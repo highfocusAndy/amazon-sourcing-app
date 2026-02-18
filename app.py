@@ -1,157 +1,153 @@
+import json
 import streamlit as st
 import requests
-import datetime
-import hashlib
-import hmac
-import json
+import boto3
+from botocore.auth import SigV4Auth
+from botocore.awsrequest import AWSRequest
+from botocore.credentials import Credentials
 
-# ================= PAGE =================
+# ================== UI ==================
 st.set_page_config(page_title="High Focus Sourcing Tool", layout="centered")
 st.title("High Focus Sourcing Tool")
 
 asin = st.text_input("Enter ASIN")
 cost = st.number_input("Your supplier cost ($)", min_value=0.0, step=0.01)
 
-# ================= AMAZON SECRETS =================
+# ================== SECRETS (FROM STREAMLIT) ==================
 CLIENT_ID = st.secrets["CLIENT_ID"]
 CLIENT_SECRET = st.secrets["CLIENT_SECRET"]
 REFRESH_TOKEN = st.secrets["REFRESH_TOKEN"]
 
-AWS_ACCESS_KEY = st.secrets["AWS_ACCESS_KEY_ID"]
-AWS_SECRET_KEY = st.secrets["AWS_SECRET_ACCESS_KEY"]
+AWS_ACCESS_KEY_ID = st.secrets["AWS_ACCESS_KEY_ID"]
+AWS_SECRET_ACCESS_KEY = st.secrets["AWS_SECRET_ACCESS_KEY"]
 AWS_ROLE_ARN = st.secrets["AWS_ROLE_ARN"]
 
-AWS_REGION = "us-east-1"
-SERVICE = "execute-api"
-HOST = "sellingpartnerapi-na.amazon.com"
-ENDPOINT = "https://sellingpartnerapi-na.amazon.com"
+AWS_REGION = st.secrets.get("AWS_REGION", "us-east-1")
+MARKETPLACE_ID = st.secrets.get("MARKETPLACE_ID", "ATVPDKIKX0DER")
+SP_API_HOST = st.secrets.get("SP_API_HOST", "sellingpartnerapi-na.amazon.com")
 
-MARKETPLACE_ID = "ATVPDKIKX0DER"  # USA
-
-# ================= GET ACCESS TOKEN =================
-def get_access_token():
+# ================== LWA ACCESS TOKEN ==================
+def get_lwa_access_token() -> str:
     url = "https://api.amazon.com/auth/o2/token"
-
     data = {
         "grant_type": "refresh_token",
         "refresh_token": REFRESH_TOKEN,
         "client_id": CLIENT_ID,
         "client_secret": CLIENT_SECRET,
     }
-
-    r = requests.post(url, data=data)
+    r = requests.post(url, data=data, timeout=30)
+    r.raise_for_status()
     return r.json()["access_token"]
 
-
-# ================= SIGN REQUEST =================
-def sign(key, msg):
-    return hmac.new(key, msg.encode("utf-8"), hashlib.sha256).digest()
-
-
-def get_signature_key(key, date_stamp, region_name, service_name):
-    k_date = sign(("AWS4" + key).encode("utf-8"), date_stamp)
-    k_region = sign(k_date, region_name)
-    k_service = sign(k_region, service_name)
-    k_signing = sign(k_service, "aws4_request")
-    return k_signing
-
-
-# ================= GET AMAZON PRICE =================
-def get_product_price(asin):
-    access_token = get_access_token()
-
-    method = "GET"
-    canonical_uri = f"/products/pricing/v0/items/{asin}/offers"
-    canonical_querystring = f"MarketplaceId={MARKETPLACE_ID}&ItemCondition=New"
-
-    t = datetime.datetime.utcnow()
-    amz_date = t.strftime("%Y%m%dT%H%M%SZ")
-    date_stamp = t.strftime("%Y%m%d")
-
-    canonical_headers = (
-        f"host:{HOST}\n"
-        f"x-amz-access-token:{access_token}\n"
-        f"x-amz-date:{amz_date}\n"
+# ================== ASSUME ROLE (AWS) ==================
+def assume_role_credentials() -> Credentials:
+    sts = boto3.client(
+        "sts",
+        aws_access_key_id=AWS_ACCESS_KEY_ID,
+        aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+        region_name=AWS_REGION,
+    )
+    resp = sts.assume_role(RoleArn=AWS_ROLE_ARN, RoleSessionName="spapi-session")
+    c = resp["Credentials"]
+    return Credentials(
+        access_key=c["AccessKeyId"],
+        secret_key=c["SecretAccessKey"],
+        token=c["SessionToken"],
     )
 
-    signed_headers = "host;x-amz-access-token;x-amz-date"
-    payload_hash = hashlib.sha256(("").encode("utf-8")).hexdigest()
+# ================== SIGNED SP-API REQUEST ==================
+def sp_api_signed_get(path: str, query: dict, lwa_access_token: str) -> dict:
+    # Build URL
+    base = f"https://{SP_API_HOST}"
+    qs = "&".join([f"{k}={requests.utils.quote(str(v))}" for k, v in query.items()])
+    url = f"{base}{path}?{qs}"
 
-    canonical_request = (
-        method
-        + "\n"
-        + canonical_uri
-        + "\n"
-        + canonical_querystring
-        + "\n"
-        + canonical_headers
-        + "\n"
-        + signed_headers
-        + "\n"
-        + payload_hash
-    )
-
-    algorithm = "AWS4-HMAC-SHA256"
-    credential_scope = f"{date_stamp}/{AWS_REGION}/{SERVICE}/aws4_request"
-
-    string_to_sign = (
-        algorithm
-        + "\n"
-        + amz_date
-        + "\n"
-        + credential_scope
-        + "\n"
-        + hashlib.sha256(canonical_request.encode("utf-8")).hexdigest()
-    )
-
-    signing_key = get_signature_key(AWS_SECRET_KEY, date_stamp, AWS_REGION, SERVICE)
-
-    signature = hmac.new(
-        signing_key, string_to_sign.encode("utf-8"), hashlib.sha256
-    ).hexdigest()
-
-    authorization_header = (
-        f"{algorithm} Credential={AWS_ACCESS_KEY}/{credential_scope}, "
-        f"SignedHeaders={signed_headers}, Signature={signature}"
-    )
-
+    # Headers required by SP-API
     headers = {
-        "x-amz-access-token": access_token,
-        "x-amz-date": amz_date,
-        "Authorization": authorization_header,
+        "host": SP_API_HOST,
+        "x-amz-access-token": lwa_access_token,
+        "user-agent": "highfocus-sourcing-tool/1.0",
+        "accept": "application/json",
     }
 
-    url = ENDPOINT + canonical_uri + "?" + canonical_querystring
-    r = requests.get(url, headers=headers)
+    # Sign with SigV4 (service must be execute-api)
+    creds = assume_role_credentials()
+    aws_req = AWSRequest(method="GET", url=url, headers=headers)
+    SigV4Auth(creds, "execute-api", AWS_REGION).add_auth(aws_req)
 
-    data = r.json()
+    signed_headers = dict(aws_req.headers)
+    r = requests.get(url, headers=signed_headers, timeout=30)
+    # Return full details to debug
+    return {"status_code": r.status_code, "text": r.text}
 
+# ================== PRICING CALL ==================
+def get_amazon_price(asin_value: str) -> dict:
+    lwa = get_lwa_access_token()
+
+    # Product Pricing API (GetPricing) for ASIN
+    path = "/products/pricing/v0/price"
+    query = {
+        "MarketplaceId": MARKETPLACE_ID,
+        "Asins": asin_value
+    }
+    return sp_api_signed_get(path, query, lwa)
+
+def extract_price(resp_text: str):
     try:
-        price = data["payload"]["Offers"][0]["ListingPrice"]["Amount"]
-        return price
-    except:
+        data = json.loads(resp_text)
+    except Exception:
         return None
 
+    # Try common structures (varies by response)
+    # If Amazon returns payload list:
+    payload = data.get("payload")
+    if isinstance(payload, list) and payload:
+        item = payload[0]
+        # Try CompetitivePricing -> CompetitivePrices -> Price -> ListingPrice -> Amount
+        cp = item.get("Product", {}).get("CompetitivePricing", {})
+        comps = cp.get("CompetitivePrices", [])
+        if comps:
+            price = comps[0].get("Price", {}).get("ListingPrice", {}).get("Amount")
+            if price is not None:
+                return float(price)
 
-# ================= BUTTON =================
+    return None
+
+# ================== ACTION ==================
 if st.button("Analyze Product"):
-
-    if asin == "":
+    if not asin:
         st.error("Enter an ASIN first.")
-    else:
-        with st.spinner("Connecting to Amazon..."):
-            price = get_product_price(asin)
+        st.stop()
 
-        if price is None:
+    with st.spinner("Connecting to Amazon..."):
+        try:
+            resp = get_amazon_price(asin.strip())
+            status = resp["status_code"]
+            body_text = resp["text"]
+
+            if status != 200:
+                st.error(f"Could not fetch Amazon price (HTTP {status}).")
+                st.code(body_text)
+                st.stop()
+
+            price = extract_price(body_text)
+
+            if price is None:
+                st.warning("Got a response but could not extract price. Showing raw response:")
+                st.json(json.loads(body_text))
+                st.stop()
+
+            # simple fees placeholder (you can replace later with Fees API)
+            est_fees = round(price * 0.30, 2)
+            net_profit = round(price - est_fees - cost, 2)
+
+            st.success("Analysis complete ✅")
+            st.write("ASIN:", asin)
+            st.write("Amazon price:", price)
+            st.write("Estimated fees:", est_fees)
+            st.write("Your cost:", cost)
+            st.write("Net profit:", net_profit)
+
+        except Exception as e:
             st.error("Could not fetch Amazon price.")
-        else:
-            fees = price * 0.15  # simple estimate
-            profit = price - fees - cost
-
-            st.success("Analysis complete")
-
-            st.write(f"**ASIN:** {asin}")
-            st.write(f"**Amazon price:** ${price:.2f}")
-            st.write(f"**Estimated fees:** ${fees:.2f}")
-            st.write(f"**Your cost:** ${cost:.2f}")
-            st.write(f"**Net profit:** ${profit:.2f}")
+            st.code(str(e))
