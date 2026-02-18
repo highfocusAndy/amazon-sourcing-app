@@ -226,7 +226,7 @@ if st.button("Analyze Product"):
 
         except Exception as e:
             st.error("Could not fetch Amazon price.")
-            st.code(str(e))    }
+            st.code(str(e))
     r = requests.post(url, data=data, timeout=30)
     r.raise_for_status()
     return r.json()["access_token"]
