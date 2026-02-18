@@ -12,11 +12,6 @@ if st.button("Analyze Product"):
     if asin == "":
         st.error("Enter an ASIN first.")
     else:
-        st.success("Amazon connection test successful ✅")
-
-        st.write("ASIN entered:", asin)
-        st.write("Your cost:", cost)
-
-        # NEXT STEP:
-        # Here we will call Amazon SP-API
-        st.info("Next step = connect to Amazon API and calculate profit.")
+        st.success("App working correctly ✅")
+        st.write("ASIN:", asin)
+        st.write("Cost:", cost)
