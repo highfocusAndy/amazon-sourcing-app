@@ -218,3 +218,5 @@ def detect_identifier_col(df: pd.DataFrame) -> Optional[str]:
 def recommend_ungate_units(case_pack: Optional[int]) -> int:
     base = 10
     if case_pack and case_pack > 0:
+        return max (base, case_pack)
+        return base
