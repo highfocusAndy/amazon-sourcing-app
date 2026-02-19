@@ -1,3 +1,5 @@
 streamlit
+requests
+boto3
 pandas
 openpyxl
