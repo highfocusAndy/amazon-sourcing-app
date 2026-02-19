@@ -69,4 +69,125 @@ PRODUCT LOOKUP
 
 --------------------------------------------------
 
-def find_asin_from_upc(upc: str) -> Optional[str]: data = sp_api_get( "/catalog/2022-04-01/items", {"identifiers": upc, "identifiersType": "UPC",
+def find_asin_from_upc(upc: str) -> Optional[str]: data = sp_api_get( "/catalog/2022-04-01/items", {"identifiers": upc, "identifiersType": "UPC", "marketplaceIds": MARKETPLACE_ID}, )
+
+try:
+    return data["items"][0]["asin"]
+except Exception:
+    return None
+
+def get_price_rank(asin: str) -> Dict[str, Any]: data = sp_api_get( f"/products/pricing/v0/items/{asin}/offers", {"MarketplaceId": MARKETPLACE_ID, "ItemCondition": "New"}, )
+
+try:
+    price = data["payload"]["Offers"][0]["ListingPrice"]["Amount"]
+except Exception:
+    price = None
+
+return {"price": price}
+
+--------------------------------------------------
+
+PROFIT CALC
+
+--------------------------------------------------
+
+def calc_profit(price: float, cost: float) -> float: if price is None: return -999
+
+fee = price * 0.15
+return round(price - fee - cost, 2)
+
+--------------------------------------------------
+
+EXCEL PROCESSING
+
+--------------------------------------------------
+
+st.subheader("Upload Wholesaler Excel File") file = st.file_uploader("Upload Excel (.xlsx)", type=["xlsx"])
+
+if file: df = pd.read_excel(file)
+
+st.success("File loaded successfully")
+st.dataframe(df.head())
+
+# Detect UPC column
+upc_col = None
+for col in df.columns:
+    if "upc" in col.lower():
+        upc_col = col
+        break
+
+if not upc_col:
+    st.error("No UPC column found.")
+    st.stop()
+
+# Detect cost column
+cost_col = None
+for col in df.columns:
+    if "cost" in col.lower():
+        cost_col = col
+        break
+
+if not cost_col:
+    st.error("No cost column found.")
+    st.stop()
+
+# --------------------------------------------------
+# ANALYZE BUTTON
+# --------------------------------------------------
+
+if st.button("Analyze Products"):
+    results: List[Dict[str, Any]] = []
+
+    progress = st.progress(0)
+
+    for i, row in df.iterrows():
+        upc = str(row[upc_col])
+        cost = float(row[cost_col])
+
+        asin = find_asin_from_upc(upc)
+
+        if not asin:
+            continue
+
+        pr = get_price_rank(asin)
+        profit = calc_profit(pr["price"], cost)
+
+        results.append({
+            "UPC": upc,
+            "ASIN": asin,
+            "Price": pr["price"],
+            "Cost": cost,
+            "Profit": profit,
+        })
+
+        progress.progress((i + 1) / len(df))
+
+    if not results:
+        st.error("No valid Amazon matches found.")
+        st.stop()
+
+    res_df = pd.DataFrame(results)
+
+    # BUY LIST
+    buy_df = res_df[res_df["Profit"] > 3]
+
+    # UNGATE LIST (placeholder logic)
+    ungate_df = res_df[(res_df["Profit"] > 3) & (res_df["Price"] is None)]
+
+    st.subheader("BUY LIST")
+    st.dataframe(buy_df)
+
+    st.subheader("UNGATE LIST")
+    st.dataframe(ungate_df)
+
+    st.download_button(
+        "Download Buy List",
+        buy_df.to_csv(index=False),
+        "buy_list.csv",
+    )
+
+    st.download_button(
+        "Download Ungate List",
+        ungate_df.to_csv(index=False),
+        "ungate_list.csv",
+    )
