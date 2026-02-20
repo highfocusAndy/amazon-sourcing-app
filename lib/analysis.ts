@@ -200,7 +200,6 @@ export async function analyzeBatch(inputs: ProductInput[]): Promise<ProductAnaly
   const results: ProductAnalysis[] = [];
   for (const input of inputs) {
     // Sequential processing is safer for SP-API rate limits.
-    // eslint-disable-next-line no-await-in-loop
     const analyzed = await analyzeProduct(input);
     results.push(analyzed);
   }
