@@ -83,7 +83,7 @@ function compareValues(
   return 0;
 }
 
-export default function Home(): JSX.Element {
+export default function Home() {
   const [identifier, setIdentifier] = useState("");
   const [wholesalePrice, setWholesalePrice] = useState("0");
   const [brand, setBrand] = useState("");
