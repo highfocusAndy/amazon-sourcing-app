@@ -7,7 +7,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint . --max-warnings=0"
+    "lint": "eslint --max-warnings=0"
   },
   "repository": {
     "type": "git",
@@ -34,7 +34,6 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
-    "@eslint/eslintrc": "^3.3.3",
     "@tailwindcss/postcss": "^4.2.0",
     "@types/node": "^25.3.0",
     "@types/react": "^19.2.14",
