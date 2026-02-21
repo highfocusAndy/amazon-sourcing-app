@@ -135,7 +135,7 @@ function ensurePrimaryFirst(primary: string, keys: string[]): string[] {
   return [...new Set(deduped)];
 }
 
-function pickProductNameKey(headers: HeaderMeta, excludedKeys: Set<string>): string | undefined {
+function pickProductNameKey(headers: HeaderMeta[], excludedKeys: Set<string>): string | undefined {
   const candidates = findKeysByPriority(headers, PRODUCT_NAME_PRIORITY);
   for (const candidate of candidates) {
     if (excludedKeys.has(candidate)) {
