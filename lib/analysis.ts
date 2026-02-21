@@ -1,6 +1,6 @@
 import { getServerEnv } from "@/lib/env";
 import { fetchFeePreviewForAsin, fetchOffersForAsin, resolveCatalogItem } from "@/lib/sp-api";
-import type { Decision, ProductAnalysis, ProductInput, RowColor } from "@/lib/types";
+import type { Decision, ProductAnalysis, ProductInput, RowColor, SellerType } from "@/lib/types";
 
 const BAD_SALES_RANK_THRESHOLD = 100_000;
 const MIN_HEALTHY_ROI_PERCENT = 10;
@@ -31,6 +31,10 @@ function normalizeBrand(value: string): string {
   return value.trim();
 }
 
+function normalizeSellerType(value: ProductInput["sellerType"]): SellerType {
+  return value === "FBM" ? "FBM" : "FBA";
+}
+
 function isRestrictedBrand(brand: string, restrictedBrandSet: Set<string>): boolean {
   if (!brand) {
     return false;
@@ -39,12 +43,15 @@ function isRestrictedBrand(brand: string, restrictedBrandSet: Set<string>): bool
 }
 
 function buildBaseResult(input: ProductInput): ProductAnalysis {
+  const sellerType = normalizeSellerType(input.sellerType);
   return {
     id: crypto.randomUUID(),
     inputIdentifier: input.identifier.trim(),
     asin: null,
     brand: normalizeBrand(input.brand ?? ""),
+    sellerType,
     wholesalePrice: normalizeNumber(input.wholesalePrice),
+    shippingCost: sellerType === "FBM" ? Math.max(0, normalizeNumber(input.shippingCost)) : 0,
     buyBoxPrice: null,
     salesRank: null,
     amazonIsSeller: false,
@@ -171,12 +178,19 @@ export async function analyzeProduct(input: ProductInput): Promise<ProductAnalys
 
     if (result.buyBoxPrice !== null) {
       try {
-        const feePreview = await fetchFeePreviewForAsin(catalog.asin, result.buyBoxPrice);
+        const feePreview = await fetchFeePreviewForAsin(catalog.asin, result.buyBoxPrice, result.sellerType);
         result.referralFee = feePreview.referralFee;
-        result.fbaFee = feePreview.fbaFee;
-        result.totalFees = feePreview.totalFees;
+        if (result.sellerType === "FBA") {
+          result.fbaFee = feePreview.fbaFee;
+          result.totalFees = feePreview.totalFees;
+        }
       } catch {
         result.reasons.push("Fee preview unavailable; fee values defaulted to 0.");
+      }
+
+      if (result.sellerType === "FBM") {
+        result.fbaFee = 0;
+        result.totalFees = toCurrency(result.referralFee + result.shippingCost) ?? 0;
       }
 
       result.netProfit = toCurrency(result.buyBoxPrice - result.wholesalePrice - result.totalFees);

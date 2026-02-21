@@ -13,6 +13,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const formData = await request.formData();
     const file = formData.get("file");
     const projectedMonthlyUnits = Number(formData.get("projectedMonthlyUnits") ?? 0);
+    const sellerType = formData.get("sellerType") === "FBM" ? "FBM" : "FBA";
+    const shippingCost = Number(formData.get("shippingCost") ?? 0);
 
     if (!(file instanceof File)) {
       return NextResponse.json({ error: "file is required." }, { status: 400 });
@@ -30,6 +32,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       wholesalePrice: row.wholesalePrice,
       brand: row.brand,
       projectedMonthlyUnits,
+      sellerType,
+      shippingCost,
     }));
 
     const results = await analyzeBatch(batchInput);

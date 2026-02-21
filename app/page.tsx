@@ -2,14 +2,16 @@
 
 import { useMemo, useState, type ChangeEvent, type DragEvent, type FormEvent } from "react";
 
-import type { ProductAnalysis } from "@/lib/types";
+import type { ProductAnalysis, SellerType } from "@/lib/types";
 
 type SortColumn =
   | "inputIdentifier"
   | "asin"
   | "brand"
+  | "sellerType"
   | "buyBoxPrice"
   | "wholesalePrice"
+  | "shippingCost"
   | "totalFees"
   | "netProfit"
   | "roiPercent"
@@ -21,6 +23,7 @@ type SortDirection = "asc" | "desc";
 const numberColumns = new Set<SortColumn>([
   "buyBoxPrice",
   "wholesalePrice",
+  "shippingCost",
   "totalFees",
   "netProfit",
   "roiPercent",
@@ -87,6 +90,8 @@ export default function Home() {
   const [identifier, setIdentifier] = useState("");
   const [wholesalePrice, setWholesalePrice] = useState("0");
   const [brand, setBrand] = useState("");
+  const [sellerType, setSellerType] = useState<SellerType>("FBA");
+  const [shippingCost, setShippingCost] = useState("0");
   const [projectedMonthlyUnits, setProjectedMonthlyUnits] = useState("30");
   const [file, setFile] = useState<File | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -173,6 +178,8 @@ export default function Home() {
           wholesalePrice: Number(wholesalePrice),
           brand,
           projectedMonthlyUnits: Number(projectedMonthlyUnits),
+          sellerType,
+          shippingCost: sellerType === "FBM" ? Number(shippingCost) : 0,
         }),
       });
 
@@ -205,6 +212,8 @@ export default function Home() {
       const formData = new FormData();
       formData.append("file", file);
       formData.append("projectedMonthlyUnits", projectedMonthlyUnits);
+      formData.append("sellerType", sellerType);
+      formData.append("shippingCost", sellerType === "FBM" ? shippingCost : "0");
 
       const response = await fetch("/api/upload", {
         method: "POST",
@@ -235,8 +244,10 @@ export default function Home() {
     { key: "inputIdentifier", label: "Input" },
     { key: "asin", label: "ASIN" },
     { key: "brand", label: "Brand" },
+    { key: "sellerType", label: "Seller" },
     { key: "buyBoxPrice", label: "Buy Box" },
     { key: "wholesalePrice", label: "Wholesale" },
+    { key: "shippingCost", label: "Shipping" },
     { key: "totalFees", label: "Fees" },
     { key: "netProfit", label: "Net Profit" },
     { key: "roiPercent", label: "ROI%" },
@@ -247,7 +258,7 @@ export default function Home() {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 p-6">
       <header className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h1 className="text-2xl font-semibold text-slate-900">Amazon FBA Wholesale Sourcing Dashboard</h1>
+        <h1 className="text-2xl font-semibold text-slate-900">Amazon FBA/FBM Wholesale Sourcing Dashboard</h1>
         <p className="mt-2 text-sm text-slate-600">
           Upload wholesale catalogs or search a single ASIN/UPC, then evaluate Buy Box pricing, fees, ROI, and ungating opportunity.
         </p>
@@ -266,6 +277,43 @@ export default function Home() {
           <p className="text-xs uppercase tracking-wide text-slate-500">Yellow (Ungating)</p>
           <p className="mt-2 text-2xl font-semibold text-amber-700">{stats.ungating}</p>
           <p className="mt-1 text-xs text-slate-500">Red (Bad/Low Margin): {stats.bad}</p>
+        </div>
+      </section>
+
+      <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h2 className="text-lg font-semibold text-slate-900">Fulfillment Settings</h2>
+        <p className="mt-1 text-sm text-slate-600">
+          Choose seller type once and apply it to manual and batch analyses.
+        </p>
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <label className="text-sm font-medium text-slate-700">
+            Seller Type
+            <select
+              value={sellerType}
+              onChange={(event) => setSellerType(event.target.value === "FBM" ? "FBM" : "FBA")}
+              className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-sky-400 focus:ring"
+            >
+              <option value="FBA">FBA</option>
+              <option value="FBM">FBM</option>
+            </select>
+          </label>
+          {sellerType === "FBM" ? (
+            <label className="text-sm font-medium text-slate-700">
+              Shipping Cost (per unit)
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={shippingCost}
+                onChange={(event) => setShippingCost(event.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-sky-400 focus:ring"
+              />
+            </label>
+          ) : (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+              FBA mode uses Amazon fee preview (referral + fulfillment fees).
+            </div>
+          )}
         </div>
       </section>
 
@@ -400,7 +448,7 @@ export default function Home() {
             <tbody>
               {sortedResults.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="px-3 py-8 text-center text-sm text-slate-500">
+                  <td colSpan={14} className="px-3 py-8 text-center text-sm text-slate-500">
                     No results yet. Run a manual lookup or upload a file.
                   </td>
                 </tr>
@@ -410,12 +458,17 @@ export default function Home() {
                     <td className="px-3 py-3">{item.inputIdentifier}</td>
                     <td className="px-3 py-3">{item.asin ?? "-"}</td>
                     <td className="px-3 py-3">{item.brand || "-"}</td>
+                    <td className="px-3 py-3">{item.sellerType}</td>
                     <td className="px-3 py-3">{formatCurrency(item.buyBoxPrice)}</td>
                     <td className="px-3 py-3">{formatCurrency(item.wholesalePrice)}</td>
+                    <td className="px-3 py-3">{item.sellerType === "FBM" ? formatCurrency(item.shippingCost) : "-"}</td>
                     <td className="px-3 py-3">
                       <div>Total: {formatCurrency(item.totalFees)}</div>
                       <div className="text-xs text-slate-600">
-                        Ref {formatCurrency(item.referralFee)} / FBA {formatCurrency(item.fbaFee)}
+                        Ref {formatCurrency(item.referralFee)} /{" "}
+                        {item.sellerType === "FBA"
+                          ? `FBA ${formatCurrency(item.fbaFee)}`
+                          : `Ship ${formatCurrency(item.shippingCost)}`}
                       </div>
                     </td>
                     <td className="px-3 py-3 font-semibold">{formatCurrency(item.netProfit)}</td>

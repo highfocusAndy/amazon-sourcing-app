@@ -1,11 +1,14 @@
 export type Decision = "BUY" | "WORTH UNGATING" | "BAD" | "LOW_MARGIN" | "UNKNOWN";
 export type RowColor = "green" | "yellow" | "red";
+export type SellerType = "FBA" | "FBM";
 
 export interface ProductInput {
   identifier: string;
   wholesalePrice: number;
   brand?: string;
   projectedMonthlyUnits?: number;
+  sellerType?: SellerType;
+  shippingCost?: number;
 }
 
 export interface FeePreview {
@@ -19,7 +22,9 @@ export interface ProductAnalysis {
   inputIdentifier: string;
   asin: string | null;
   brand: string;
+  sellerType: SellerType;
   wholesalePrice: number;
+  shippingCost: number;
   buyBoxPrice: number | null;
   salesRank: number | null;
   amazonIsSeller: boolean;

@@ -2,7 +2,7 @@ import { AssumeRoleCommand, STSClient } from "@aws-sdk/client-sts";
 import aws4 from "aws4";
 
 import { getServerEnv, type ServerEnv } from "@/lib/env";
-import type { FeePreview } from "@/lib/types";
+import type { FeePreview, SellerType } from "@/lib/types";
 
 type RequestMethod = "GET" | "POST";
 
@@ -421,12 +421,16 @@ export async function fetchOffersForAsin(asin: string): Promise<OffersBasics> {
   return extractOffersBasics(offers);
 }
 
-export async function fetchFeePreviewForAsin(asin: string, buyBoxPrice: number): Promise<FeePreview> {
+export async function fetchFeePreviewForAsin(
+  asin: string,
+  buyBoxPrice: number,
+  sellerType: SellerType,
+): Promise<FeePreview> {
   const fees = await spApiRequest<unknown>("POST", `/products/fees/v0/items/${asin}/feesEstimate`, {
     body: {
       FeesEstimateRequest: {
         MarketplaceId: getServerEnv().marketplaceId,
-        IsAmazonFulfilled: true,
+        IsAmazonFulfilled: sellerType === "FBA",
         Identifier: `${asin}-${Date.now()}`,
         PriceToEstimateFees: {
           ListingPrice: {

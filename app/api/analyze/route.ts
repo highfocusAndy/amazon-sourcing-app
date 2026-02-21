@@ -11,6 +11,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       wholesalePrice?: number;
       brand?: string;
       projectedMonthlyUnits?: number;
+      sellerType?: "FBA" | "FBM";
+      shippingCost?: number;
     };
 
     if (!body.identifier || !body.identifier.trim()) {
@@ -22,6 +24,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       wholesalePrice: Number(body.wholesalePrice ?? 0),
       brand: body.brand,
       projectedMonthlyUnits: Number(body.projectedMonthlyUnits ?? 0),
+      sellerType: body.sellerType === "FBM" ? "FBM" : "FBA",
+      shippingCost: Number(body.shippingCost ?? 0),
     });
 
     return NextResponse.json({ result });
