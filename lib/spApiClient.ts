@@ -400,12 +400,32 @@ export class SpApiClient {
   private extractFeeEstimate(data: unknown): FeeEstimate {
     const root = asObject(data);
     const payload = asObject(root?.payload);
-    const result = asObject(payload?.FeesEstimateResult);
+    const result =
+      asObject(payload?.FeesEstimateResult) ??
+      asObject(asArray(payload?.FeesEstimateResultList)[0]);
+    if (!result) {
+      throw new Error("SP-API fee response missing FeesEstimateResult.");
+    }
+
+    const status = readString(result.Status);
+    if (status && status.toLowerCase() !== "success") {
+      const error = asObject(result.Error);
+      const message = readString(error?.Message) ?? `Fee estimate status: ${status}`;
+      throw new Error(message);
+    }
+
     const estimate = asObject(result?.FeesEstimate);
+    if (!estimate) {
+      throw new Error("SP-API fee response missing fee breakdown.");
+    }
+
+    const totalFeesEstimate = asObject(estimate.TotalFeesEstimate);
+    const totalFeesAmount = readNumber(totalFeesEstimate?.Amount);
     const feeDetails = asArray(estimate?.FeeDetailList);
 
     let referralFee = 0;
     let fulfillmentFee = 0;
+    let otherFees = 0;
 
     for (const feeRaw of feeDetails) {
       const feeObj = asObject(feeRaw);
@@ -421,13 +441,18 @@ export class SpApiClient {
         referralFee += amount;
       } else if (/fba|fulfillment/i.test(feeType)) {
         fulfillmentFee += amount;
+      } else {
+        otherFees += amount;
       }
     }
+
+    const fallbackTotal = referralFee + fulfillmentFee + otherFees;
+    const totalFees = totalFeesAmount !== null && totalFeesAmount > 0 ? totalFeesAmount : fallbackTotal;
 
     return {
       referralFee: toCurrency(referralFee),
       fulfillmentFee: toCurrency(fulfillmentFee),
-      totalFees: toCurrency(referralFee + fulfillmentFee),
+      totalFees: toCurrency(totalFees),
     };
   }
 

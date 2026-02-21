@@ -4,6 +4,7 @@ import type { Decision, ProductAnalysis, ProductInput, RowColor, SellerType } fr
 
 const BAD_SALES_RANK_THRESHOLD = 100_000;
 const MIN_HEALTHY_ROI_PERCENT = 10;
+const ESTIMATED_REFERRAL_RATE = 0.15;
 
 function toCurrency(value: number | null): number | null {
   if (value === null || !Number.isFinite(value)) {
@@ -33,6 +34,10 @@ function normalizeBrand(value: string): string {
 
 function normalizeSellerType(value: ProductInput["sellerType"]): SellerType {
   return value === "FBM" ? "FBM" : "FBA";
+}
+
+function estimateReferralFee(buyBoxPrice: number): number {
+  return toCurrency(buyBoxPrice * ESTIMATED_REFERRAL_RATE) ?? 0;
 }
 
 function isRestrictedBrand(brand: string, restrictedBrandSet: Set<string>): boolean {
@@ -182,18 +187,42 @@ export async function analyzeProduct(input: ProductInput): Promise<ProductAnalys
     if (result.buyBoxPrice !== null) {
       try {
         const feeEstimate = await spApiClient.fetchFeeEstimate(catalog.asin, result.buyBoxPrice, result.sellerType);
-        result.referralFee = feeEstimate.referralFee;
+        let referralFee = feeEstimate.referralFee;
+        let fulfillmentFee = feeEstimate.fulfillmentFee;
+
+        // Some SP-API responses provide only total fees without detailed fee types.
+        if (feeEstimate.totalFees > 0 && referralFee <= 0 && fulfillmentFee <= 0) {
+          if (result.sellerType === "FBA") {
+            referralFee = estimateReferralFee(result.buyBoxPrice);
+            fulfillmentFee = Math.max(0, (toCurrency(feeEstimate.totalFees - referralFee) ?? 0));
+          } else {
+            referralFee = feeEstimate.totalFees;
+          }
+          result.reasons.push("Fee breakdown unavailable; total fee estimate was used.");
+        }
+
+        if (feeEstimate.totalFees <= 0 && referralFee <= 0 && result.buyBoxPrice > 0) {
+          referralFee = estimateReferralFee(result.buyBoxPrice);
+          result.reasons.push("Fee estimate returned zero; applied estimated referral fee (15%).");
+        }
+
+        result.referralFee = referralFee;
         if (result.sellerType === "FBA") {
-          result.fbaFee = feeEstimate.fulfillmentFee;
-          result.totalFees = toCurrency(result.referralFee + result.fbaFee) ?? 0;
+          result.fbaFee = fulfillmentFee;
+          result.totalFees = feeEstimate.totalFees > 0 ? feeEstimate.totalFees : toCurrency(result.referralFee + result.fbaFee) ?? 0;
         } else {
           result.fbaFee = 0;
           result.totalFees = toCurrency(result.referralFee + result.shippingCost) ?? 0;
         }
       } catch {
-        result.reasons.push("Fee preview unavailable; fee values defaulted to 0.");
+        result.referralFee = estimateReferralFee(result.buyBoxPrice);
+        result.reasons.push("Fee preview unavailable; using estimated referral fee (15%).");
         if (result.sellerType === "FBM") {
-          result.totalFees = toCurrency(result.shippingCost) ?? 0;
+          result.fbaFee = 0;
+          result.totalFees = toCurrency(result.referralFee + result.shippingCost) ?? 0;
+        } else {
+          result.fbaFee = 0;
+          result.totalFees = result.referralFee;
         }
       }
 
