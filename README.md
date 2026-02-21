@@ -8,6 +8,7 @@ It supports manual ASIN/UPC lookups and bulk spreadsheet uploads, enriches produ
 - **Data input**
   - Drag-and-drop upload zone for `.xlsx`, `.xls`, and `.csv`.
   - Universal parsing via `xlsx` with smart header normalization and column detection across supplier formats.
+  - Accepts rows with ASIN/UPC/EAN/barcode or product name/title plus wholesale cost.
   - Manual search form for single ASIN/UPC lookups.
 
 - **Amazon SP-API integration**

@@ -4,6 +4,7 @@ export type SellerType = "FBA" | "FBM";
 
 export interface ProductInput {
   identifier: string;
+  productName?: string;
   wholesalePrice: number;
   brand?: string;
   projectedMonthlyUnits?: number;
@@ -48,6 +49,7 @@ export interface ProductAnalysis {
 
 export interface ParsedUploadRow {
   identifier: string;
+  productName?: string;
   wholesalePrice: number;
   brand: string;
 }

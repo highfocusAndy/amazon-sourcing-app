@@ -486,6 +486,44 @@ export class SpApiClient {
     return this.extractCatalogItem(items[0]);
   }
 
+  async searchCatalogByKeyword(keyword: string): Promise<CatalogItem | null> {
+    const query = keyword.trim();
+    if (!query) {
+      return null;
+    }
+
+    const response = await this.request<unknown>("GET", "/catalog/2022-04-01/items", {
+      query: {
+        marketplaceIds: this.config.marketplaceId,
+        keywords: query,
+        includedData: "summaries,salesRanks,identifiers",
+        pageSize: "20",
+      },
+    });
+
+    const root = asObject(response);
+    const items = asArray(root?.items);
+    if (items.length === 0) {
+      return null;
+    }
+
+    const parsedItems = items
+      .map((item) => this.extractCatalogItem(item))
+      .filter((item): item is CatalogItem => Boolean(item));
+
+    if (parsedItems.length === 0) {
+      return null;
+    }
+
+    const normalizedQuery = query.toLowerCase();
+    const titleMatch = parsedItems.find((item) => item.title.toLowerCase().includes(normalizedQuery));
+    if (titleMatch) {
+      return titleMatch;
+    }
+
+    return parsedItems[0];
+  }
+
   async resolveCatalogItem(identifier: string): Promise<CatalogItem | null> {
     const normalized = normalizeIdentifier(identifier);
     if (!normalized) {

@@ -29,6 +29,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     const batchInput: ProductInput[] = parsed.rows.slice(0, MAX_BATCH_SIZE).map((row) => ({
       identifier: row.identifier,
+      productName: row.productName,
       wholesalePrice: row.wholesalePrice,
       brand: row.brand,
       projectedMonthlyUnits,
@@ -45,7 +46,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unexpected upload processing error.";
-    const isUserInputError = /No identifier column|No cost column/i.test(message);
+    const isUserInputError = /No identifier column|No identifier or product name column|No cost column/i.test(message);
     return NextResponse.json(
       { error: message },
       { status: isUserInputError ? 400 : 500 },

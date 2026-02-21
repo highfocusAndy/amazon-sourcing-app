@@ -382,8 +382,7 @@ export default function Home() {
         <form onSubmit={handleUploadSubmit} className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-slate-900">Upload Wholesale File</h2>
           <p className="mt-1 text-sm text-slate-600">
-            Required columns: <span className="font-medium">UPC/EAN</span>,{" "}
-            <span className="font-medium">Wholesale Price</span>, and <span className="font-medium">Brand</span>.
+            Include product identifier (ASIN/UPC/EAN/barcode) or product name/title, plus wholesale cost.
           </p>
 
           <div

@@ -154,21 +154,33 @@ function evaluateDecision(result: ProductAnalysis, projectedMonthlyUnits: number
 export async function analyzeProduct(input: ProductInput): Promise<ProductAnalysis> {
   const result = buildBaseResult(input);
   const spApiClient = getSpApiClient();
+  const requestedProductName = String(input.productName ?? "").trim();
   const projectedMonthlyUnits =
     normalizeNumber(input.projectedMonthlyUnits) > 0
       ? normalizeNumber(input.projectedMonthlyUnits)
       : getServerEnv().defaultProjectedMonthlyUnits;
 
   try {
-    if (!result.inputIdentifier) {
-      result.error = "Missing ASIN/UPC identifier.";
-      result.reasons = ["Provide an ASIN, UPC, or EAN to run analysis."];
+    if (!result.inputIdentifier && !requestedProductName) {
+      result.error = "Missing product reference.";
+      result.reasons = ["Provide ASIN/UPC/EAN or a product name to run analysis."];
       return result;
     }
 
-    const catalog = await spApiClient.resolveCatalogItem(result.inputIdentifier);
+    let catalog = result.inputIdentifier ? await spApiClient.resolveCatalogItem(result.inputIdentifier) : null;
+
+    if (!catalog && requestedProductName) {
+      catalog = await spApiClient.searchCatalogByKeyword(requestedProductName);
+      if (catalog) {
+        result.reasons.push("Catalog match resolved from product name search.");
+        if (!result.inputIdentifier) {
+          result.inputIdentifier = requestedProductName;
+        }
+      }
+    }
+
     if (!catalog) {
-      result.error = "No ASIN found for this identifier.";
+      result.error = "No ASIN found for the provided product reference.";
       result.reasons = ["Could not resolve catalog metadata from Amazon SP-API."];
       return result;
     }

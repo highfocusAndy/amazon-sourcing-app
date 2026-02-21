@@ -3,7 +3,8 @@ import * as XLSX from "xlsx";
 import type { ParsedUploadRow } from "@/lib/types";
 
 interface DetectedColumns {
-  identifierKey: string;
+  identifierKey?: string;
+  productNameKey?: string;
   costKey: string;
   brandKey?: string;
   casePackKey?: string;
@@ -40,6 +41,13 @@ const COST_PRIORITY: string[][] = [
 
 const BRAND_PRIORITY: string[][] = [["brand"], ["manufacturer"], ["vendor"], ["supplier"]];
 const CASE_PACK_PRIORITY: string[][] = [["case_pack", "casepack"]];
+const PRODUCT_NAME_PRIORITY: string[][] = [
+  ["product_name", "productname"],
+  ["item_name", "itemname"],
+  ["title"],
+  ["description", "desc"],
+  ["name"],
+];
 const ASIN_VALUE_REGEX = /^[A-Z0-9]{10}$/i;
 const UPC_EAN_VALUE_REGEX = /^\d{11,14}$/;
 
@@ -102,6 +110,10 @@ function toHeaderMeta(headers: string[]): HeaderMeta[] {
   }));
 }
 
+function matchesAnyToken(normalizedHeader: string, groups: string[][]): boolean {
+  return groups.some((group) => group.some((token) => normalizedHeader.includes(token)));
+}
+
 function findKeysByPriority(headers: HeaderMeta[], priorityMatchers: string[][]): string[] {
   const ordered: string[] = [];
   const seen = new Set<string>();
@@ -121,6 +133,33 @@ function findKeysByPriority(headers: HeaderMeta[], priorityMatchers: string[][])
 function ensurePrimaryFirst(primary: string, keys: string[]): string[] {
   const deduped = [primary, ...keys.filter((key) => key !== primary)];
   return [...new Set(deduped)];
+}
+
+function pickProductNameKey(headers: HeaderMeta, excludedKeys: Set<string>): string | undefined {
+  const candidates = findKeysByPriority(headers, PRODUCT_NAME_PRIORITY);
+  for (const candidate of candidates) {
+    if (excludedKeys.has(candidate)) {
+      continue;
+    }
+
+    const normalized = headers.find((header) => header.original === candidate)?.normalized ?? "";
+    if (!normalized) {
+      continue;
+    }
+
+    if (
+      matchesAnyToken(normalized, IDENTIFIER_PRIORITY) ||
+      matchesAnyToken(normalized, COST_PRIORITY) ||
+      matchesAnyToken(normalized, BRAND_PRIORITY) ||
+      matchesAnyToken(normalized, CASE_PACK_PRIORITY)
+    ) {
+      continue;
+    }
+
+    return candidate;
+  }
+
+  return undefined;
 }
 
 function normalizeIdentifier(value: unknown): string {
@@ -149,6 +188,20 @@ function normalizeIdentifier(value: unknown): string {
   }
 
   return normalized;
+}
+
+function looksLikeResolvableIdentifier(value: string): boolean {
+  const normalized = value.trim().toUpperCase();
+  if (!normalized) {
+    return false;
+  }
+
+  if (ASIN_VALUE_REGEX.test(normalized)) {
+    return true;
+  }
+
+  const digits = normalized.replace(/\D/g, "");
+  return UPC_EAN_VALUE_REGEX.test(digits);
 }
 
 function detectHeaderRow(sheetRows: unknown[][]): number {
@@ -182,6 +235,10 @@ function detectHeaderRow(sheetRows: unknown[][]): number {
     }
 
     if (normalizedCells.some((cell) => CASE_PACK_PRIORITY.some((group) => group.some((token) => cell.includes(token))))) {
+      score += 1;
+    }
+
+    if (normalizedCells.some((cell) => PRODUCT_NAME_PRIORITY.some((group) => group.some((token) => cell.includes(token))))) {
       score += 1;
     }
 
@@ -367,8 +424,10 @@ function inferColumnsFromValues(headers: string[], rawRows: Array<Record<string,
     identifierKey = upcCandidate.header;
   }
 
-  if (!identifierKey) {
-    throw new Error("No identifier column found. Expected ASIN, UPC, EAN, barcode, product_id, or item_id.");
+  const headerProductNameKey = pickProductNameKey(headerMeta, new Set([headerBrandKey, headerCasePackKey].filter(Boolean) as string[]));
+  const identifierExists = Boolean(identifierKey);
+  if (!identifierExists && !headerProductNameKey) {
+    throw new Error("No identifier or product name column found. Expected ASIN/UPC/EAN/barcode or product title/name.");
   }
 
   let casePackKey = headerCasePackKey;
@@ -394,7 +453,7 @@ function inferColumnsFromValues(headers: string[], rawRows: Array<Record<string,
   }
 
   const costCandidate = headers
-    .filter((header) => header !== identifierKey)
+    .filter((header) => header !== identifierKey && header !== headerProductNameKey)
     .map((header) => {
       const s = stats.get(header)!;
       const numericRate = rate(s.numeric, s.nonEmpty);
@@ -422,6 +481,7 @@ function inferColumnsFromValues(headers: string[], rawRows: Array<Record<string,
 
   return {
     identifierKey,
+    productNameKey: headerProductNameKey,
     costKey,
     brandKey: headerBrandKey,
     casePackKey,
@@ -432,10 +492,6 @@ export function detectColumns(headers: string[]): DetectedColumns {
   const normalizedHeaders = toHeaderMeta(headers);
   const identifierKey = findKeysByPriority(normalizedHeaders, IDENTIFIER_PRIORITY)[0];
 
-  if (!identifierKey) {
-    throw new Error("No identifier column found. Expected ASIN, UPC, EAN, barcode, product_id, or item_id.");
-  }
-
   const costKey = findKeysByPriority(normalizedHeaders, COST_PRIORITY)[0];
 
   if (!costKey) {
@@ -444,8 +500,16 @@ export function detectColumns(headers: string[]): DetectedColumns {
 
   const brandKey = findKeysByPriority(normalizedHeaders, BRAND_PRIORITY)[0];
   const casePackKey = findKeysByPriority(normalizedHeaders, CASE_PACK_PRIORITY)[0];
+  const productNameKey = pickProductNameKey(
+    normalizedHeaders,
+    new Set([identifierKey, costKey, brandKey, casePackKey].filter(Boolean) as string[]),
+  );
 
-  return { identifierKey, costKey, brandKey, casePackKey };
+  if (!identifierKey && !productNameKey) {
+    throw new Error("No identifier or product name column found. Expected ASIN/UPC/EAN/barcode or product title/name.");
+  }
+
+  return { identifierKey, productNameKey, costKey, brandKey, casePackKey };
 }
 
 function parseSheetData(sheet: XLSX.WorkSheet): SheetParseResult {
@@ -476,16 +540,23 @@ function parseSheetData(sheet: XLSX.WorkSheet): SheetParseResult {
   }
 
   const headerMeta = toHeaderMeta(headers);
-  const identifierKeys = ensurePrimaryFirst(
-    detected.identifierKey,
-    findKeysByPriority(headerMeta, IDENTIFIER_PRIORITY),
-  );
+  const identifierKeys = detected.identifierKey
+    ? ensurePrimaryFirst(detected.identifierKey, findKeysByPriority(headerMeta, IDENTIFIER_PRIORITY))
+    : [];
   const costKeys = ensurePrimaryFirst(detected.costKey, findKeysByPriority(headerMeta, COST_PRIORITY));
 
   const rows: ParsedUploadRow[] = [];
   for (const rawRow of rawRows) {
-    const identifier = getFirstIdentifierValue(rawRow, identifierKeys);
-    if (!identifier) {
+    let identifier = identifierKeys.length > 0 ? getFirstIdentifierValue(rawRow, identifierKeys) : "";
+    let productName = detected.productNameKey ? String(rawRow[detected.productNameKey] ?? "").trim() : "";
+
+    // If a candidate identifier is actually a product title, switch to keyword-based lookup.
+    if (identifier && !looksLikeResolvableIdentifier(identifier) && !productName) {
+      productName = identifier;
+      identifier = "";
+    }
+
+    if (!identifier && !productName) {
       continue;
     }
 
@@ -496,6 +567,7 @@ function parseSheetData(sheet: XLSX.WorkSheet): SheetParseResult {
 
     rows.push({
       identifier,
+      productName,
       wholesalePrice,
       brand: detected.brandKey ? String(rawRow[detected.brandKey] ?? "").trim() : "",
     });
