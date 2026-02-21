@@ -53,6 +53,7 @@ export interface FeeEstimate {
 const AMAZON_RETAIL_SELLER_ID = "ATVPDKIKX0DER";
 const ASIN_REGEX = /^[A-Z0-9]{10}$/i;
 const UPC_EAN_REGEX = /^\d{11,14}$/;
+const RETRYABLE_HTTP_STATUS = new Set([429, 500, 502, 503, 504]);
 
 let lwaTokenCache: LwaTokenCache | null = null;
 let assumedRoleCache: AwsCredentials | null = null;
@@ -116,6 +117,26 @@ function asObject(value: unknown): Record<string, unknown> | null {
 
 function asArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
+}
+
+function getField(source: Record<string, unknown> | null, candidates: string[]): unknown {
+  if (!source) {
+    return undefined;
+  }
+
+  for (const candidate of candidates) {
+    if (candidate in source) {
+      return source[candidate];
+    }
+  }
+
+  return undefined;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 function toCurrency(value: number): number {
@@ -253,53 +274,71 @@ export class SpApiClient {
       body?: unknown;
     },
   ): Promise<T> {
-    const [token, awsCredentials] = await Promise.all([this.getLwaAccessToken(), this.getAwsCredentials()]);
-    const query = options?.query ? `?${new URLSearchParams(options.query).toString()}` : "";
-    const body = options?.body ? JSON.stringify(options.body) : undefined;
+    const maxAttempts = 3;
+    let lastError: Error | null = null;
 
-    const signed = aws4.sign(
-      {
-        service: "execute-api",
-        region: this.config.awsRegion,
-        host: this.config.spApiHost,
-        method,
-        path: `${path}${query}`,
-        headers: {
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      const [token, awsCredentials] = await Promise.all([this.getLwaAccessToken(), this.getAwsCredentials()]);
+      const query = options?.query ? `?${new URLSearchParams(options.query).toString()}` : "";
+      const body = options?.body ? JSON.stringify(options.body) : undefined;
+
+      const signed = aws4.sign(
+        {
+          service: "execute-api",
+          region: this.config.awsRegion,
           host: this.config.spApiHost,
-          "x-amz-access-token": token,
-          "content-type": "application/json",
+          method,
+          path: `${path}${query}`,
+          headers: {
+            host: this.config.spApiHost,
+            "x-amz-access-token": token,
+            "content-type": "application/json",
+          },
+          body,
         },
+        {
+          accessKeyId: awsCredentials.accessKeyId,
+          secretAccessKey: awsCredentials.secretAccessKey,
+          sessionToken: awsCredentials.sessionToken,
+        },
+      );
+
+      const response = await fetch(`https://${this.config.spApiHost}${signed.path}`, {
+        method,
+        headers: signed.headers as Record<string, string>,
         body,
-      },
-      {
-        accessKeyId: awsCredentials.accessKeyId,
-        secretAccessKey: awsCredentials.secretAccessKey,
-        sessionToken: awsCredentials.sessionToken,
-      },
-    );
+        cache: "no-store",
+      });
 
-    const response = await fetch(`https://${this.config.spApiHost}${signed.path}`, {
-      method,
-      headers: signed.headers as Record<string, string>,
-      body,
-      cache: "no-store",
-    });
-
-    const raw = await response.text();
-    let json: unknown = {};
-    if (raw) {
-      try {
-        json = JSON.parse(raw);
-      } catch {
-        json = {};
+      const raw = await response.text();
+      let json: unknown = {};
+      if (raw) {
+        try {
+          json = JSON.parse(raw);
+        } catch {
+          json = {};
+        }
       }
+
+      if (response.ok) {
+        return json as T;
+      }
+
+      const responseError = new Error(
+        `SP-API request failed (${response.status}) on ${method} ${path}${raw ? `: ${raw.slice(0, 500)}` : ""}`,
+      );
+      lastError = responseError;
+
+      if (attempt < maxAttempts && RETRYABLE_HTTP_STATUS.has(response.status)) {
+        // Exponential backoff for transient API throttling/service errors.
+        await sleep(300 * 2 ** (attempt - 1));
+        continue;
+      }
+
+      throw responseError;
     }
 
-    if (!response.ok) {
-      throw new Error(`SP-API request failed (${response.status}) on ${method} ${path}`);
-    }
-
-    return json as T;
+    throw lastError ?? new Error(`SP-API request failed on ${method} ${path}`);
   }
 
   private extractCatalogItem(item: unknown): CatalogItem | null {
@@ -353,27 +392,27 @@ export class SpApiClient {
 
   private extractPricing(data: unknown): CompetitivePricing {
     const root = asObject(data);
-    const payload = asObject(root?.payload);
-    const summary = asObject(payload?.Summary);
-    const offers = asArray(payload?.Offers);
+    const payload = asObject(getField(root, ["payload", "Payload"]));
+    const summary = asObject(getField(payload, ["Summary", "summary"]));
+    const offers = asArray(getField(payload, ["Offers", "offers"]));
 
-    const buyBoxPrices = asArray(summary?.BuyBoxPrices);
+    const buyBoxPrices = asArray(getField(summary, ["BuyBoxPrices", "buyBoxPrices"]));
     const buyBox = asObject(buyBoxPrices[0]);
-    const buyBoxLandedPrice = asObject(buyBox?.LandedPrice);
+    const buyBoxLandedPrice = asObject(getField(buyBox, ["LandedPrice", "landedPrice"]));
 
     let buyBoxPrice = readNumber(buyBoxLandedPrice?.Amount);
     if (buyBoxPrice === null) {
-      const lowestPrices = asArray(summary?.LowestPrices);
+      const lowestPrices = asArray(getField(summary, ["LowestPrices", "lowestPrices"]));
       const lowest = asObject(lowestPrices[0]);
-      const landed = asObject(lowest?.LandedPrice);
+      const landed = asObject(getField(lowest, ["LandedPrice", "landedPrice"]));
       buyBoxPrice = readNumber(landed?.Amount);
     }
 
     if (buyBoxPrice === null) {
       for (const offerRaw of offers) {
         const offer = asObject(offerRaw);
-        const listingPrice = asObject(offer?.ListingPrice);
-        const shippingPrice = asObject(offer?.Shipping);
+        const listingPrice = asObject(getField(offer, ["ListingPrice", "listingPrice"]));
+        const shippingPrice = asObject(getField(offer, ["Shipping", "shipping"]));
         const listing = readNumber(listingPrice?.Amount);
         const shipping = readNumber(shippingPrice?.Amount) ?? 0;
         if (listing === null) {
@@ -388,12 +427,59 @@ export class SpApiClient {
 
     const amazonIsSeller = offers.some((offerRaw) => {
       const offer = asObject(offerRaw);
-      return readString(offer?.SellerId) === AMAZON_RETAIL_SELLER_ID;
+      return readString(getField(offer, ["SellerId", "sellerId"])) === AMAZON_RETAIL_SELLER_ID;
     });
 
     return {
       buyBoxPrice: buyBoxPrice === null ? null : toCurrency(buyBoxPrice),
       amazonIsSeller,
+    };
+  }
+
+  private extractCompetitivePricingFallback(data: unknown): CompetitivePricing {
+    const root = asObject(data);
+    const payload = asArray(getField(root, ["payload", "Payload"]));
+    if (payload.length === 0) {
+      return { buyBoxPrice: null, amazonIsSeller: false };
+    }
+
+    let bestPrice: number | null = null;
+    for (const entryRaw of payload) {
+      const entry = asObject(entryRaw);
+      const product = asObject(getField(entry, ["Product", "product"]));
+      const competitivePricing = asObject(getField(product, ["CompetitivePricing", "competitivePricing"]));
+      const competitivePrices = asArray(getField(competitivePricing, ["CompetitivePrices", "competitivePrices"]));
+
+      for (const priceRaw of competitivePrices) {
+        const priceObj = asObject(priceRaw);
+        const condition = readString(getField(priceObj, ["condition", "Condition"])) ?? "";
+        if (condition && condition.toLowerCase() !== "new") {
+          continue;
+        }
+
+        const priceBlock = asObject(getField(priceObj, ["Price", "price"]));
+        const landedPrice = asObject(getField(priceBlock, ["LandedPrice", "landedPrice"]));
+        const listingPrice = asObject(getField(priceBlock, ["ListingPrice", "listingPrice"]));
+        const shippingPrice = asObject(getField(priceBlock, ["Shipping", "shipping"]));
+
+        let candidatePrice = readNumber(landedPrice?.Amount);
+        if (candidatePrice === null) {
+          const listing = readNumber(listingPrice?.Amount);
+          const shipping = readNumber(shippingPrice?.Amount) ?? 0;
+          if (listing !== null) {
+            candidatePrice = listing + shipping;
+          }
+        }
+
+        if (candidatePrice !== null && (bestPrice === null || candidatePrice < bestPrice)) {
+          bestPrice = candidatePrice;
+        }
+      }
+    }
+
+    return {
+      buyBoxPrice: bestPrice === null ? null : toCurrency(bestPrice),
+      amazonIsSeller: false,
     };
   }
 
@@ -547,14 +633,52 @@ export class SpApiClient {
   }
 
   async fetchCompetitivePricing(asin: string): Promise<CompetitivePricing> {
-    const response = await this.request<unknown>("GET", `/products/pricing/v0/items/${asin}/offers`, {
-      query: {
-        MarketplaceId: this.config.marketplaceId,
-        ItemCondition: "New",
-      },
-    });
+    let primaryError: Error | null = null;
+    let primaryPricing: CompetitivePricing = { buyBoxPrice: null, amazonIsSeller: false };
 
-    return this.extractPricing(response);
+    try {
+      const response = await this.request<unknown>("GET", `/products/pricing/v0/items/${asin}/offers`, {
+        query: {
+          MarketplaceId: this.config.marketplaceId,
+          ItemCondition: "New",
+          CustomerType: "Consumer",
+        },
+      });
+      primaryPricing = this.extractPricing(response);
+      if (primaryPricing.buyBoxPrice !== null) {
+        return primaryPricing;
+      }
+    } catch (error) {
+      primaryError = error instanceof Error ? error : new Error("Primary pricing request failed.");
+    }
+
+    try {
+      const fallbackResponse = await this.request<unknown>("GET", "/products/pricing/v0/competitivePrice", {
+        query: {
+          MarketplaceId: this.config.marketplaceId,
+          Asins: asin,
+          ItemType: "Asin",
+        },
+      });
+      const fallbackPricing = this.extractCompetitivePricingFallback(fallbackResponse);
+      if (fallbackPricing.buyBoxPrice !== null) {
+        return {
+          buyBoxPrice: fallbackPricing.buyBoxPrice,
+          amazonIsSeller: primaryPricing.amazonIsSeller || fallbackPricing.amazonIsSeller,
+        };
+      }
+    } catch (fallbackError) {
+      if (primaryError) {
+        throw primaryError;
+      }
+      throw fallbackError instanceof Error ? fallbackError : new Error("Fallback pricing request failed.");
+    }
+
+    if (primaryError) {
+      throw primaryError;
+    }
+
+    return primaryPricing;
   }
 
   async fetchFeeEstimate(asin: string, buyBoxPrice: number, sellerType: SellerType): Promise<FeeEstimate> {
