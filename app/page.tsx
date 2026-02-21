@@ -129,8 +129,8 @@ export default function Home() {
       return;
     }
 
-    if (!/\.(xlsx|csv)$/i.test(nextFile.name)) {
-      setErrorMessage("Only .xlsx or .csv files are accepted.");
+    if (!/\.(xlsx|xls|csv)$/i.test(nextFile.name)) {
+      setErrorMessage("Only .xlsx, .xls, or .csv files are accepted.");
       return;
     }
 
@@ -200,7 +200,7 @@ export default function Home() {
   async function handleUploadSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     if (!file) {
-      setErrorMessage("Choose an .xlsx or .csv file before running upload analysis.");
+      setErrorMessage("Choose an .xlsx, .xls, or .csv file before running upload analysis.");
       return;
     }
 
@@ -394,11 +394,11 @@ export default function Home() {
               dragging ? "border-sky-400 bg-sky-50" : "border-slate-300 bg-slate-50"
             }`}
           >
-            <p className="text-sm text-slate-700">{file ? file.name : "Drag and drop .xlsx/.csv here"}</p>
+            <p className="text-sm text-slate-700">{file ? file.name : "Drag and drop .xlsx/.xls/.csv here"}</p>
             <p className="mt-1 text-xs text-slate-500">or</p>
             <label className="mt-3 inline-flex cursor-pointer items-center rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100">
               Select File
-              <input type="file" accept=".xlsx,.csv" className="hidden" onChange={handleFileInput} />
+              <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFileInput} />
             </label>
           </div>
 

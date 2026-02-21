@@ -6,7 +6,7 @@ It supports manual ASIN/UPC lookups and bulk spreadsheet uploads, enriches produ
 ## Core Features
 
 - **Data input**
-  - Drag-and-drop upload zone for `.xlsx` and `.csv`.
+  - Drag-and-drop upload zone for `.xlsx`, `.xls`, and `.csv`.
   - Universal parsing via `xlsx` with smart header normalization and column detection across supplier formats.
   - Manual search form for single ASIN/UPC lookups.
 
@@ -81,7 +81,7 @@ npm run dev
 
 - `POST /api/upload`  
   Multipart form data:
-  - `file` (`.xlsx`/`.csv`)
+  - `file` (`.xlsx`/`.xls`/`.csv`)
   - `projectedMonthlyUnits` (optional)
 
 ## Notes

@@ -20,8 +20,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: "file is required." }, { status: 400 });
     }
 
-    if (!/\.(xlsx|csv)$/i.test(file.name)) {
-      return NextResponse.json({ error: "Only .xlsx and .csv files are accepted." }, { status: 400 });
+    if (!/\.(xlsx|xls|csv)$/i.test(file.name)) {
+      return NextResponse.json({ error: "Only .xlsx, .xls, and .csv files are accepted." }, { status: 400 });
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
