@@ -21,6 +21,7 @@ export interface ProductAnalysis {
   id: string;
   inputIdentifier: string;
   asin: string | null;
+  title: string;
   brand: string;
   sellerType: SellerType;
   wholesalePrice: number;

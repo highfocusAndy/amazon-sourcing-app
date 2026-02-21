@@ -7,7 +7,7 @@ It supports manual ASIN/UPC lookups and bulk spreadsheet uploads, enriches produ
 
 - **Data input**
   - Drag-and-drop upload zone for `.xlsx` and `.csv`.
-  - Parsing via `xlsx` for `UPC/EAN`, `Wholesale Price`, and `Brand` columns.
+  - Universal parsing via `xlsx` with smart header normalization and column detection across supplier formats.
   - Manual search form for single ASIN/UPC lookups.
 
 - **Amazon SP-API integration**
@@ -47,7 +47,15 @@ npm install
 cp .env.example .env.local
 ```
 
-3. Fill your SP-API and AWS credentials in `.env.local`.
+3. Fill your SP-API and AWS credentials in `.env.local`, including:
+   - `SP_API_CLIENT_ID`
+   - `SP_API_CLIENT_SECRET`
+   - `SP_API_REFRESH_TOKEN`
+   - `AWS_ACCESS_KEY_ID`
+   - `AWS_SECRET_ACCESS_KEY`
+   - `AWS_REGION`
+   - `SELLER_ID`
+   - `MARKETPLACE_ID`
 
 4. Run development server:
 

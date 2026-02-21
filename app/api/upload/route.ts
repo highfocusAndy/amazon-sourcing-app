@@ -44,9 +44,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       maxBatchSize: MAX_BATCH_SIZE,
     });
   } catch (error) {
+    const message = error instanceof Error ? error.message : "Unexpected upload processing error.";
+    const isUserInputError = /No identifier column|No cost column/i.test(message);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Unexpected upload processing error." },
-      { status: 500 },
+      { error: message },
+      { status: isUserInputError ? 400 : 500 },
     );
   }
 }

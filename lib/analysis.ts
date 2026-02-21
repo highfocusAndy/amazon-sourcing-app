@@ -1,5 +1,5 @@
 import { getServerEnv } from "@/lib/env";
-import { fetchFeePreviewForAsin, fetchOffersForAsin, resolveCatalogItem } from "@/lib/sp-api";
+import { getSpApiClient } from "@/lib/spApiClient";
 import type { Decision, ProductAnalysis, ProductInput, RowColor, SellerType } from "@/lib/types";
 
 const BAD_SALES_RANK_THRESHOLD = 100_000;
@@ -48,6 +48,7 @@ function buildBaseResult(input: ProductInput): ProductAnalysis {
     id: crypto.randomUUID(),
     inputIdentifier: input.identifier.trim(),
     asin: null,
+    title: "",
     brand: normalizeBrand(input.brand ?? ""),
     sellerType,
     wholesalePrice: normalizeNumber(input.wholesalePrice),
@@ -147,6 +148,7 @@ function evaluateDecision(result: ProductAnalysis, projectedMonthlyUnits: number
 
 export async function analyzeProduct(input: ProductInput): Promise<ProductAnalysis> {
   const result = buildBaseResult(input);
+  const spApiClient = getSpApiClient();
   const projectedMonthlyUnits =
     normalizeNumber(input.projectedMonthlyUnits) > 0
       ? normalizeNumber(input.projectedMonthlyUnits)
@@ -159,38 +161,40 @@ export async function analyzeProduct(input: ProductInput): Promise<ProductAnalys
       return result;
     }
 
-    const catalog = await resolveCatalogItem(result.inputIdentifier);
-    if (!catalog?.asin) {
+    const catalog = await spApiClient.resolveCatalogItem(result.inputIdentifier);
+    if (!catalog) {
       result.error = "No ASIN found for this identifier.";
       result.reasons = ["Could not resolve catalog metadata from Amazon SP-API."];
       return result;
     }
 
     result.asin = catalog.asin;
-    result.salesRank = catalog.salesRank;
+    result.title = catalog.title;
+    result.salesRank = catalog.rank;
     if (!result.brand && catalog.brand) {
       result.brand = catalog.brand;
     }
 
-    const offerData = await fetchOffersForAsin(catalog.asin);
-    result.buyBoxPrice = offerData.buyBoxPrice;
-    result.amazonIsSeller = offerData.amazonIsSeller;
+    const pricing = await spApiClient.fetchCompetitivePricing(catalog.asin);
+    result.buyBoxPrice = pricing.buyBoxPrice;
+    result.amazonIsSeller = pricing.amazonIsSeller;
 
     if (result.buyBoxPrice !== null) {
       try {
-        const feePreview = await fetchFeePreviewForAsin(catalog.asin, result.buyBoxPrice, result.sellerType);
-        result.referralFee = feePreview.referralFee;
+        const feeEstimate = await spApiClient.fetchFeeEstimate(catalog.asin, result.buyBoxPrice, result.sellerType);
+        result.referralFee = feeEstimate.referralFee;
         if (result.sellerType === "FBA") {
-          result.fbaFee = feePreview.fbaFee;
-          result.totalFees = feePreview.totalFees;
+          result.fbaFee = feeEstimate.fulfillmentFee;
+          result.totalFees = toCurrency(result.referralFee + result.fbaFee) ?? 0;
+        } else {
+          result.fbaFee = 0;
+          result.totalFees = toCurrency(result.referralFee + result.shippingCost) ?? 0;
         }
       } catch {
         result.reasons.push("Fee preview unavailable; fee values defaulted to 0.");
-      }
-
-      if (result.sellerType === "FBM") {
-        result.fbaFee = 0;
-        result.totalFees = toCurrency(result.referralFee + result.shippingCost) ?? 0;
+        if (result.sellerType === "FBM") {
+          result.totalFees = toCurrency(result.shippingCost) ?? 0;
+        }
       }
 
       result.netProfit = toCurrency(result.buyBoxPrice - result.wholesalePrice - result.totalFees);
