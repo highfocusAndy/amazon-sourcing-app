@@ -54,9 +54,14 @@ cp .env.example .env.local
    - `SP_API_REFRESH_TOKEN`
    - `AWS_ACCESS_KEY_ID`
    - `AWS_SECRET_ACCESS_KEY`
+   - `AWS_SESSION_TOKEN` (required only for temporary `ASIA...` keys)
    - `AWS_REGION`
    - `SELLER_ID`
    - `MARKETPLACE_ID`
+
+   Notes:
+   - If `AWS_ACCESS_KEY_ID` starts with `AKIA`, leave `AWS_SESSION_TOKEN` empty.
+   - If `AWS_ACCESS_KEY_ID` starts with `ASIA`, you must provide `AWS_SESSION_TOKEN`.
 
 4. Run development server:
 

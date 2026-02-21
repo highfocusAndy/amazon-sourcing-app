@@ -54,7 +54,7 @@ export function getServerEnv(): ServerEnv {
     clientId: requiredEnv("SP_API_CLIENT_ID"),
     clientSecret: requiredEnv("SP_API_CLIENT_SECRET"),
     refreshToken: requiredEnv("SP_API_REFRESH_TOKEN"),
-    marketplaceId: process.env.SP_API_MARKETPLACE_ID?.trim() || DEFAULT_MARKETPLACE,
+    marketplaceId: process.env.MARKETPLACE_ID?.trim() || process.env.SP_API_MARKETPLACE_ID?.trim() || DEFAULT_MARKETPLACE,
     spApiRegion: process.env.SP_API_REGION?.trim() || DEFAULT_REGION,
     spApiHost: process.env.SP_API_HOST?.trim() || DEFAULT_HOST,
     awsRegion: process.env.AWS_REGION?.trim() || DEFAULT_REGION,
