@@ -114,7 +114,7 @@ function evaluateDecision(result: ProductAnalysis, projectedMonthlyUnits: number
     ) {
       result.worthUngating = true;
       reasons.push("Projected monthly profit is greater than 2x ungating invoice cost.");
-    } else {
+    } else if (result.projectedMonthlyProfit !== null && result.ungatingCost10Units !== null) {
       reasons.push("Projected monthly profit does not exceed 2x ungating invoice cost.");
     }
   }
