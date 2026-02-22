@@ -200,6 +200,61 @@ export default function Home() {
     hasScannedRef.current = false;
   }, []);
 
+  const runManualAnalysis = useCallback(
+    async (
+      selectedSellerType: SellerType,
+      isAutoRerun = false,
+      identifierOverride?: string,
+      isScannerTriggered = false,
+    ): Promise<void> => {
+      const effectiveIdentifier = (identifierOverride ?? identifier).trim();
+      if (!effectiveIdentifier) {
+        setErrorMessage("Enter ASIN/UPC/EAN before running manual analysis.");
+        return;
+      }
+
+      setErrorMessage(null);
+      setInfoMessage(null);
+      setIsManualLoading(true);
+
+      try {
+        const response = await fetch("/api/analyze", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            identifier: effectiveIdentifier,
+            wholesalePrice: Number(wholesalePrice),
+            brand,
+            projectedMonthlyUnits: Number(projectedMonthlyUnits),
+            sellerType: selectedSellerType,
+            shippingCost: selectedSellerType === "FBM" ? Number(shippingCost) : 0,
+          }),
+        });
+
+        const json = (await response.json()) as { error?: string; result?: ProductAnalysis };
+        if (!response.ok || !json.result) {
+          throw new Error(json.error ?? "Manual analysis failed.");
+        }
+
+        if (isAutoRerun) {
+          setResults([json.result as ProductAnalysis]);
+          setInfoMessage(`Manual lookup re-analyzed for ${selectedSellerType}.`);
+        } else {
+          setResults((current) => [json.result as ProductAnalysis, ...current]);
+          setInfoMessage(isScannerTriggered ? "Scanned and analyzed successfully." : "Manual lookup complete.");
+        }
+        setLastRunMode("manual");
+      } catch (error) {
+        setErrorMessage(error instanceof Error ? error.message : "Manual lookup failed.");
+      } finally {
+        setIsManualLoading(false);
+      }
+    },
+    [identifier, wholesalePrice, brand, projectedMonthlyUnits, shippingCost],
+  );
+
   useEffect(() => {
     if (!isScannerOpen || !videoRef.current) {
       stopScanner();
@@ -217,8 +272,15 @@ export default function Home() {
       hasScannedRef.current = true;
       setIdentifier(scannedValue);
       setErrorMessage(null);
-      setInfoMessage(`Scanned identifier: ${scannedValue}`);
       setIsScannerOpen(false);
+
+      if (isManualLoading || isUploadLoading) {
+        setInfoMessage(`Scanned identifier: ${scannedValue}. Finish current run, then tap Analyze Product.`);
+        return;
+      }
+
+      setInfoMessage(`Scanned identifier: ${scannedValue}. Running analysis...`);
+      void runManualAnalysis(sellerType, false, scannedValue, true);
     };
 
     const scanLoop = async (detector: BarcodeDetectorInstance): Promise<void> => {
@@ -343,7 +405,7 @@ export default function Home() {
       cancelled = true;
       stopScanner();
     };
-  }, [isScannerOpen, scannerRunNonce, stopScanner]);
+  }, [isScannerOpen, scannerRunNonce, stopScanner, isManualLoading, isUploadLoading, sellerType, runManualAnalysis]);
 
   const filteredSortedResults = useMemo(() => {
     return [...results]
@@ -403,47 +465,6 @@ export default function Home() {
     event.stopPropagation();
     setDragging(false);
     applyFileSelection(event.dataTransfer.files?.[0] ?? null);
-  }
-
-  async function runManualAnalysis(selectedSellerType: SellerType, isAutoRerun = false): Promise<void> {
-    setErrorMessage(null);
-    setInfoMessage(null);
-    setIsManualLoading(true);
-
-    try {
-      const response = await fetch("/api/analyze", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          identifier,
-          wholesalePrice: Number(wholesalePrice),
-          brand,
-          projectedMonthlyUnits: Number(projectedMonthlyUnits),
-          sellerType: selectedSellerType,
-          shippingCost: selectedSellerType === "FBM" ? Number(shippingCost) : 0,
-        }),
-      });
-
-      const json = (await response.json()) as { error?: string; result?: ProductAnalysis };
-      if (!response.ok || !json.result) {
-        throw new Error(json.error ?? "Manual analysis failed.");
-      }
-
-      if (isAutoRerun) {
-        setResults([json.result as ProductAnalysis]);
-        setInfoMessage(`Manual lookup re-analyzed for ${selectedSellerType}.`);
-      } else {
-        setResults((current) => [json.result as ProductAnalysis, ...current]);
-        setInfoMessage("Manual lookup complete.");
-      }
-      setLastRunMode("manual");
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Manual lookup failed.");
-    } finally {
-      setIsManualLoading(false);
-    }
   }
 
   async function handleManualSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
