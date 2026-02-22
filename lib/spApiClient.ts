@@ -674,7 +674,7 @@ export class SpApiClient {
     return this.extractCatalogItem(response);
   }
 
-  private async searchCatalogByIdentifier(identifierType: "UPC" | "EAN", identifier: string): Promise<CatalogItem | null> {
+  private async searchCatalogByIdentifier(identifierType: "UPC" | "EAN" | "GTIN", identifier: string): Promise<CatalogItem | null> {
     const response = await this.request<unknown>("GET", "/catalog/2022-04-01/items", {
       query: {
         marketplaceIds: this.config.marketplaceId,
@@ -749,8 +749,12 @@ export class SpApiClient {
     if (UPC_EAN_REGEX.test(digits)) {
       const identifierCandidates = buildNumericIdentifierCandidates(digits);
       for (const candidate of identifierCandidates) {
-        const identifierTypes: Array<"UPC" | "EAN"> =
-          candidate.length === 13 ? ["EAN", "UPC"] : candidate.length === 12 ? ["UPC", "EAN"] : ["UPC", "EAN"];
+      const identifierTypes: Array<"UPC" | "EAN" | "GTIN"> =
+        candidate.length === 13
+          ? ["EAN", "GTIN", "UPC"]
+          : candidate.length === 12
+            ? ["UPC", "GTIN", "EAN"]
+            : ["GTIN", "UPC", "EAN"];
 
         for (const identifierType of identifierTypes) {
           // Sequential tries improve reliability for mixed UPC/EAN supplier data.

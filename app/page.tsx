@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ChangeEvent, type DragEvent, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type FormEvent } from "react";
 
 import type { ProductAnalysis, SellerType } from "@/lib/types";
 
@@ -103,6 +103,7 @@ export default function Home() {
   const [sortColumn, setSortColumn] = useState<SortColumn>("netProfit");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [lastRunMode, setLastRunMode] = useState<"manual" | "upload" | null>(null);
+  const hasInitializedSellerType = useRef(false);
 
   const sortedResults = useMemo(() => {
     return [...results].sort((left, right) => compareValues(left, right, sortColumn, sortDirection));
@@ -260,26 +261,32 @@ export default function Home() {
     await runUploadAnalysis(sellerType, false);
   }
 
-  async function handleSellerTypeChange(nextSellerType: SellerType): Promise<void> {
+  function handleSellerTypeChange(nextSellerType: SellerType): void {
     if (nextSellerType === sellerType) {
       return;
     }
-
     setSellerType(nextSellerType);
+  }
+
+  useEffect(() => {
+    if (!hasInitializedSellerType.current) {
+      hasInitializedSellerType.current = true;
+      return;
+    }
 
     if (isManualLoading || isUploadLoading || results.length === 0) {
       return;
     }
 
     if (lastRunMode === "manual" && identifier.trim()) {
-      await runManualAnalysis(nextSellerType, true);
+      void runManualAnalysis(sellerType, true);
       return;
     }
 
     if (lastRunMode === "upload" && file) {
-      await runUploadAnalysis(nextSellerType, true);
+      void runUploadAnalysis(sellerType, true);
     }
-  }
+  }, [sellerType]);
 
   const tableHeaders: Array<{ key: SortColumn; label: string }> = [
     { key: "inputIdentifier", label: "Input" },
@@ -332,7 +339,7 @@ export default function Home() {
             <select
               value={sellerType}
               onChange={(event) => {
-                void handleSellerTypeChange(event.target.value === "FBM" ? "FBM" : "FBA");
+                handleSellerTypeChange(event.target.value === "FBM" ? "FBM" : "FBA");
               }}
               className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-sky-400 focus:ring"
             >
