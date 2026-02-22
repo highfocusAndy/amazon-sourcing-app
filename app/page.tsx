@@ -219,6 +219,13 @@ export default function Home() {
 
     const startScanner = async (): Promise<void> => {
       try {
+        if (!window.isSecureContext) {
+          setScannerError(
+            "Camera is blocked on insecure pages. Open this app on https:// or on http://localhost, then allow camera permission.",
+          );
+          return;
+        }
+
         if (!navigator.mediaDevices?.getUserMedia) {
           setScannerError("Camera access is not available in this browser.");
           return;
