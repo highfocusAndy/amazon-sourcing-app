@@ -724,9 +724,7 @@ export default function Home() {
             {manualIdentifierResolved ? "Step 2: Cost + Units" : "Step 1: Product Lookup"}
           </span>
         </div>
-        <p className="mt-1 text-sm text-slate-600">
-          Enter or scan ASIN/UPC first. Unit price and unit count appear after product lookup.
-        </p>
+        <p className="mt-1 text-sm text-slate-600">Enter or scan ASIN/UPC first.</p>
 
         <div className="mt-4 grid gap-3">
           <label className="text-sm font-medium text-slate-700">
@@ -784,7 +782,7 @@ export default function Home() {
             </div>
           ) : (
             <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-              Unit price, brand, and unit quantity will appear after product lookup.
+              Complete product lookup to continue.
             </div>
           )}
         </div>
@@ -810,63 +808,6 @@ export default function Home() {
           ) : null}
         </div>
       </form>
-
-      <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-slate-900">Fulfillment Settings</h2>
-        <p className="mt-1 text-sm text-slate-600">
-          Choose seller type once and apply it to manual and batch analyses.
-        </p>
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
-          <label className="text-sm font-medium text-slate-700">
-            Seller Type
-            <select
-              value={sellerType}
-              onChange={(event) => {
-                void handleSellerTypeChange(event.target.value === "FBM" ? "FBM" : "FBA");
-              }}
-              className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-sky-400 focus:ring"
-            >
-              <option value="FBA">FBA</option>
-              <option value="FBM">FBM</option>
-            </select>
-          </label>
-          {sellerType === "FBM" ? (
-            <label className="text-sm font-medium text-slate-700">
-              Shipping Cost (per unit)
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={shippingCost}
-                onChange={(event) => setShippingCost(event.target.value)}
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-sky-400 focus:ring"
-              />
-            </label>
-          ) : (
-            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-              FBA mode uses Amazon fee preview (referral + fulfillment fees).
-            </div>
-          )}
-        </div>
-      </section>
-
-      <section className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
-          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Summary</span>
-          <span className="text-slate-700">
-            Total: <span className="font-semibold text-slate-900">{results.length}</span>
-          </span>
-          <span className="text-emerald-700">
-            Buy: <span className="font-semibold">{stats.profitable}</span>
-          </span>
-          <span className="text-amber-700">
-            Ungate: <span className="font-semibold">{stats.ungating}</span>
-          </span>
-          <span className="text-rose-700">
-            Bad/Low Margin: <span className="font-semibold">{stats.bad}</span>
-          </span>
-        </div>
-      </section>
 
       <form onSubmit={handleUploadSubmit} className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         <h2 className="text-lg font-semibold text-slate-900">Upload Wholesale File</h2>
@@ -898,6 +839,24 @@ export default function Home() {
           {isUploadLoading ? "Analyzing File..." : "Run Batch Analysis"}
         </button>
       </form>
+
+      <section className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
+          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Summary</span>
+          <span className="text-slate-700">
+            Total: <span className="font-semibold text-slate-900">{results.length}</span>
+          </span>
+          <span className="text-emerald-700">
+            Buy: <span className="font-semibold">{stats.profitable}</span>
+          </span>
+          <span className="text-amber-700">
+            Ungate: <span className="font-semibold">{stats.ungating}</span>
+          </span>
+          <span className="text-rose-700">
+            Bad/Low Margin: <span className="font-semibold">{stats.bad}</span>
+          </span>
+        </div>
+      </section>
 
       {errorMessage ? (
         <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{errorMessage}</div>
@@ -1055,6 +1014,45 @@ export default function Home() {
               )}
             </tbody>
           </table>
+        </div>
+      </section>
+
+      <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h2 className="text-lg font-semibold text-slate-900">Fulfillment Settings</h2>
+        <p className="mt-1 text-sm text-slate-600">
+          Choose seller type once and apply it to manual and batch analyses.
+        </p>
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <label className="text-sm font-medium text-slate-700">
+            Seller Type
+            <select
+              value={sellerType}
+              onChange={(event) => {
+                void handleSellerTypeChange(event.target.value === "FBM" ? "FBM" : "FBA");
+              }}
+              className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-sky-400 focus:ring"
+            >
+              <option value="FBA">FBA</option>
+              <option value="FBM">FBM</option>
+            </select>
+          </label>
+          {sellerType === "FBM" ? (
+            <label className="text-sm font-medium text-slate-700">
+              Shipping Cost (per unit)
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={shippingCost}
+                onChange={(event) => setShippingCost(event.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-sky-400 focus:ring"
+              />
+            </label>
+          ) : (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+              FBA mode uses Amazon fee preview (referral + fulfillment fees).
+            </div>
+          )}
         </div>
       </section>
 
