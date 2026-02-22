@@ -40,6 +40,25 @@ type BarcodeDetectorInstance = {
 
 type BarcodeDetectorCtor = new (options?: { formats?: string[] }) => BarcodeDetectorInstance;
 
+type ZxingScanResultLike = {
+  getText: () => string;
+};
+
+type ZxingScanErrorLike = {
+  name?: string;
+};
+
+type ZxingReaderLike = {
+  decodeFromVideoDevice: (
+    deviceId: string | null,
+    videoSource: string | HTMLVideoElement | null,
+    callbackFn: (result: ZxingScanResultLike | undefined, error?: ZxingScanErrorLike) => void,
+  ) => Promise<void>;
+  stopContinuousDecode?: () => void;
+  stopAsyncDecode?: () => void;
+  reset: () => void;
+};
+
 const numberColumns = new Set<SortColumn>([
   "buyBoxPrice",
   "wholesalePrice",
@@ -157,9 +176,17 @@ export default function Home() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const scannerStreamRef = useRef<MediaStream | null>(null);
   const scannerFrameRef = useRef<number | null>(null);
+  const zxingReaderRef = useRef<ZxingReaderLike | null>(null);
   const hasScannedRef = useRef(false);
 
   const stopScanner = useCallback(() => {
+    if (zxingReaderRef.current) {
+      zxingReaderRef.current.stopContinuousDecode?.();
+      zxingReaderRef.current.stopAsyncDecode?.();
+      zxingReaderRef.current.reset();
+      zxingReaderRef.current = null;
+    }
+
     if (scannerFrameRef.current !== null) {
       window.cancelAnimationFrame(scannerFrameRef.current);
       scannerFrameRef.current = null;
@@ -183,6 +210,16 @@ export default function Home() {
     hasScannedRef.current = false;
     let cancelled = false;
     let detectionErrorShown = false;
+    const applyScannedValue = (scannedValue: string): void => {
+      if (!scannedValue || cancelled || hasScannedRef.current) {
+        return;
+      }
+      hasScannedRef.current = true;
+      setIdentifier(scannedValue);
+      setErrorMessage(null);
+      setInfoMessage(`Scanned identifier: ${scannedValue}`);
+      setIsScannerOpen(false);
+    };
 
     const scanLoop = async (detector: BarcodeDetectorInstance): Promise<void> => {
       if (cancelled || hasScannedRef.current || !videoRef.current) {
@@ -197,11 +234,7 @@ export default function Home() {
             .find((value) => value.length > 0);
 
           if (scannedValue) {
-            hasScannedRef.current = true;
-            setIdentifier(scannedValue);
-            setErrorMessage(null);
-            setInfoMessage(`Scanned identifier: ${scannedValue}`);
-            setIsScannerOpen(false);
+            applyScannedValue(scannedValue);
             return;
           }
         }
@@ -231,6 +264,46 @@ export default function Home() {
           return;
         }
 
+        const detectorCtor = (window as Window & { BarcodeDetector?: BarcodeDetectorCtor }).BarcodeDetector;
+
+        if (!videoRef.current) {
+          return;
+        }
+
+        if (!detectorCtor) {
+          const zxingModule = await import("@zxing/library");
+          if (cancelled || !videoRef.current) {
+            return;
+          }
+
+          const zxingReader = new zxingModule.BrowserMultiFormatReader() as unknown as ZxingReaderLike;
+          zxingReaderRef.current = zxingReader;
+          await zxingReader.decodeFromVideoDevice(null, videoRef.current, (result, error) => {
+            if (cancelled || hasScannedRef.current) {
+              return;
+            }
+
+            const scannedValue = result?.getText().trim();
+            if (scannedValue) {
+              applyScannedValue(scannedValue);
+              return;
+            }
+
+            const errorName = error?.name ?? "";
+            if (
+              errorName &&
+              errorName !== "NotFoundException" &&
+              errorName !== "ChecksumException" &&
+              errorName !== "FormatException" &&
+              !detectionErrorShown
+            ) {
+              setScannerError("Scanner is active but could not decode this frame. Try better lighting and distance.");
+              detectionErrorShown = true;
+            }
+          });
+          return;
+        }
+
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: { ideal: "environment" } },
           audio: false,
@@ -248,12 +321,6 @@ export default function Home() {
 
         videoRef.current.srcObject = stream;
         await videoRef.current.play();
-
-        const detectorCtor = (window as Window & { BarcodeDetector?: BarcodeDetectorCtor }).BarcodeDetector;
-        if (!detectorCtor) {
-          setScannerError("Camera opened, but barcode detection is not supported in this browser. Use Chrome/Edge or type manually.");
-          return;
-        }
 
         const detector = new detectorCtor({
           formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "code_39", "itf"],
