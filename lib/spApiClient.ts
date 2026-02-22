@@ -25,6 +25,7 @@ interface SpApiConfig {
   awsSessionToken?: string;
   awsRoleArn?: string;
   awsRoleSessionName: string;
+  amazonSellerIds: Set<string>;
 }
 
 interface LwaTokenCache {
@@ -41,7 +42,7 @@ export interface CatalogItem {
 
 export interface CompetitivePricing {
   buyBoxPrice: number | null;
-  amazonIsSeller: boolean;
+  amazonIsSeller: boolean | null;
 }
 
 export interface FeeEstimate {
@@ -67,6 +68,21 @@ function defaultSpApiHost(awsRegion: string): string {
     return "sellingpartnerapi-fe.amazon.com";
   }
   return "sellingpartnerapi-na.amazon.com";
+}
+
+function parseAmazonSellerIds(raw: string | undefined, marketplaceId: string): Set<string> {
+  const values = new Set<string>([AMAZON_RETAIL_SELLER_ID, marketplaceId.toUpperCase()]);
+  if (!raw) {
+    return values;
+  }
+
+  for (const value of raw.split(",")) {
+    const normalized = value.trim().toUpperCase();
+    if (normalized) {
+      values.add(normalized);
+    }
+  }
+  return values;
 }
 
 function requiredEnv(name: string): string {
@@ -192,6 +208,7 @@ function readSpApiConfig(): SpApiConfig {
     awsSessionToken: process.env.AWS_SESSION_TOKEN?.trim(),
     awsRoleArn: process.env.AWS_ROLE_ARN?.trim(),
     awsRoleSessionName: process.env.AWS_ROLE_SESSION_NAME?.trim() || "next-sp-api-session",
+    amazonSellerIds: parseAmazonSellerIds(process.env.AMAZON_SELLER_IDS, marketplaceId),
   };
 }
 
@@ -454,7 +471,8 @@ export class SpApiClient {
 
     const amazonIsSeller = offers.some((offerRaw) => {
       const offer = asObject(offerRaw);
-      return readString(getField(offer, ["SellerId", "sellerId"])) === AMAZON_RETAIL_SELLER_ID;
+      const sellerId = readString(getField(offer, ["SellerId", "sellerId"]))?.toUpperCase();
+      return Boolean(sellerId && this.config.amazonSellerIds.has(sellerId));
     });
 
     return {
@@ -467,7 +485,7 @@ export class SpApiClient {
     const root = asObject(data);
     const payload = asArray(getField(root, ["payload", "Payload"]));
     if (payload.length === 0) {
-      return { buyBoxPrice: null, amazonIsSeller: false };
+      return { buyBoxPrice: null, amazonIsSeller: null };
     }
 
     let bestPrice: number | null = null;
@@ -506,7 +524,7 @@ export class SpApiClient {
 
     return {
       buyBoxPrice: bestPrice === null ? null : toCurrency(bestPrice),
-      amazonIsSeller: false,
+      amazonIsSeller: null,
     };
   }
 
@@ -671,7 +689,7 @@ export class SpApiClient {
 
   async fetchCompetitivePricing(asin: string): Promise<CompetitivePricing> {
     let primaryError: Error | null = null;
-    let primaryPricing: CompetitivePricing = { buyBoxPrice: null, amazonIsSeller: false };
+    let primaryPricing: CompetitivePricing = { buyBoxPrice: null, amazonIsSeller: null };
 
     try {
       const response = await this.request<unknown>("GET", `/products/pricing/v0/items/${asin}/offers`, {
@@ -701,7 +719,10 @@ export class SpApiClient {
       if (fallbackPricing.buyBoxPrice !== null) {
         return {
           buyBoxPrice: fallbackPricing.buyBoxPrice,
-          amazonIsSeller: primaryPricing.amazonIsSeller || fallbackPricing.amazonIsSeller,
+          amazonIsSeller:
+            primaryPricing.amazonIsSeller === true
+              ? true
+              : fallbackPricing.amazonIsSeller,
         };
       }
     } catch (fallbackError) {

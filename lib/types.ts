@@ -29,7 +29,7 @@ export interface ProductAnalysis {
   shippingCost: number;
   buyBoxPrice: number | null;
   salesRank: number | null;
-  amazonIsSeller: boolean;
+  amazonIsSeller: boolean | null;
   referralFee: number;
   fbaFee: number;
   totalFees: number;

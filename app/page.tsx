@@ -474,7 +474,13 @@ export default function Home() {
                     <td className="px-3 py-3">{formatPercent(item.roiPercent)}</td>
                     <td className="px-3 py-3">
                       <div>{formatNumber(item.salesRank)}</div>
-                      <div className="text-xs text-slate-600">{item.amazonIsSeller ? "Amazon seller: Yes" : "Amazon seller: No"}</div>
+                      <div className="text-xs text-slate-600">
+                        {item.amazonIsSeller === true
+                          ? "Amazon seller: Yes"
+                          : item.amazonIsSeller === false
+                            ? "Amazon seller: No"
+                            : "Amazon seller: Unknown"}
+                      </div>
                     </td>
                     <td className="px-3 py-3 font-semibold">{item.decision}</td>
                     <td className="px-3 py-3 text-xs text-slate-700">

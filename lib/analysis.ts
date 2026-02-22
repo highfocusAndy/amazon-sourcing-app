@@ -6,6 +6,7 @@ const BAD_SALES_RANK_THRESHOLD = 100_000;
 const MIN_HEALTHY_ROI_PERCENT = 10;
 const ESTIMATED_REFERRAL_RATE = 0.15;
 const ASIN_REGEX = /^[A-Z0-9]{10}$/i;
+const DEFAULT_BATCH_CONCURRENCY = 3;
 
 function toCurrency(value: number | null): number | null {
   if (value === null || !Number.isFinite(value)) {
@@ -83,7 +84,7 @@ function buildBaseResult(input: ProductInput): ProductAnalysis {
     shippingCost: sellerType === "FBM" ? Math.max(0, normalizeNumber(input.shippingCost)) : 0,
     buyBoxPrice: null,
     salesRank: null,
-    amazonIsSeller: false,
+    amazonIsSeller: null,
     referralFee: 0,
     fbaFee: 0,
     totalFees: 0,
@@ -107,8 +108,10 @@ function evaluateDecision(result: ProductAnalysis, projectedMonthlyUnits: number
   const restricted = isRestrictedBrand(result.brand, getServerEnv().restrictedBrands);
   result.restrictedBrand = restricted;
 
-  if (result.amazonIsSeller) {
+  if (result.amazonIsSeller === true) {
     reasons.push("Amazon is currently a seller on this listing.");
+  } else if (result.amazonIsSeller === null) {
+    reasons.push("Amazon seller presence could not be determined from available pricing data.");
   }
 
   if (result.salesRank !== null && result.salesRank > BAD_SALES_RANK_THRESHOLD) {
@@ -150,7 +153,7 @@ function evaluateDecision(result: ProductAnalysis, projectedMonthlyUnits: number
   let decision: Decision = "UNKNOWN";
   let rowColor: RowColor = "red";
 
-  const forcedBad = result.amazonIsSeller || (result.salesRank !== null && result.salesRank > BAD_SALES_RANK_THRESHOLD);
+  const forcedBad = result.amazonIsSeller === true || (result.salesRank !== null && result.salesRank > BAD_SALES_RANK_THRESHOLD);
   if (forcedBad) {
     decision = "BAD";
     rowColor = "red";
@@ -323,11 +326,24 @@ export async function analyzeProduct(input: ProductInput): Promise<ProductAnalys
 }
 
 export async function analyzeBatch(inputs: ProductInput[]): Promise<ProductAnalysis[]> {
-  const results: ProductAnalysis[] = [];
-  for (const input of inputs) {
-    // Sequential processing is safer for SP-API rate limits.
-    const analyzed = await analyzeProduct(input);
-    results.push(analyzed);
+  if (inputs.length === 0) {
+    return [];
   }
+
+  const configuredConcurrency = Number(process.env.BATCH_ANALYZE_CONCURRENCY ?? DEFAULT_BATCH_CONCURRENCY);
+  const concurrency = Math.max(1, Math.min(6, Number.isFinite(configuredConcurrency) ? configuredConcurrency : DEFAULT_BATCH_CONCURRENCY));
+  const results = new Array<ProductAnalysis>(inputs.length);
+  let nextIndex = 0;
+
+  async function worker(): Promise<void> {
+    while (nextIndex < inputs.length) {
+      const currentIndex = nextIndex;
+      nextIndex += 1;
+      // Keep a modest pool to improve throughput without excessive API throttling.
+      results[currentIndex] = await analyzeProduct(inputs[currentIndex]);
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(concurrency, inputs.length) }, () => worker()));
   return results;
 }
