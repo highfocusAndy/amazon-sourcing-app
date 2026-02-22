@@ -10,7 +10,6 @@ import {
   type DragEvent,
   type FormEvent,
 } from "react";
-import { BrowserMultiFormatReader, type IScannerControls } from "@zxing/browser";
 
 import type { ProductAnalysis, SellerType } from "@/lib/types";
 
@@ -30,6 +29,16 @@ type SortColumn =
 
 type SortDirection = "asc" | "desc";
 type ViewFilter = "all" | "buy_now" | "ungate_profitable" | "restricted" | "needs_review";
+
+type DetectedBarcode = {
+  rawValue?: string;
+};
+
+type BarcodeDetectorInstance = {
+  detect: (source: ImageBitmapSource) => Promise<DetectedBarcode[]>;
+};
+
+type BarcodeDetectorCtor = new (options?: { formats?: string[] }) => BarcodeDetectorInstance;
 
 const numberColumns = new Set<SortColumn>([
   "buyBoxPrice",
@@ -146,13 +155,17 @@ export default function Home() {
   const [scannerError, setScannerError] = useState<string | null>(null);
   const [scannerRunNonce, setScannerRunNonce] = useState(0);
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const scannerControlsRef = useRef<IScannerControls | null>(null);
+  const scannerStreamRef = useRef<MediaStream | null>(null);
+  const scannerFrameRef = useRef<number | null>(null);
   const hasScannedRef = useRef(false);
 
   const stopScanner = useCallback(() => {
-    scannerControlsRef.current?.stop();
-    scannerControlsRef.current = null;
-    BrowserMultiFormatReader.releaseAllStreams();
+    if (scannerFrameRef.current !== null) {
+      window.cancelAnimationFrame(scannerFrameRef.current);
+      scannerFrameRef.current = null;
+    }
+    scannerStreamRef.current?.getTracks().forEach((track) => track.stop());
+    scannerStreamRef.current = null;
     if (videoRef.current) {
       videoRef.current.pause();
       videoRef.current.srcObject = null;
@@ -168,45 +181,89 @@ export default function Home() {
 
     setScannerError(null);
     hasScannedRef.current = false;
-    const reader = new BrowserMultiFormatReader();
     let cancelled = false;
+    let detectionErrorShown = false;
 
-    void reader
-      .decodeFromVideoDevice(undefined, videoRef.current, (result, error, controls) => {
-        scannerControlsRef.current = controls;
-        if (cancelled || hasScannedRef.current) {
-          return;
-        }
+    const scanLoop = async (detector: BarcodeDetectorInstance): Promise<void> => {
+      if (cancelled || hasScannedRef.current || !videoRef.current) {
+        return;
+      }
 
-        if (result) {
-          const scannedIdentifier = result.getText().trim();
-          if (!scannedIdentifier) {
+      try {
+        if (videoRef.current.readyState >= 2) {
+          const detections = await detector.detect(videoRef.current);
+          const scannedValue = detections
+            .map((entry) => entry.rawValue?.trim() ?? "")
+            .find((value) => value.length > 0);
+
+          if (scannedValue) {
+            hasScannedRef.current = true;
+            setIdentifier(scannedValue);
+            setErrorMessage(null);
+            setInfoMessage(`Scanned identifier: ${scannedValue}`);
+            setIsScannerOpen(false);
             return;
           }
+        }
+      } catch {
+        if (!detectionErrorShown) {
+          setScannerError("Scanner is active but could not decode this frame. Try better lighting and distance.");
+          detectionErrorShown = true;
+        }
+      }
 
-          hasScannedRef.current = true;
-          setIdentifier(scannedIdentifier);
-          setErrorMessage(null);
-          setInfoMessage(`Scanned identifier: ${scannedIdentifier}`);
-          setIsScannerOpen(false);
+      scannerFrameRef.current = window.requestAnimationFrame(() => {
+        void scanLoop(detector);
+      });
+    };
+
+    const startScanner = async (): Promise<void> => {
+      try {
+        if (!navigator.mediaDevices?.getUserMedia) {
+          setScannerError("Camera access is not available in this browser.");
           return;
         }
 
-        if (
-          error &&
-          error.name !== "NotFoundException" &&
-          error.name !== "ChecksumException" &&
-          error.name !== "FormatException"
-        ) {
-          setScannerError("Scanner is active but could not decode this frame. Try better lighting and distance.");
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: "environment" } },
+          audio: false,
+        });
+        if (cancelled) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
         }
-      })
-      .catch((error) => {
+
+        scannerStreamRef.current = stream;
+        if (!videoRef.current) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+
+        const detectorCtor = (window as Window & { BarcodeDetector?: BarcodeDetectorCtor }).BarcodeDetector;
+        if (!detectorCtor) {
+          setScannerError("Camera opened, but barcode detection is not supported in this browser. Use Chrome/Edge or type manually.");
+          return;
+        }
+
+        const detector = new detectorCtor({
+          formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "code_39", "itf"],
+        });
+
+        scannerFrameRef.current = window.requestAnimationFrame(() => {
+          void scanLoop(detector);
+        });
+      } catch (error) {
         if (cancelled) {
           return;
         }
         setScannerError(error instanceof Error ? error.message : "Unable to access camera.");
-      });
+      }
+    };
+
+    void startScanner();
 
     return () => {
       cancelled = true;

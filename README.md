@@ -100,3 +100,4 @@ npm run dev
 - Batch analysis concurrency can be tuned with `BATCH_ANALYZE_CONCURRENCY` in `.env.local` (default: 3).
 - If Amazon seller detection needs marketplace-specific IDs, set `AMAZON_SELLER_IDS` as a comma-separated list.
 - Restricted brand matching comes from `RESTRICTED_BRANDS` in `.env.local` (comma-separated).
+- If testing from another device/browser origin in dev, set `ALLOWED_DEV_ORIGINS` (comma-separated full origins).
