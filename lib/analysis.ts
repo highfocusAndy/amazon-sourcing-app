@@ -41,6 +41,24 @@ function isPermissionError(message: string): boolean {
   return /unauthorized|access to requested resource is denied|403/i.test(message);
 }
 
+function uniqueNonEmpty(values: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of values) {
+    const value = raw.trim();
+    if (!value) {
+      continue;
+    }
+    const key = value.toLowerCase();
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    out.push(value);
+  }
+  return out;
+}
+
 function estimateReferralFee(buyBoxPrice: number): number {
   return toCurrency(buyBoxPrice * ESTIMATED_REFERRAL_RATE) ?? 0;
 }
@@ -184,16 +202,26 @@ export async function analyzeProduct(input: ProductInput): Promise<ProductAnalys
     }
 
     if (!catalog && requestedProductName) {
-      try {
-        catalog = await spApiClient.searchCatalogByKeyword(requestedProductName);
-        if (catalog) {
-          result.reasons.push("Catalog match resolved from product name search.");
-          if (!result.inputIdentifier) {
-            result.inputIdentifier = requestedProductName;
+      const keywordQueries = uniqueNonEmpty([
+        requestedProductName,
+        result.brand ? `${result.brand} ${requestedProductName}` : "",
+        result.brand ? `${requestedProductName} ${result.brand}` : "",
+      ]);
+
+      for (const keywordQuery of keywordQueries) {
+        try {
+          // Try best-to-broadest keyword combinations.
+          catalog = await spApiClient.searchCatalogByKeyword(keywordQuery);
+          if (catalog) {
+            result.reasons.push("Catalog match resolved from product name search.");
+            if (!result.inputIdentifier) {
+              result.inputIdentifier = requestedProductName;
+            }
+            break;
           }
+        } catch (error) {
+          catalogErrorMessage = error instanceof Error ? error.message : "Catalog keyword search failed.";
         }
-      } catch (error) {
-        catalogErrorMessage = error instanceof Error ? error.message : "Catalog keyword search failed.";
       }
     }
 
@@ -209,6 +237,8 @@ export async function analyzeProduct(input: ProductInput): Promise<ProductAnalys
       result.reasons = ["Could not resolve catalog metadata from Amazon SP-API."];
       if (catalogErrorMessage) {
         result.reasons.push(catalogErrorMessage);
+      } else {
+        result.reasons.push("Identifier may not map to an active listing in the configured marketplace.");
       }
       return result;
     }

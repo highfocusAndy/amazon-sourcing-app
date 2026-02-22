@@ -52,7 +52,7 @@ export interface FeeEstimate {
 
 const AMAZON_RETAIL_SELLER_ID = "ATVPDKIKX0DER";
 const ASIN_REGEX = /^[A-Z0-9]{10}$/i;
-const UPC_EAN_REGEX = /^\d{11,14}$/;
+const UPC_EAN_REGEX = /^\d{8,14}$/;
 const RETRYABLE_HTTP_STATUS = new Set([429, 500, 502, 503, 504]);
 
 let lwaTokenCache: LwaTokenCache | null = null;
@@ -145,6 +145,33 @@ function toCurrency(value: number): number {
 
 function normalizeIdentifier(identifier: string): string {
   return identifier.trim().replace(/\u200b/g, "");
+}
+
+function buildNumericIdentifierCandidates(rawDigits: string): string[] {
+  const base = rawDigits.replace(/\D/g, "");
+  const candidates = new Set<string>();
+
+  if (base) {
+    candidates.add(base);
+    const trimmed = base.replace(/^0+/, "");
+    if (trimmed) {
+      candidates.add(trimmed);
+    }
+  }
+
+  if (base.length >= 8 && base.length < 12) {
+    candidates.add(base.padStart(12, "0"));
+  }
+
+  if (base.length >= 8 && base.length < 13) {
+    candidates.add(base.padStart(13, "0"));
+  }
+
+  if (base.length >= 8 && base.length < 14) {
+    candidates.add(base.padStart(14, "0"));
+  }
+
+  return [...candidates].filter((candidate) => UPC_EAN_REGEX.test(candidate));
 }
 
 function readSpApiConfig(): SpApiConfig {
@@ -625,11 +652,21 @@ export class SpApiClient {
       return null;
     }
 
-    const [upc, ean] = await Promise.all([
-      this.searchCatalogByIdentifier("UPC", digits).catch(() => null),
-      this.searchCatalogByIdentifier("EAN", digits).catch(() => null),
-    ]);
-    return upc ?? ean;
+    const identifierCandidates = buildNumericIdentifierCandidates(digits);
+    for (const candidate of identifierCandidates) {
+      const identifierTypes: Array<"UPC" | "EAN"> =
+        candidate.length === 13 ? ["EAN", "UPC"] : candidate.length === 12 ? ["UPC", "EAN"] : ["UPC", "EAN"];
+
+      for (const identifierType of identifierTypes) {
+        // Sequential tries improve reliability for mixed UPC/EAN supplier data.
+        const match = await this.searchCatalogByIdentifier(identifierType, candidate).catch(() => null);
+        if (match) {
+          return match;
+        }
+      }
+    }
+
+    return null;
   }
 
   async fetchCompetitivePricing(asin: string): Promise<CompetitivePricing> {

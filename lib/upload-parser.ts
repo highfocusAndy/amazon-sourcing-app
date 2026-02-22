@@ -49,7 +49,7 @@ const PRODUCT_NAME_PRIORITY: string[][] = [
   ["name"],
 ];
 const ASIN_VALUE_REGEX = /^[A-Z0-9]{10}$/i;
-const UPC_EAN_VALUE_REGEX = /^\d{11,14}$/;
+const UPC_EAN_VALUE_REGEX = /^\d{8,14}$/;
 
 type ColumnStats = {
   nonEmpty: number;
