@@ -268,6 +268,8 @@ export default function Home() {
     setSellerType(nextSellerType);
   }
 
+  // Rerun only when seller type changes after an initial successful run.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!hasInitializedSellerType.current) {
       hasInitializedSellerType.current = true;
