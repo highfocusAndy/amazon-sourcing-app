@@ -102,6 +102,7 @@ export default function Home() {
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
   const [sortColumn, setSortColumn] = useState<SortColumn>("netProfit");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [lastRunMode, setLastRunMode] = useState<"manual" | "upload" | null>(null);
 
   const sortedResults = useMemo(() => {
     return [...results].sort((left, right) => compareValues(left, right, sortColumn, sortDirection));
@@ -161,8 +162,7 @@ export default function Home() {
     applyFileSelection(event.dataTransfer.files?.[0] ?? null);
   }
 
-  async function handleManualSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
-    event.preventDefault();
+  async function runManualAnalysis(selectedSellerType: SellerType, isAutoRerun = false): Promise<void> {
     setErrorMessage(null);
     setInfoMessage(null);
     setIsManualLoading(true);
@@ -178,8 +178,8 @@ export default function Home() {
           wholesalePrice: Number(wholesalePrice),
           brand,
           projectedMonthlyUnits: Number(projectedMonthlyUnits),
-          sellerType,
-          shippingCost: sellerType === "FBM" ? Number(shippingCost) : 0,
+          sellerType: selectedSellerType,
+          shippingCost: selectedSellerType === "FBM" ? Number(shippingCost) : 0,
         }),
       });
 
@@ -188,8 +188,14 @@ export default function Home() {
         throw new Error(json.error ?? "Manual analysis failed.");
       }
 
-      setResults((current) => [json.result as ProductAnalysis, ...current]);
-      setInfoMessage("Manual lookup complete.");
+      if (isAutoRerun) {
+        setResults([json.result as ProductAnalysis]);
+        setInfoMessage(`Manual lookup re-analyzed for ${selectedSellerType}.`);
+      } else {
+        setResults((current) => [json.result as ProductAnalysis, ...current]);
+        setInfoMessage("Manual lookup complete.");
+      }
+      setLastRunMode("manual");
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Manual lookup failed.");
     } finally {
@@ -197,8 +203,12 @@ export default function Home() {
     }
   }
 
-  async function handleUploadSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
+  async function handleManualSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
+    await runManualAnalysis(sellerType, false);
+  }
+
+  async function runUploadAnalysis(selectedSellerType: SellerType, isAutoRerun = false): Promise<void> {
     if (!file) {
       setErrorMessage("Choose an .xlsx, .xls, or .csv file before running upload analysis.");
       return;
@@ -212,8 +222,8 @@ export default function Home() {
       const formData = new FormData();
       formData.append("file", file);
       formData.append("projectedMonthlyUnits", projectedMonthlyUnits);
-      formData.append("sellerType", sellerType);
-      formData.append("shippingCost", sellerType === "FBM" ? shippingCost : "0");
+      formData.append("sellerType", selectedSellerType);
+      formData.append("shippingCost", selectedSellerType === "FBM" ? shippingCost : "0");
 
       const response = await fetch("/api/upload", {
         method: "POST",
@@ -232,11 +242,42 @@ export default function Home() {
       }
 
       setResults(json.results);
-      setInfoMessage(`Analyzed ${json.analyzedRows ?? json.results.length} rows from ${json.parsedRows ?? 0} uploaded rows.`);
+      setInfoMessage(
+        isAutoRerun
+          ? `Batch analysis re-analyzed for ${selectedSellerType}.`
+          : `Analyzed ${json.analyzedRows ?? json.results.length} rows from ${json.parsedRows ?? 0} uploaded rows.`,
+      );
+      setLastRunMode("upload");
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Upload analysis failed.");
     } finally {
       setIsUploadLoading(false);
+    }
+  }
+
+  async function handleUploadSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    await runUploadAnalysis(sellerType, false);
+  }
+
+  async function handleSellerTypeChange(nextSellerType: SellerType): Promise<void> {
+    if (nextSellerType === sellerType) {
+      return;
+    }
+
+    setSellerType(nextSellerType);
+
+    if (isManualLoading || isUploadLoading || results.length === 0) {
+      return;
+    }
+
+    if (lastRunMode === "manual" && identifier.trim()) {
+      await runManualAnalysis(nextSellerType, true);
+      return;
+    }
+
+    if (lastRunMode === "upload" && file) {
+      await runUploadAnalysis(nextSellerType, true);
     }
   }
 
@@ -290,7 +331,9 @@ export default function Home() {
             Seller Type
             <select
               value={sellerType}
-              onChange={(event) => setSellerType(event.target.value === "FBM" ? "FBM" : "FBA")}
+              onChange={(event) => {
+                void handleSellerTypeChange(event.target.value === "FBM" ? "FBM" : "FBA");
+              }}
               className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-sky-400 focus:ring"
             >
               <option value="FBA">FBA</option>
