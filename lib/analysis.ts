@@ -204,11 +204,12 @@ export async function analyzeProduct(input: ProductInput): Promise<ProductAnalys
       }
     }
 
-    if (!catalog && requestedProductName) {
+    if (!catalog) {
+      const keywordSeed = requestedProductName || (!ASIN_REGEX.test(result.inputIdentifier) ? result.inputIdentifier : "");
       const keywordQueries = uniqueNonEmpty([
-        requestedProductName,
-        result.brand ? `${result.brand} ${requestedProductName}` : "",
-        result.brand ? `${requestedProductName} ${result.brand}` : "",
+        keywordSeed,
+        result.brand && keywordSeed ? `${result.brand} ${keywordSeed}` : "",
+        result.brand && keywordSeed ? `${keywordSeed} ${result.brand}` : "",
       ]);
 
       for (const keywordQuery of keywordQueries) {
@@ -216,7 +217,7 @@ export async function analyzeProduct(input: ProductInput): Promise<ProductAnalys
           // Try best-to-broadest keyword combinations.
           catalog = await spApiClient.searchCatalogByKeyword(keywordQuery);
           if (catalog) {
-            result.reasons.push("Catalog match resolved from product name search.");
+            result.reasons.push("Catalog match resolved from keyword search.");
             if (!result.inputIdentifier) {
               result.inputIdentifier = requestedProductName;
             }

@@ -55,6 +55,7 @@ type ColumnStats = {
   nonEmpty: number;
   asinLike: number;
   upcLike: number;
+  alphaLike: number;
   numeric: number;
   decimalNumeric: number;
   smallInteger: number;
@@ -340,6 +341,7 @@ function inferColumnsFromValues(headers: string[], rawRows: Array<Record<string,
       nonEmpty: 0,
       asinLike: 0,
       upcLike: 0,
+      alphaLike: 0,
       numeric: 0,
       decimalNumeric: 0,
       smallInteger: 0,
@@ -363,6 +365,10 @@ function inferColumnsFromValues(headers: string[], rawRows: Array<Record<string,
       const compact = normalized.replace(/\s+/g, "").toUpperCase();
       if (ASIN_VALUE_REGEX.test(compact)) {
         headerStats.asinLike += 1;
+      }
+
+      if (/[A-Z]/.test(compact)) {
+        headerStats.alphaLike += 1;
       }
 
       const digits = compact.replace(/\D/g, "");
@@ -424,7 +430,7 @@ function inferColumnsFromValues(headers: string[], rawRows: Array<Record<string,
     identifierKey = upcCandidate.header;
   }
 
-  const headerProductNameKey = pickProductNameKey(headerMeta, new Set([headerBrandKey, headerCasePackKey].filter(Boolean) as string[]));
+  let headerProductNameKey = pickProductNameKey(headerMeta, new Set([headerBrandKey, headerCasePackKey].filter(Boolean) as string[]));
   const identifierExists = Boolean(identifierKey);
   if (!identifierExists && !headerProductNameKey) {
     throw new Error("No identifier or product name column found. Expected ASIN/UPC/EAN/barcode or product title/name.");
@@ -477,6 +483,27 @@ function inferColumnsFromValues(headers: string[], rawRows: Array<Record<string,
   const costKey = costCandidate[0]?.header;
   if (!costKey) {
     throw new Error("No cost column found. Expected cost, wholesale, unit_cost, buy_price, case_cost, or price_per_unit.");
+  }
+
+  if (!headerProductNameKey) {
+    const inferredNameCandidate = headers
+      .filter((header) => header !== identifierKey && header !== costKey && header !== casePackKey && header !== headerBrandKey)
+      .map((header) => {
+        const s = stats.get(header)!;
+        const nonEmpty = Math.max(s.nonEmpty, 1);
+        const alphaRatio = rate(s.alphaLike, nonEmpty);
+        const numericRatio = rate(s.numeric, nonEmpty);
+        return {
+          header,
+          alphaRatio,
+          numericRatio,
+          nonEmpty: s.nonEmpty,
+        };
+      })
+      .filter((entry) => entry.nonEmpty >= 3 && entry.alphaRatio >= 0.5 && entry.numericRatio <= 0.5)
+      .sort((a, b) => b.alphaRatio - a.alphaRatio || b.nonEmpty - a.nonEmpty);
+
+    headerProductNameKey = inferredNameCandidate[0]?.header;
   }
 
   return {

@@ -163,6 +163,24 @@ function normalizeIdentifier(identifier: string): string {
   return identifier.trim().replace(/\u200b/g, "");
 }
 
+function extractAsinCandidate(value: string): string | null {
+  const normalized = value.toUpperCase();
+  if (ASIN_REGEX.test(normalized)) {
+    return normalized;
+  }
+
+  const matches = normalized.match(/[A-Z0-9]{10}/g) ?? [];
+  for (const match of matches) {
+    const hasLetter = /[A-Z]/.test(match);
+    const hasDigit = /\d/.test(match);
+    if (hasLetter && hasDigit) {
+      return match;
+    }
+  }
+
+  return null;
+}
+
 function buildNumericIdentifierCandidates(rawDigits: string): string[] {
   const base = rawDigits.replace(/\D/g, "");
   const candidates = new Set<string>();
@@ -661,30 +679,33 @@ export class SpApiClient {
       return null;
     }
 
-    if (ASIN_REGEX.test(normalized)) {
-      return this.fetchCatalogItem(normalized.toUpperCase());
+    const asinCandidate = extractAsinCandidate(normalized);
+    if (asinCandidate) {
+      const asinResult = await this.fetchCatalogItem(asinCandidate).catch(() => null);
+      if (asinResult) {
+        return asinResult;
+      }
     }
 
     const digits = normalized.replace(/\D/g, "");
-    if (!UPC_EAN_REGEX.test(digits)) {
-      return null;
-    }
+    if (UPC_EAN_REGEX.test(digits)) {
+      const identifierCandidates = buildNumericIdentifierCandidates(digits);
+      for (const candidate of identifierCandidates) {
+        const identifierTypes: Array<"UPC" | "EAN"> =
+          candidate.length === 13 ? ["EAN", "UPC"] : candidate.length === 12 ? ["UPC", "EAN"] : ["UPC", "EAN"];
 
-    const identifierCandidates = buildNumericIdentifierCandidates(digits);
-    for (const candidate of identifierCandidates) {
-      const identifierTypes: Array<"UPC" | "EAN"> =
-        candidate.length === 13 ? ["EAN", "UPC"] : candidate.length === 12 ? ["UPC", "EAN"] : ["UPC", "EAN"];
-
-      for (const identifierType of identifierTypes) {
-        // Sequential tries improve reliability for mixed UPC/EAN supplier data.
-        const match = await this.searchCatalogByIdentifier(identifierType, candidate).catch(() => null);
-        if (match) {
-          return match;
+        for (const identifierType of identifierTypes) {
+          // Sequential tries improve reliability for mixed UPC/EAN supplier data.
+          const match = await this.searchCatalogByIdentifier(identifierType, candidate).catch(() => null);
+          if (match) {
+            return match;
+          }
         }
       }
     }
 
-    return null;
+    // Last resort: keyword lookup can recover noisy supplier identifiers/titles.
+    return this.searchCatalogByKeyword(normalized).catch(() => null);
   }
 
   async fetchCompetitivePricing(asin: string): Promise<CompetitivePricing> {
