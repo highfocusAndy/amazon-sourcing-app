@@ -38,6 +38,12 @@ function normalizeSellerType(value: ProductInput["sellerType"]): SellerType {
   return value === "FBM" ? "FBM" : "FBA";
 }
 
+function addReasonUnique(reasons: string[], reason: string): void {
+  if (!reasons.includes(reason)) {
+    reasons.push(reason);
+  }
+}
+
 function isPermissionError(message: string): boolean {
   return /unauthorized|access to requested resource is denied|403/i.test(message);
 }
@@ -85,6 +91,10 @@ function buildBaseResult(input: ProductInput): ProductAnalysis {
     buyBoxPrice: null,
     salesRank: null,
     amazonIsSeller: null,
+    listingRestricted: null,
+    approvalRequired: null,
+    ipComplaintRisk: null,
+    restrictionReasonCodes: [],
     referralFee: 0,
     fbaFee: 0,
     totalFees: 0,
@@ -103,31 +113,43 @@ function buildBaseResult(input: ProductInput): ProductAnalysis {
 }
 
 function evaluateDecision(result: ProductAnalysis, projectedMonthlyUnits: number): ProductAnalysis {
-  const reasons: string[] = [];
+  const reasons: string[] = [...result.reasons];
 
   const restricted = isRestrictedBrand(result.brand, getServerEnv().restrictedBrands);
   result.restrictedBrand = restricted;
 
   if (result.amazonIsSeller === true) {
-    reasons.push("Amazon is currently a seller on this listing.");
+    addReasonUnique(reasons, "Amazon is currently a seller on this listing.");
   } else if (result.amazonIsSeller === null) {
-    reasons.push("Amazon seller presence could not be determined from available pricing data.");
+    addReasonUnique(reasons, "Amazon seller presence could not be determined from available pricing data.");
+  }
+
+  if (result.approvalRequired === true) {
+    addReasonUnique(reasons, "This ASIN requires approval for your seller account.");
+  }
+
+  if (result.listingRestricted === true) {
+    addReasonUnique(reasons, "Listing restrictions were returned for this ASIN in your account.");
+  }
+
+  if (result.ipComplaintRisk === true) {
+    addReasonUnique(reasons, "Potential IP/brand complaint risk detected from restriction reasons.");
   }
 
   if (result.salesRank !== null && result.salesRank > BAD_SALES_RANK_THRESHOLD) {
-    reasons.push(`Sales rank ${result.salesRank.toLocaleString()} is above 100,000.`);
+    addReasonUnique(reasons, `Sales rank ${result.salesRank.toLocaleString()} is above 100,000.`);
   }
 
   if (result.netProfit !== null && result.netProfit <= 0) {
-    reasons.push("Net profit is non-positive after wholesale and fee costs.");
+    addReasonUnique(reasons, "Net profit is non-positive after wholesale and fee costs.");
   }
 
   if (result.roiPercent !== null && result.roiPercent < MIN_HEALTHY_ROI_PERCENT) {
-    reasons.push(`ROI is below ${MIN_HEALTHY_ROI_PERCENT}%.`);
+    addReasonUnique(reasons, `ROI is below ${MIN_HEALTHY_ROI_PERCENT}%.`);
   }
 
   if (restricted) {
-    reasons.push("Brand is in the restricted list.");
+    addReasonUnique(reasons, "Brand is in the restricted list.");
     result.ungatingCost10Units = toCurrency(result.wholesalePrice * 10);
 
     if (result.netProfit !== null) {
@@ -144,22 +166,28 @@ function evaluateDecision(result: ProductAnalysis, projectedMonthlyUnits: number
       result.projectedMonthlyProfit > result.ungatingCost10Units * 2
     ) {
       result.worthUngating = true;
-      reasons.push("Projected monthly profit is greater than 2x ungating invoice cost.");
+      addReasonUnique(reasons, "Projected monthly profit is greater than 2x ungating invoice cost.");
     } else if (result.projectedMonthlyProfit !== null && result.ungatingCost10Units !== null) {
-      reasons.push("Projected monthly profit does not exceed 2x ungating invoice cost.");
+      addReasonUnique(reasons, "Projected monthly profit does not exceed 2x ungating invoice cost.");
     }
   }
 
   let decision: Decision = "UNKNOWN";
   let rowColor: RowColor = "red";
 
-  const forcedBad = result.amazonIsSeller === true || (result.salesRank !== null && result.salesRank > BAD_SALES_RANK_THRESHOLD);
+  const forcedBad =
+    result.amazonIsSeller === true ||
+    result.ipComplaintRisk === true ||
+    (result.salesRank !== null && result.salesRank > BAD_SALES_RANK_THRESHOLD);
   if (forcedBad) {
     decision = "BAD";
     rowColor = "red";
-  } else if (restricted && result.worthUngating) {
+  } else if ((restricted || result.approvalRequired === true || result.listingRestricted === true) && result.worthUngating) {
     decision = "WORTH UNGATING";
     rowColor = "yellow";
+  } else if (result.approvalRequired === true || result.listingRestricted === true) {
+    decision = "LOW_MARGIN";
+    rowColor = "red";
   } else if (result.netProfit === null || result.roiPercent === null) {
     decision = "UNKNOWN";
     rowColor = "red";
@@ -263,9 +291,33 @@ export async function analyzeProduct(input: ProductInput): Promise<ProductAnalys
       return result;
     }
 
-    const pricing = await spApiClient.fetchCompetitivePricing(resolvedAsin);
+    const [pricing, listingRestrictionsResult] = await Promise.all([
+      spApiClient.fetchCompetitivePricing(resolvedAsin),
+      spApiClient
+        .fetchListingRestrictions(resolvedAsin)
+        .then((data) => ({ data, error: null as string | null }))
+        .catch((error) => ({
+          data: null,
+          error: error instanceof Error ? error.message : "Listing restrictions lookup failed.",
+        })),
+    ]);
     result.buyBoxPrice = pricing.buyBoxPrice;
     result.amazonIsSeller = pricing.amazonIsSeller;
+    const listingRestrictions = listingRestrictionsResult.data;
+    if (listingRestrictions) {
+      result.listingRestricted = listingRestrictions.restricted;
+      result.approvalRequired = listingRestrictions.approvalRequired;
+      result.ipComplaintRisk = listingRestrictions.ipComplaintRisk;
+      result.restrictionReasonCodes = listingRestrictions.reasonCodes;
+      if (listingRestrictions.reasonCodes.length > 0) {
+        addReasonUnique(result.reasons, `Restriction codes: ${listingRestrictions.reasonCodes.join(", ")}`);
+      }
+      if (listingRestrictions.reasonMessages.length > 0) {
+        addReasonUnique(result.reasons, listingRestrictions.reasonMessages[0]);
+      }
+    } else if (listingRestrictionsResult.error) {
+      addReasonUnique(result.reasons, `Listing restriction check unavailable: ${listingRestrictionsResult.error}`);
+    }
 
     if (result.buyBoxPrice !== null) {
       try {

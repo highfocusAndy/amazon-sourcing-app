@@ -51,6 +51,14 @@ export interface FeeEstimate {
   totalFees: number;
 }
 
+export interface ListingRestrictionsAssessment {
+  restricted: boolean;
+  approvalRequired: boolean;
+  ipComplaintRisk: boolean;
+  reasonCodes: string[];
+  reasonMessages: string[];
+}
+
 const AMAZON_RETAIL_SELLER_ID = "ATVPDKIKX0DER";
 const ASIN_REGEX = /^[A-Z0-9]{10}$/i;
 const UPC_EAN_REGEX = /^\d{8,14}$/;
@@ -59,6 +67,7 @@ const RETRYABLE_HTTP_STATUS = new Set([429, 500, 502, 503, 504]);
 let lwaTokenCache: LwaTokenCache | null = null;
 let assumedRoleCache: AwsCredentials | null = null;
 let spApiClientSingleton: SpApiClient | null = null;
+const listingRestrictionsCache = new Map<string, ListingRestrictionsAssessment>();
 
 function defaultSpApiHost(awsRegion: string): string {
   if (awsRegion.startsWith("eu-")) {
@@ -153,6 +162,10 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
+}
+
+function unique(values: string[]): string[] {
+  return [...new Set(values)];
 }
 
 function toCurrency(value: number): number {
@@ -605,6 +618,51 @@ export class SpApiClient {
     };
   }
 
+  private extractListingRestrictions(data: unknown): ListingRestrictionsAssessment {
+    const root = asObject(data);
+    const restrictions = asArray(getField(root, ["restrictions", "Restrictions"]));
+
+    const reasonCodes: string[] = [];
+    const reasonMessages: string[] = [];
+
+    for (const restrictionRaw of restrictions) {
+      const restriction = asObject(restrictionRaw);
+      if (!restriction) {
+        continue;
+      }
+
+      const reasons = asArray(getField(restriction, ["reasons", "Reasons"]));
+      for (const reasonRaw of reasons) {
+        const reason = asObject(reasonRaw);
+        if (!reason) {
+          continue;
+        }
+
+        const code = (readString(getField(reason, ["reasonCode", "ReasonCode"])) ?? "").trim();
+        const message = (readString(getField(reason, ["reasonDescription", "ReasonDescription"])) ?? "").trim();
+        if (code) {
+          reasonCodes.push(code.toUpperCase());
+        }
+        if (message) {
+          reasonMessages.push(message);
+        }
+      }
+    }
+
+    const allSignals = unique([...reasonCodes, ...reasonMessages.map((msg) => msg.toUpperCase())]).join(" | ");
+    const approvalRequired = /APPROVAL|RESTRICT|GATED|NOT_ELIGIBLE|REQUIRES|APPLICATION/.test(allSignals);
+    const ipComplaintRisk = /INTELLECTUAL|IP|TRADEMARK|PATENT|COPYRIGHT|COUNTERFEIT|BRAND_PROTECTION/.test(allSignals);
+    const restricted = restrictions.length > 0;
+
+    return {
+      restricted,
+      approvalRequired,
+      ipComplaintRisk,
+      reasonCodes: unique(reasonCodes),
+      reasonMessages: unique(reasonMessages),
+    };
+  }
+
   async fetchCatalogItem(asin: string): Promise<CatalogItem | null> {
     const response = await this.request<unknown>("GET", `/catalog/2022-04-01/items/${asin}`, {
       query: {
@@ -789,6 +847,27 @@ export class SpApiClient {
     });
 
     return this.extractFeeEstimate(response);
+  }
+
+  async fetchListingRestrictions(asin: string): Promise<ListingRestrictionsAssessment> {
+    const cacheKey = `${this.config.marketplaceId}:${this.config.sellerId}:${asin}`;
+    const cached = listingRestrictionsCache.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    const response = await this.request<unknown>("GET", "/listings/2021-08-01/restrictions", {
+      query: {
+        asin,
+        sellerId: this.config.sellerId,
+        marketplaceIds: this.config.marketplaceId,
+        conditionType: "new_new",
+      },
+    });
+
+    const parsed = this.extractListingRestrictions(response);
+    listingRestrictionsCache.set(cacheKey, parsed);
+    return parsed;
   }
 }
 

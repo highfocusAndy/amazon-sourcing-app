@@ -19,6 +19,10 @@ It supports manual ASIN/UPC lookups and bulk spreadsheet uploads, enriches produ
 
 - **Smart decision logic**
   - Auto-flags **BAD** if Amazon is a seller or BSR is over 100,000.
+  - Adds seller-account risk checks from Listings Restrictions API:
+    - approval required
+    - listing restricted for your account
+    - IP complaint risk signals from restriction reasons
   - Ungating calculator for restricted brands:
     - 10-unit invoice cost
     - break-even unit estimate

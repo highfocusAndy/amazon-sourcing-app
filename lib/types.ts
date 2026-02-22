@@ -30,6 +30,10 @@ export interface ProductAnalysis {
   buyBoxPrice: number | null;
   salesRank: number | null;
   amazonIsSeller: boolean | null;
+  listingRestricted: boolean | null;
+  approvalRequired: boolean | null;
+  ipComplaintRisk: boolean | null;
+  restrictionReasonCodes: string[];
   referralFee: number;
   fbaFee: number;
   totalFees: number;
