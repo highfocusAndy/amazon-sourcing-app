@@ -100,6 +100,52 @@ function rowColorClasses(color: ProductAnalysis["rowColor"]): string {
   return "bg-rose-50";
 }
 
+function decisionBadgeClasses(decision: ProductAnalysis["decision"]): string {
+  if (decision === "BUY") {
+    return "bg-emerald-100 text-emerald-800";
+  }
+  if (decision === "WORTH UNGATING") {
+    return "bg-amber-100 text-amber-800";
+  }
+  if (decision === "LOW_MARGIN") {
+    return "bg-orange-100 text-orange-800";
+  }
+  if (decision === "BAD") {
+    return "bg-rose-100 text-rose-800";
+  }
+  return "bg-slate-100 text-slate-700";
+}
+
+function buildAiInsight(item: ProductAnalysis): string {
+  if (item.error) {
+    return "Data connection issue. Re-run this item and verify account/API credentials.";
+  }
+
+  if (item.approvalRequired || item.listingRestricted || item.restrictedBrand) {
+    return "Listing/gating risk detected. Check approvals and ungating docs before buying.";
+  }
+
+  if (item.netProfit === null || item.roiPercent === null || item.buyBoxPrice === null) {
+    return "Incomplete market data. Validate buy box and fee data before making a sourcing decision.";
+  }
+
+  if (item.decision === "BUY") {
+    return item.amazonIsSeller === true
+      ? "Profitable but Amazon is on listing. Watch buy box share and price volatility."
+      : "Strong candidate. Profit and ROI are acceptable with current market snapshot.";
+  }
+
+  if (item.decision === "WORTH UNGATING") {
+    return "Potentially attractive after ungating. Confirm docs and post-ungating margin stability.";
+  }
+
+  if (item.decision === "LOW_MARGIN") {
+    return "Margin is thin. Negotiate lower cost, reduce shipping, or skip.";
+  }
+
+  return "Needs deeper review: compare offer depth, rank trend, and competition before buying.";
+}
+
 function compareValues(
   a: ProductAnalysis,
   b: ProductAnalysis,
@@ -173,12 +219,13 @@ export default function Home() {
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [scannerError, setScannerError] = useState<string | null>(null);
   const [scannerRunNonce, setScannerRunNonce] = useState(0);
+  const [manualIdentifierResolved, setManualIdentifierResolved] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const scannerStreamRef = useRef<MediaStream | null>(null);
   const scannerFrameRef = useRef<number | null>(null);
   const zxingReaderRef = useRef<ZxingReaderLike | null>(null);
   const hasScannedRef = useRef(false);
-  const lastAutoWholesalePriceRef = useRef(wholesalePrice);
+  const lastAutoManualCalcKeyRef = useRef("");
 
   const stopScanner = useCallback(() => {
     if (zxingReaderRef.current) {
@@ -207,6 +254,7 @@ export default function Home() {
       isAutoRerun = false,
       identifierOverride?: string,
       isScannerTriggered = false,
+      lookupOnly = false,
     ): Promise<void> => {
       const effectiveIdentifier = (identifierOverride ?? identifier).trim();
       if (!effectiveIdentifier) {
@@ -226,9 +274,9 @@ export default function Home() {
           },
           body: JSON.stringify({
             identifier: effectiveIdentifier,
-            wholesalePrice: Number(wholesalePrice),
-            brand,
-            projectedMonthlyUnits: Number(projectedMonthlyUnits),
+          wholesalePrice: lookupOnly ? 0 : Number(wholesalePrice),
+          brand,
+          projectedMonthlyUnits: lookupOnly ? 1 : Number(projectedMonthlyUnits),
             sellerType: selectedSellerType,
             shippingCost: selectedSellerType === "FBM" ? Number(shippingCost) : 0,
           }),
@@ -237,6 +285,23 @@ export default function Home() {
         const json = (await response.json()) as { error?: string; result?: ProductAnalysis };
         if (!response.ok || !json.result) {
           throw new Error(json.error ?? "Manual analysis failed.");
+        }
+
+        const detectedBrand = json.result.brand?.trim() ?? "";
+        if (detectedBrand) {
+          setBrand(detectedBrand);
+        }
+        setManualIdentifierResolved(true);
+
+        if (lookupOnly) {
+          setResults([]);
+          setLastRunMode("manual");
+          setInfoMessage(
+            isScannerTriggered
+              ? `Scanned ${effectiveIdentifier}. Product found. Enter unit price and units to calculate profit.`
+              : "Product found. Enter unit price and units to calculate profit.",
+          );
+          return;
         }
 
         if (isAutoRerun) {
@@ -272,16 +337,21 @@ export default function Home() {
       }
       hasScannedRef.current = true;
       setIdentifier(scannedValue);
+      setManualIdentifierResolved(false);
+      setBrand("");
+      setResults([]);
+      setLastRunMode(null);
+      lastAutoManualCalcKeyRef.current = "";
       setErrorMessage(null);
       setIsScannerOpen(false);
 
       if (isManualLoading || isUploadLoading) {
-        setInfoMessage(`Scanned identifier: ${scannedValue}. Finish current run, then tap Analyze Product.`);
+        setInfoMessage(`Scanned identifier: ${scannedValue}. Finish current run, then continue.`);
         return;
       }
 
-      setInfoMessage(`Scanned identifier: ${scannedValue}. Running analysis...`);
-      void runManualAnalysis(sellerType, false, scannedValue, true);
+      setInfoMessage(`Scanned identifier: ${scannedValue}. Loading product data...`);
+      void runManualAnalysis(sellerType, false, scannedValue, true, true);
     };
 
     const scanLoop = async (detector: BarcodeDetectorInstance): Promise<void> => {
@@ -409,26 +479,39 @@ export default function Home() {
   }, [isScannerOpen, scannerRunNonce, stopScanner, isManualLoading, isUploadLoading, sellerType, runManualAnalysis]);
 
   useEffect(() => {
-    if (lastRunMode !== "manual" || results.length === 0) {
-      lastAutoWholesalePriceRef.current = wholesalePrice;
+    if (!manualIdentifierResolved) {
+      lastAutoManualCalcKeyRef.current = "";
       return;
     }
-
-    if (wholesalePrice === lastAutoWholesalePriceRef.current) {
-      return;
-    }
-    lastAutoWholesalePriceRef.current = wholesalePrice;
 
     if (isManualLoading || isUploadLoading || isScannerOpen || !identifier.trim()) {
       return;
     }
 
     const parsedWholesalePrice = Number(wholesalePrice);
-    if (Number.isNaN(parsedWholesalePrice) || parsedWholesalePrice < 0) {
+    const parsedProjectedUnits = Number(projectedMonthlyUnits);
+    if (
+      Number.isNaN(parsedWholesalePrice) ||
+      Number.isNaN(parsedProjectedUnits) ||
+      parsedWholesalePrice <= 0 ||
+      parsedProjectedUnits <= 0
+    ) {
+      return;
+    }
+
+    const autoCalcKey = [
+      identifier.trim().toUpperCase(),
+      sellerType,
+      shippingCost,
+      wholesalePrice,
+      projectedMonthlyUnits,
+    ].join("|");
+    if (lastAutoManualCalcKeyRef.current === autoCalcKey) {
       return;
     }
 
     const rerunTimer = window.setTimeout(() => {
+      lastAutoManualCalcKeyRef.current = autoCalcKey;
       void runManualAnalysis(sellerType, true);
     }, 450);
 
@@ -437,13 +520,14 @@ export default function Home() {
     };
   }, [
     wholesalePrice,
-    lastRunMode,
-    results.length,
+    projectedMonthlyUnits,
+    manualIdentifierResolved,
     isManualLoading,
     isUploadLoading,
     isScannerOpen,
     identifier,
     sellerType,
+    shippingCost,
     runManualAnalysis,
   ]);
 
@@ -459,6 +543,8 @@ export default function Home() {
     const bad = results.filter((item) => item.decision === "BAD" || item.decision === "LOW_MARGIN").length;
     return { profitable, ungating, bad };
   }, [results]);
+
+  const manualResult = lastRunMode === "manual" && results.length > 0 ? results[0] : null;
 
   function handleSort(column: SortColumn): void {
     if (sortColumn === column) {
@@ -507,8 +593,24 @@ export default function Home() {
     applyFileSelection(event.dataTransfer.files?.[0] ?? null);
   }
 
+  function handleIdentifierChange(nextIdentifier: string): void {
+    setIdentifier(nextIdentifier);
+    setManualIdentifierResolved(false);
+    setBrand("");
+    setResults([]);
+    setLastRunMode(null);
+    lastAutoManualCalcKeyRef.current = "";
+    setInfoMessage(null);
+    setErrorMessage(null);
+  }
+
   async function handleManualSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
+    if (!manualIdentifierResolved) {
+      await runManualAnalysis(sellerType, false, undefined, false, true);
+      return;
+    }
+
     await runManualAnalysis(sellerType, false);
   }
 
@@ -615,23 +717,99 @@ export default function Home() {
         </p>
       </header>
 
-      <section className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
-          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Summary</span>
-          <span className="text-slate-700">
-            Total: <span className="font-semibold text-slate-900">{results.length}</span>
-          </span>
-          <span className="text-emerald-700">
-            Buy: <span className="font-semibold">{stats.profitable}</span>
-          </span>
-          <span className="text-amber-700">
-            Ungate: <span className="font-semibold">{stats.ungating}</span>
-          </span>
-          <span className="text-rose-700">
-            Bad/Low Margin: <span className="font-semibold">{stats.bad}</span>
+      <form onSubmit={handleManualSubmit} className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold text-slate-900">Manual Single Lookup</h2>
+          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+            {manualIdentifierResolved ? "Step 2: Cost + Units" : "Step 1: Product Lookup"}
           </span>
         </div>
-      </section>
+        <p className="mt-1 text-sm text-slate-600">
+          Enter or scan ASIN/UPC first. Unit price and unit count appear after product lookup.
+        </p>
+
+        <div className="mt-4 grid gap-3">
+          <label className="text-sm font-medium text-slate-700">
+            ASIN or UPC/EAN
+            <div className="mt-1 flex gap-2">
+              <input
+                value={identifier}
+                onChange={(event) => handleIdentifierChange(event.target.value)}
+                placeholder="B000123456 or 012345678901"
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-sky-400 focus:ring"
+                required
+              />
+              <button
+                type="button"
+                onClick={handleOpenScanner}
+                className="shrink-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+              >
+                Scan Barcode
+              </button>
+            </div>
+          </label>
+
+          {manualIdentifierResolved ? (
+            <div className="grid gap-3 md:grid-cols-3">
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                <p className="text-xs uppercase tracking-wide text-slate-500">Brand (auto)</p>
+                <p className="mt-1 font-semibold">{brand || "-"}</p>
+              </div>
+              <label className="text-sm font-medium text-slate-700">
+                Unit Price
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={wholesalePrice}
+                  onChange={(event) => setWholesalePrice(event.target.value)}
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-sky-400 focus:ring"
+                  placeholder="e.g. 7.25"
+                  required
+                />
+              </label>
+              <label className="text-sm font-medium text-slate-700">
+                Unit Quantity
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={projectedMonthlyUnits}
+                  onChange={(event) => setProjectedMonthlyUnits(event.target.value)}
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-sky-400 focus:ring"
+                  placeholder="e.g. 30"
+                  required
+                />
+              </label>
+            </div>
+          ) : (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              Unit price, brand, and unit quantity will appear after product lookup.
+            </div>
+          )}
+        </div>
+
+        <div className="mt-5 flex flex-wrap items-center gap-3">
+          <button
+            type="submit"
+            disabled={isManualLoading}
+            className="inline-flex items-center rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isManualLoading
+              ? manualIdentifierResolved
+                ? "Calculating..."
+                : "Loading Product..."
+              : manualIdentifierResolved
+                ? "Refresh Product Lookup"
+                : "Get Product Data"}
+          </button>
+          {manualIdentifierResolved ? (
+            <p className="text-xs text-slate-600">
+              Profit calculation runs automatically when Unit Price or Unit Quantity changes.
+            </p>
+          ) : null}
+        </div>
+      </form>
 
       <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         <h2 className="text-lg font-semibold text-slate-900">Fulfillment Settings</h2>
@@ -672,108 +850,54 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="grid gap-6 lg:grid-cols-2">
-        <form onSubmit={handleManualSubmit} className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-slate-900">Manual Single Lookup</h2>
-          <p className="mt-1 text-sm text-slate-600">Search one ASIN/UPC and calculate profit/ROI immediately.</p>
-
-          <div className="mt-4 grid gap-3">
-            <label className="text-sm font-medium text-slate-700">
-              ASIN or UPC/EAN
-              <div className="mt-1 flex gap-2">
-                <input
-                  value={identifier}
-                  onChange={(event) => setIdentifier(event.target.value)}
-                  placeholder="B000123456 or 012345678901"
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-sky-400 focus:ring"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={handleOpenScanner}
-                  className="shrink-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
-                >
-                  Scan Barcode
-                </button>
-              </div>
-            </label>
-
-            <label className="text-sm font-medium text-slate-700">
-              Wholesale Price
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={wholesalePrice}
-                onChange={(event) => setWholesalePrice(event.target.value)}
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-sky-400 focus:ring"
-                required
-              />
-            </label>
-
-            <label className="text-sm font-medium text-slate-700">
-              Brand (optional)
-              <input
-                value={brand}
-                onChange={(event) => setBrand(event.target.value)}
-                placeholder="Nike"
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-sky-400 focus:ring"
-              />
-            </label>
-
-            <label className="text-sm font-medium text-slate-700">
-              Projected Monthly Units
-              <input
-                type="number"
-                min="1"
-                step="1"
-                value={projectedMonthlyUnits}
-                onChange={(event) => setProjectedMonthlyUnits(event.target.value)}
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-sky-400 focus:ring"
-              />
-            </label>
-          </div>
-
-          <button
-            type="submit"
-            disabled={isManualLoading}
-            className="mt-5 inline-flex items-center rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {isManualLoading ? "Running..." : "Analyze Product"}
-          </button>
-        </form>
-
-        <form onSubmit={handleUploadSubmit} className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-slate-900">Upload Wholesale File</h2>
-          <p className="mt-1 text-sm text-slate-600">
-            Include product identifier (ASIN/UPC/EAN/barcode) or product name/title, plus wholesale cost.
-          </p>
-
-          <div
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-            className={`mt-4 rounded-xl border-2 border-dashed p-6 text-center transition ${
-              dragging ? "border-sky-400 bg-sky-50" : "border-slate-300 bg-slate-50"
-            }`}
-          >
-            <p className="text-sm text-slate-700">{file ? file.name : "Drag and drop .xlsx/.xls/.csv here"}</p>
-            <p className="mt-1 text-xs text-slate-500">or</p>
-            <label className="mt-3 inline-flex cursor-pointer items-center rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100">
-              Select File
-              <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFileInput} />
-            </label>
-          </div>
-
-          <button
-            type="submit"
-            disabled={isUploadLoading}
-            className="mt-5 inline-flex items-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {isUploadLoading ? "Analyzing File..." : "Run Batch Analysis"}
-          </button>
-        </form>
+      <section className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
+          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Summary</span>
+          <span className="text-slate-700">
+            Total: <span className="font-semibold text-slate-900">{results.length}</span>
+          </span>
+          <span className="text-emerald-700">
+            Buy: <span className="font-semibold">{stats.profitable}</span>
+          </span>
+          <span className="text-amber-700">
+            Ungate: <span className="font-semibold">{stats.ungating}</span>
+          </span>
+          <span className="text-rose-700">
+            Bad/Low Margin: <span className="font-semibold">{stats.bad}</span>
+          </span>
+        </div>
       </section>
+
+      <form onSubmit={handleUploadSubmit} className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h2 className="text-lg font-semibold text-slate-900">Upload Wholesale File</h2>
+        <p className="mt-1 text-sm text-slate-600">
+          Include product identifier (ASIN/UPC/EAN/barcode) or product name/title, plus wholesale cost.
+        </p>
+
+        <div
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          className={`mt-4 rounded-xl border-2 border-dashed p-6 text-center transition ${
+            dragging ? "border-sky-400 bg-sky-50" : "border-slate-300 bg-slate-50"
+          }`}
+        >
+          <p className="text-sm text-slate-700">{file ? file.name : "Drag and drop .xlsx/.xls/.csv here"}</p>
+          <p className="mt-1 text-xs text-slate-500">or</p>
+          <label className="mt-3 inline-flex cursor-pointer items-center rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100">
+            Select File
+            <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFileInput} />
+          </label>
+        </div>
+
+        <button
+          type="submit"
+          disabled={isUploadLoading}
+          className="mt-5 inline-flex items-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {isUploadLoading ? "Analyzing File..." : "Run Batch Analysis"}
+        </button>
+      </form>
 
       {errorMessage ? (
         <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{errorMessage}</div>
@@ -783,6 +907,39 @@ export default function Home() {
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
           {infoMessage}
         </div>
+      ) : null}
+
+      {manualResult ? (
+        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">General Profit</h3>
+            <span className={`rounded-full px-3 py-1 text-xs font-semibold ${decisionBadgeClasses(manualResult.decision)}`}>
+              {manualResult.decision}
+            </span>
+          </div>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+              <p className="text-xs text-slate-500">Net Profit</p>
+              <p className="text-lg font-semibold text-slate-900">{formatCurrency(manualResult.netProfit)}</p>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+              <p className="text-xs text-slate-500">ROI</p>
+              <p className="text-lg font-semibold text-slate-900">{formatPercent(manualResult.roiPercent)}</p>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+              <p className="text-xs text-slate-500">Buy Box</p>
+              <p className="text-lg font-semibold text-slate-900">{formatCurrency(manualResult.buyBoxPrice)}</p>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+              <p className="text-xs text-slate-500">Total Fees</p>
+              <p className="text-lg font-semibold text-slate-900">{formatCurrency(manualResult.totalFees)}</p>
+            </div>
+          </div>
+          <p className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+            <span className="font-semibold text-slate-900">AI Hint: </span>
+            {buildAiInsight(manualResult)}
+          </p>
+        </section>
       ) : null}
 
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -823,14 +980,13 @@ export default function Home() {
                     </button>
                   </th>
                 ))}
-                <th className="px-3 py-3">Ungating</th>
-                <th className="px-3 py-3">Notes</th>
+                <th className="px-3 py-3">AI / Notes</th>
               </tr>
             </thead>
             <tbody>
               {filteredSortedResults.length === 0 ? (
                 <tr>
-                  <td colSpan={14} className="px-3 py-8 text-center text-sm text-slate-500">
+                  <td colSpan={13} className="px-3 py-8 text-center text-sm text-slate-500">
                     {results.length === 0
                       ? "No results yet. Run a manual lookup or upload a file."
                       : "No products match the selected view filter."}
@@ -867,19 +1023,22 @@ export default function Home() {
                             : "Amazon seller: Unknown"}
                       </div>
                     </td>
-                    <td className="px-3 py-3 font-semibold">{item.decision}</td>
+                    <td className="px-3 py-3">
+                      <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${decisionBadgeClasses(item.decision)}`}>
+                        {item.decision}
+                      </span>
+                    </td>
                     <td className="px-3 py-3 text-xs text-slate-700">
+                      <div className="mb-2 rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-slate-700">
+                        <span className="font-semibold text-slate-900">AI:</span> {buildAiInsight(item)}
+                      </div>
                       {item.restrictedBrand ? (
-                        <>
+                        <div className="mb-2 space-y-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5">
                           <div>10-unit cost: {formatCurrency(item.ungatingCost10Units)}</div>
                           <div>Break-even units: {formatNumber(item.breakEvenUnits)}</div>
                           <div>Monthly profit: {formatCurrency(item.projectedMonthlyProfit)}</div>
-                        </>
-                      ) : (
-                        "-"
-                      )}
-                    </td>
-                    <td className="px-3 py-3 text-xs text-slate-700">
+                        </div>
+                      ) : null}
                       {item.error ? <div className="mb-1 text-rose-700">{item.error}</div> : null}
                       {item.reasons.length > 0 ? (
                         <ul className="list-disc space-y-1 pl-4">
