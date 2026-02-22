@@ -178,6 +178,7 @@ export default function Home() {
   const scannerFrameRef = useRef<number | null>(null);
   const zxingReaderRef = useRef<ZxingReaderLike | null>(null);
   const hasScannedRef = useRef(false);
+  const lastAutoWholesalePriceRef = useRef(wholesalePrice);
 
   const stopScanner = useCallback(() => {
     if (zxingReaderRef.current) {
@@ -242,7 +243,7 @@ export default function Home() {
           setResults([json.result as ProductAnalysis]);
           setInfoMessage(`Manual lookup re-analyzed for ${selectedSellerType}.`);
         } else {
-          setResults((current) => [json.result as ProductAnalysis, ...current]);
+          setResults([json.result as ProductAnalysis]);
           setInfoMessage(isScannerTriggered ? "Scanned and analyzed successfully." : "Manual lookup complete.");
         }
         setLastRunMode("manual");
@@ -406,6 +407,45 @@ export default function Home() {
       stopScanner();
     };
   }, [isScannerOpen, scannerRunNonce, stopScanner, isManualLoading, isUploadLoading, sellerType, runManualAnalysis]);
+
+  useEffect(() => {
+    if (lastRunMode !== "manual" || results.length === 0) {
+      lastAutoWholesalePriceRef.current = wholesalePrice;
+      return;
+    }
+
+    if (wholesalePrice === lastAutoWholesalePriceRef.current) {
+      return;
+    }
+    lastAutoWholesalePriceRef.current = wholesalePrice;
+
+    if (isManualLoading || isUploadLoading || isScannerOpen || !identifier.trim()) {
+      return;
+    }
+
+    const parsedWholesalePrice = Number(wholesalePrice);
+    if (Number.isNaN(parsedWholesalePrice) || parsedWholesalePrice < 0) {
+      return;
+    }
+
+    const rerunTimer = window.setTimeout(() => {
+      void runManualAnalysis(sellerType, true);
+    }, 450);
+
+    return () => {
+      window.clearTimeout(rerunTimer);
+    };
+  }, [
+    wholesalePrice,
+    lastRunMode,
+    results.length,
+    isManualLoading,
+    isUploadLoading,
+    isScannerOpen,
+    identifier,
+    sellerType,
+    runManualAnalysis,
+  ]);
 
   const filteredSortedResults = useMemo(() => {
     return [...results]
@@ -575,19 +615,21 @@ export default function Home() {
         </p>
       </header>
 
-      <section className="grid gap-4 md:grid-cols-3">
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs uppercase tracking-wide text-slate-500">Total analyzed</p>
-          <p className="mt-2 text-2xl font-semibold text-slate-900">{results.length}</p>
-        </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs uppercase tracking-wide text-slate-500">Green (Profitable)</p>
-          <p className="mt-2 text-2xl font-semibold text-emerald-700">{stats.profitable}</p>
-        </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs uppercase tracking-wide text-slate-500">Yellow (Ungating)</p>
-          <p className="mt-2 text-2xl font-semibold text-amber-700">{stats.ungating}</p>
-          <p className="mt-1 text-xs text-slate-500">Red (Bad/Low Margin): {stats.bad}</p>
+      <section className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
+          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Summary</span>
+          <span className="text-slate-700">
+            Total: <span className="font-semibold text-slate-900">{results.length}</span>
+          </span>
+          <span className="text-emerald-700">
+            Buy: <span className="font-semibold">{stats.profitable}</span>
+          </span>
+          <span className="text-amber-700">
+            Ungate: <span className="font-semibold">{stats.ungating}</span>
+          </span>
+          <span className="text-rose-700">
+            Bad/Low Margin: <span className="font-semibold">{stats.bad}</span>
+          </span>
         </div>
       </section>
 
