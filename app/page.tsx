@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type FormEvent } from "react";
+import { useMemo, useState, type ChangeEvent, type DragEvent, type FormEvent } from "react";
 
 import type { ProductAnalysis, SellerType } from "@/lib/types";
 
@@ -103,7 +103,6 @@ export default function Home() {
   const [sortColumn, setSortColumn] = useState<SortColumn>("netProfit");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [lastRunMode, setLastRunMode] = useState<"manual" | "upload" | null>(null);
-  const hasInitializedSellerType = useRef(false);
 
   const sortedResults = useMemo(() => {
     return [...results].sort((left, right) => compareValues(left, right, sortColumn, sortDirection));
@@ -261,34 +260,26 @@ export default function Home() {
     await runUploadAnalysis(sellerType, false);
   }
 
-  function handleSellerTypeChange(nextSellerType: SellerType): void {
+  async function handleSellerTypeChange(nextSellerType: SellerType): Promise<void> {
     if (nextSellerType === sellerType) {
       return;
     }
     setSellerType(nextSellerType);
-  }
-
-  // Rerun only when seller type changes after an initial successful run.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    if (!hasInitializedSellerType.current) {
-      hasInitializedSellerType.current = true;
-      return;
-    }
 
     if (isManualLoading || isUploadLoading || results.length === 0) {
       return;
     }
 
-    if (lastRunMode === "manual" && identifier.trim()) {
-      void runManualAnalysis(sellerType, true);
+    const inferredMode = lastRunMode ?? (file ? "upload" : identifier.trim() ? "manual" : null);
+    if (inferredMode === "manual" && identifier.trim()) {
+      await runManualAnalysis(nextSellerType, true);
       return;
     }
 
-    if (lastRunMode === "upload" && file) {
-      void runUploadAnalysis(sellerType, true);
+    if (inferredMode === "upload" && file) {
+      await runUploadAnalysis(nextSellerType, true);
     }
-  }, [sellerType]);
+  }
 
   const tableHeaders: Array<{ key: SortColumn; label: string }> = [
     { key: "inputIdentifier", label: "Input" },
@@ -341,7 +332,7 @@ export default function Home() {
             <select
               value={sellerType}
               onChange={(event) => {
-                handleSellerTypeChange(event.target.value === "FBM" ? "FBM" : "FBA");
+                void handleSellerTypeChange(event.target.value === "FBM" ? "FBM" : "FBA");
               }}
               className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-sky-400 focus:ring"
             >
