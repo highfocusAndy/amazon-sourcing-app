@@ -5,6 +5,7 @@ import type { Decision, ProductAnalysis, ProductInput, RowColor, SellerType } fr
 const BAD_SALES_RANK_THRESHOLD = 100_000;
 const MIN_HEALTHY_ROI_PERCENT = 10;
 const ESTIMATED_REFERRAL_RATE = 0.15;
+const ASIN_REGEX = /^[A-Z0-9]{10}$/i;
 
 function toCurrency(value: number | null): number | null {
   if (value === null || !Number.isFinite(value)) {
@@ -34,6 +35,10 @@ function normalizeBrand(value: string): string {
 
 function normalizeSellerType(value: ProductInput["sellerType"]): SellerType {
   return value === "FBM" ? "FBM" : "FBA";
+}
+
+function isPermissionError(message: string): boolean {
+  return /unauthorized|access to requested resource is denied|403/i.test(message);
 }
 
 function estimateReferralFee(buyBoxPrice: number): number {
@@ -167,38 +172,70 @@ export async function analyzeProduct(input: ProductInput): Promise<ProductAnalys
       return result;
     }
 
-    let catalog = result.inputIdentifier ? await spApiClient.resolveCatalogItem(result.inputIdentifier) : null;
+    let catalog = null;
+    let catalogErrorMessage: string | null = null;
 
-    if (!catalog && requestedProductName) {
-      catalog = await spApiClient.searchCatalogByKeyword(requestedProductName);
-      if (catalog) {
-        result.reasons.push("Catalog match resolved from product name search.");
-        if (!result.inputIdentifier) {
-          result.inputIdentifier = requestedProductName;
-        }
+    if (result.inputIdentifier) {
+      try {
+        catalog = await spApiClient.resolveCatalogItem(result.inputIdentifier);
+      } catch (error) {
+        catalogErrorMessage = error instanceof Error ? error.message : "Catalog lookup failed.";
       }
     }
 
-    if (!catalog) {
+    if (!catalog && requestedProductName) {
+      try {
+        catalog = await spApiClient.searchCatalogByKeyword(requestedProductName);
+        if (catalog) {
+          result.reasons.push("Catalog match resolved from product name search.");
+          if (!result.inputIdentifier) {
+            result.inputIdentifier = requestedProductName;
+          }
+        }
+      } catch (error) {
+        catalogErrorMessage = error instanceof Error ? error.message : "Catalog keyword search failed.";
+      }
+    }
+
+    if (!catalog && result.inputIdentifier && ASIN_REGEX.test(result.inputIdentifier) && catalogErrorMessage) {
+      if (isPermissionError(catalogErrorMessage)) {
+        result.asin = result.inputIdentifier.toUpperCase();
+        result.reasons.push("Catalog API access denied; using input ASIN directly for pricing and fee analysis.");
+      }
+    }
+
+    if (!catalog && !result.asin) {
+      result.error = "No ASIN found for the provided product reference.";
+      result.reasons = ["Could not resolve catalog metadata from Amazon SP-API."];
+      if (catalogErrorMessage) {
+        result.reasons.push(catalogErrorMessage);
+      }
+      return result;
+    }
+
+    if (catalog) {
+      result.asin = catalog.asin;
+      result.title = catalog.title;
+      result.salesRank = catalog.rank;
+      if (!result.brand && catalog.brand) {
+        result.brand = catalog.brand;
+      }
+    }
+
+    const resolvedAsin = result.asin;
+    if (!resolvedAsin) {
       result.error = "No ASIN found for the provided product reference.";
       result.reasons = ["Could not resolve catalog metadata from Amazon SP-API."];
       return result;
     }
 
-    result.asin = catalog.asin;
-    result.title = catalog.title;
-    result.salesRank = catalog.rank;
-    if (!result.brand && catalog.brand) {
-      result.brand = catalog.brand;
-    }
-
-    const pricing = await spApiClient.fetchCompetitivePricing(catalog.asin);
+    const pricing = await spApiClient.fetchCompetitivePricing(resolvedAsin);
     result.buyBoxPrice = pricing.buyBoxPrice;
     result.amazonIsSeller = pricing.amazonIsSeller;
 
     if (result.buyBoxPrice !== null) {
       try {
-        const feeEstimate = await spApiClient.fetchFeeEstimate(catalog.asin, result.buyBoxPrice, result.sellerType);
+        const feeEstimate = await spApiClient.fetchFeeEstimate(resolvedAsin, result.buyBoxPrice, result.sellerType);
         let referralFee = feeEstimate.referralFee;
         let fulfillmentFee = feeEstimate.fulfillmentFee;
 
