@@ -90,6 +90,134 @@ function formatNumber(value: number | null): string {
   return value.toLocaleString();
 }
 
+function roundToTwo(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+function evaluateCalculatorExpression(rawValue: string): number | null {
+  const source = rawValue.replace(/\s+/g, "");
+  if (!source) {
+    return null;
+  }
+  if (!/^[0-9+\-*/().]+$/.test(source)) {
+    return null;
+  }
+
+  let cursor = 0;
+
+  function parseExpression(): number | null {
+    let value = parseTerm();
+    if (value === null) {
+      return null;
+    }
+    while (cursor < source.length && (source[cursor] === "+" || source[cursor] === "-")) {
+      const operator = source[cursor];
+      cursor += 1;
+      const right = parseTerm();
+      if (right === null) {
+        return null;
+      }
+      value = operator === "+" ? value + right : value - right;
+    }
+    return value;
+  }
+
+  function parseTerm(): number | null {
+    let value = parseFactor();
+    if (value === null) {
+      return null;
+    }
+    while (cursor < source.length && (source[cursor] === "*" || source[cursor] === "/")) {
+      const operator = source[cursor];
+      cursor += 1;
+      const right = parseFactor();
+      if (right === null) {
+        return null;
+      }
+      value = operator === "*" ? value * right : value / right;
+    }
+    return value;
+  }
+
+  function parseFactor(): number | null {
+    if (cursor >= source.length) {
+      return null;
+    }
+
+    const current = source[cursor];
+    if (current === "+") {
+      cursor += 1;
+      return parseFactor();
+    }
+    if (current === "-") {
+      cursor += 1;
+      const inner = parseFactor();
+      return inner === null ? null : -inner;
+    }
+    if (current === "(") {
+      cursor += 1;
+      const inner = parseExpression();
+      if (inner === null || source[cursor] !== ")") {
+        return null;
+      }
+      cursor += 1;
+      return inner;
+    }
+
+    return parseNumber();
+  }
+
+  function parseNumber(): number | null {
+    const start = cursor;
+    let dotCount = 0;
+    while (cursor < source.length) {
+      const char = source[cursor];
+      if (char >= "0" && char <= "9") {
+        cursor += 1;
+        continue;
+      }
+      if (char === ".") {
+        dotCount += 1;
+        if (dotCount > 1) {
+          return null;
+        }
+        cursor += 1;
+        continue;
+      }
+      break;
+    }
+
+    if (start === cursor) {
+      return null;
+    }
+
+    const parsed = Number(source.slice(start, cursor));
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  const result = parseExpression();
+  if (result === null || cursor !== source.length || !Number.isFinite(result)) {
+    return null;
+  }
+  return result;
+}
+
+function parseNonNegativeInput(rawValue: string): number | null {
+  const parsed = evaluateCalculatorExpression(rawValue);
+  if (parsed === null || parsed < 0) {
+    return null;
+  }
+  return parsed;
+}
+
+function parsePositiveInput(rawValue: string): number | null {
+  const parsed = evaluateCalculatorExpression(rawValue);
+  if (parsed === null || parsed <= 0) {
+    return null;
+  }
+  return parsed;
+}
+
 function rowColorClasses(color: ProductAnalysis["rowColor"]): string {
   if (color === "green") {
     return "bg-emerald-50";
@@ -262,6 +390,17 @@ export default function Home() {
         return;
       }
 
+      const parsedWholesalePrice = parseNonNegativeInput(wholesalePrice);
+      const parsedProjectedUnits = parsePositiveInput(projectedMonthlyUnits);
+      if (!lookupOnly && parsedWholesalePrice === null) {
+        setErrorMessage("Enter a valid unit price.");
+        return;
+      }
+      if (!lookupOnly && parsedProjectedUnits === null) {
+        setErrorMessage("Enter a valid unit quantity. Calculator format is supported (example: 1/2).");
+        return;
+      }
+
       setErrorMessage(null);
       setInfoMessage(null);
       setIsManualLoading(true);
@@ -274,9 +413,9 @@ export default function Home() {
           },
           body: JSON.stringify({
             identifier: effectiveIdentifier,
-          wholesalePrice: lookupOnly ? 0 : Number(wholesalePrice),
+          wholesalePrice: lookupOnly ? 0 : parsedWholesalePrice ?? 0,
           brand,
-          projectedMonthlyUnits: lookupOnly ? 1 : Number(projectedMonthlyUnits),
+          projectedMonthlyUnits: lookupOnly ? 1 : parsedProjectedUnits ?? 1,
             sellerType: selectedSellerType,
             shippingCost: selectedSellerType === "FBM" ? Number(shippingCost) : 0,
           }),
@@ -303,7 +442,7 @@ export default function Home() {
           }
 
           setManualIdentifierResolved(true);
-          setResults([]);
+          setResults([analysisResult]);
           setLastRunMode("manual");
           setInfoMessage(
             isScannerTriggered
@@ -502,14 +641,9 @@ export default function Home() {
       return;
     }
 
-    const parsedWholesalePrice = Number(wholesalePrice);
-    const parsedProjectedUnits = Number(projectedMonthlyUnits);
-    if (
-      Number.isNaN(parsedWholesalePrice) ||
-      Number.isNaN(parsedProjectedUnits) ||
-      parsedWholesalePrice <= 0 ||
-      parsedProjectedUnits <= 0
-    ) {
+    const parsedWholesalePrice = parseNonNegativeInput(wholesalePrice);
+    const parsedProjectedUnits = parsePositiveInput(projectedMonthlyUnits);
+    if (parsedWholesalePrice === null || parsedProjectedUnits === null) {
       return;
     }
 
@@ -517,8 +651,8 @@ export default function Home() {
       identifier.trim().toUpperCase(),
       sellerType,
       shippingCost,
-      wholesalePrice,
-      projectedMonthlyUnits,
+      parsedWholesalePrice.toString(),
+      parsedProjectedUnits.toString(),
     ].join("|");
     if (lastAutoManualCalcKeyRef.current === autoCalcKey) {
       return;
@@ -559,6 +693,16 @@ export default function Home() {
   }, [results]);
 
   const manualResult = lastRunMode === "manual" && results.length > 0 ? results[0] : null;
+  const parsedUnitPrice = parseNonNegativeInput(wholesalePrice);
+  const parsedUnitQuantity = parsePositiveInput(projectedMonthlyUnits);
+  const totalBuyCost =
+    parsedUnitPrice !== null && parsedUnitQuantity !== null
+      ? roundToTwo(parsedUnitPrice * parsedUnitQuantity)
+      : null;
+  const projectedProfitForQuantity =
+    manualResult?.netProfit !== null && manualResult?.netProfit !== undefined && parsedUnitQuantity !== null
+      ? roundToTwo(manualResult.netProfit * parsedUnitQuantity)
+      : null;
 
   function handleSort(column: SortColumn): void {
     if (sortColumn === column) {
@@ -783,13 +927,12 @@ export default function Home() {
               <label className="text-sm font-medium text-slate-700">
                 Unit Quantity
                 <input
-                  type="number"
-                  min="1"
-                  step="1"
+                  type="text"
+                  inputMode="decimal"
                   value={projectedMonthlyUnits}
                   onChange={(event) => setProjectedMonthlyUnits(event.target.value)}
                   className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-sky-400 focus:ring"
-                  placeholder="e.g. 30"
+                  placeholder="e.g. 30 or 1/2"
                   required
                 />
               </label>
@@ -861,7 +1004,7 @@ export default function Home() {
               {manualResult.decision}
             </span>
           </div>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
             <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
               <p className="text-xs text-slate-500">Net Profit</p>
               <p className="text-lg font-semibold text-slate-900">{formatCurrency(manualResult.netProfit)}</p>
@@ -877,6 +1020,14 @@ export default function Home() {
             <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
               <p className="text-xs text-slate-500">Total Fees</p>
               <p className="text-lg font-semibold text-slate-900">{formatCurrency(manualResult.totalFees)}</p>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+              <p className="text-xs text-slate-500">Total Buy Cost ({projectedMonthlyUnits})</p>
+              <p className="text-lg font-semibold text-slate-900">{formatCurrency(totalBuyCost)}</p>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+              <p className="text-xs text-slate-500">Projected Profit (Qty)</p>
+              <p className="text-lg font-semibold text-slate-900">{formatCurrency(projectedProfitForQuantity)}</p>
             </div>
           </div>
           <p className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
