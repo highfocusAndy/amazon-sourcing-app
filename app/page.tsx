@@ -853,6 +853,39 @@ export default function Home() {
         </div>
       </section>
 
+      {manualResult ? (
+        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">General Profit</h3>
+            <span className={`rounded-full px-3 py-1 text-xs font-semibold ${decisionBadgeClasses(manualResult.decision)}`}>
+              {manualResult.decision}
+            </span>
+          </div>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+              <p className="text-xs text-slate-500">Net Profit</p>
+              <p className="text-lg font-semibold text-slate-900">{formatCurrency(manualResult.netProfit)}</p>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+              <p className="text-xs text-slate-500">ROI</p>
+              <p className="text-lg font-semibold text-slate-900">{formatPercent(manualResult.roiPercent)}</p>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+              <p className="text-xs text-slate-500">Buy Box</p>
+              <p className="text-lg font-semibold text-slate-900">{formatCurrency(manualResult.buyBoxPrice)}</p>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+              <p className="text-xs text-slate-500">Total Fees</p>
+              <p className="text-lg font-semibold text-slate-900">{formatCurrency(manualResult.totalFees)}</p>
+            </div>
+          </div>
+          <p className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+            <span className="font-semibold text-slate-900">AI Hint: </span>
+            {buildAiInsight(manualResult)}
+          </p>
+        </section>
+      ) : null}
+
       <form onSubmit={handleUploadSubmit} className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         <h2 className="text-lg font-semibold text-slate-900">Upload Wholesale File</h2>
         <p className="mt-1 text-sm text-slate-600">
@@ -910,39 +943,6 @@ export default function Home() {
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
           {infoMessage}
         </div>
-      ) : null}
-
-      {manualResult ? (
-        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">General Profit</h3>
-            <span className={`rounded-full px-3 py-1 text-xs font-semibold ${decisionBadgeClasses(manualResult.decision)}`}>
-              {manualResult.decision}
-            </span>
-          </div>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-              <p className="text-xs text-slate-500">Net Profit</p>
-              <p className="text-lg font-semibold text-slate-900">{formatCurrency(manualResult.netProfit)}</p>
-            </div>
-            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-              <p className="text-xs text-slate-500">ROI</p>
-              <p className="text-lg font-semibold text-slate-900">{formatPercent(manualResult.roiPercent)}</p>
-            </div>
-            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-              <p className="text-xs text-slate-500">Buy Box</p>
-              <p className="text-lg font-semibold text-slate-900">{formatCurrency(manualResult.buyBoxPrice)}</p>
-            </div>
-            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-              <p className="text-xs text-slate-500">Total Fees</p>
-              <p className="text-lg font-semibold text-slate-900">{formatCurrency(manualResult.totalFees)}</p>
-            </div>
-          </div>
-          <p className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-            <span className="font-semibold text-slate-900">AI Hint: </span>
-            {buildAiInsight(manualResult)}
-          </p>
-        </section>
       ) : null}
 
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
