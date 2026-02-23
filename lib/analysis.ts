@@ -185,14 +185,17 @@ function evaluateDecision(result: ProductAnalysis, projectedMonthlyUnits: number
   } else if ((restricted || result.approvalRequired === true || result.listingRestricted === true) && result.worthUngating) {
     decision = "WORTH UNGATING";
     rowColor = "yellow";
+  } else if (result.netProfit !== null && result.netProfit <= 0) {
+    decision = "LOSS";
+    rowColor = "red";
   } else if (result.approvalRequired === true || result.listingRestricted === true) {
-    decision = "LOW_MARGIN";
+    decision = "THIN_MARGIN";
     rowColor = "red";
   } else if (result.netProfit === null || result.roiPercent === null) {
     decision = "UNKNOWN";
     rowColor = "red";
-  } else if (result.netProfit <= 0 || result.roiPercent < MIN_HEALTHY_ROI_PERCENT || restricted) {
-    decision = "LOW_MARGIN";
+  } else if (result.roiPercent < MIN_HEALTHY_ROI_PERCENT || restricted) {
+    decision = "THIN_MARGIN";
     rowColor = "red";
   } else {
     decision = "BUY";

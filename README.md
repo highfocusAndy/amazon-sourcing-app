@@ -33,7 +33,7 @@ It supports manual ASIN/UPC lookups and bulk spreadsheet uploads, enriches produ
   - Color coded rows:
     - Green: profitable and low risk
     - Yellow: ungating opportunity
-    - Red: bad rank or low margin
+    - Red: bad rank, loss, or thin margin
 
 - **Security**
   - Credentials are loaded from `.env.local`.

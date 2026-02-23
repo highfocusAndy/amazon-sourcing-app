@@ -1,4 +1,11 @@
-export type Decision = "BUY" | "WORTH UNGATING" | "BAD" | "LOW_MARGIN" | "UNKNOWN";
+export type Decision =
+  | "BUY"
+  | "WORTH UNGATING"
+  | "BAD"
+  | "THIN_MARGIN"
+  | "LOSS"
+  | "LOW_MARGIN"
+  | "UNKNOWN";
 export type RowColor = "green" | "yellow" | "red";
 export type SellerType = "FBA" | "FBM";
 

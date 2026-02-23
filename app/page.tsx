@@ -235,13 +235,26 @@ function decisionBadgeClasses(decision: ProductAnalysis["decision"]): string {
   if (decision === "WORTH UNGATING") {
     return "bg-amber-100 text-amber-800";
   }
-  if (decision === "LOW_MARGIN") {
+  if (decision === "LOSS") {
+    return "bg-rose-200 text-rose-900";
+  }
+  if (decision === "THIN_MARGIN" || decision === "LOW_MARGIN") {
     return "bg-orange-100 text-orange-800";
   }
   if (decision === "BAD") {
     return "bg-rose-100 text-rose-800";
   }
   return "bg-slate-100 text-slate-700";
+}
+
+function decisionLabel(decision: ProductAnalysis["decision"]): string {
+  if (decision === "THIN_MARGIN") {
+    return "THIN MARGIN";
+  }
+  if (decision === "LOW_MARGIN") {
+    return "THIN MARGIN";
+  }
+  return decision;
 }
 
 function buildAiInsight(item: ProductAnalysis): string {
@@ -267,7 +280,11 @@ function buildAiInsight(item: ProductAnalysis): string {
     return "Potentially attractive after ungating. Confirm docs and post-ungating margin stability.";
   }
 
-  if (item.decision === "LOW_MARGIN") {
+  if (item.decision === "LOSS") {
+    return "This item is running at a loss. Reduce buy cost or skip.";
+  }
+
+  if (item.decision === "THIN_MARGIN" || item.decision === "LOW_MARGIN") {
     return "Margin is thin. Negotiate lower cost, reduce shipping, or skip.";
   }
 
@@ -688,7 +705,13 @@ export default function Home() {
   const stats = useMemo(() => {
     const profitable = results.filter((item) => item.decision === "BUY").length;
     const ungating = results.filter((item) => item.decision === "WORTH UNGATING").length;
-    const bad = results.filter((item) => item.decision === "BAD" || item.decision === "LOW_MARGIN").length;
+    const bad = results.filter(
+      (item) =>
+        item.decision === "BAD" ||
+        item.decision === "LOSS" ||
+        item.decision === "THIN_MARGIN" ||
+        item.decision === "LOW_MARGIN",
+    ).length;
     return { profitable, ungating, bad };
   }, [results]);
 
@@ -1001,7 +1024,7 @@ export default function Home() {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">General Profit</h3>
             <span className={`rounded-full px-3 py-1 text-xs font-semibold ${decisionBadgeClasses(manualResult.decision)}`}>
-              {manualResult.decision}
+              {decisionLabel(manualResult.decision)}
             </span>
           </div>
           <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
@@ -1081,7 +1104,7 @@ export default function Home() {
             Ungate: <span className="font-semibold">{stats.ungating}</span>
           </span>
           <span className="text-rose-700">
-            Bad/Low Margin: <span className="font-semibold">{stats.bad}</span>
+            Bad/Loss/Thin Margin: <span className="font-semibold">{stats.bad}</span>
           </span>
         </div>
       </section>
@@ -1179,7 +1202,7 @@ export default function Home() {
                     </td>
                     <td className="px-3 py-3">
                       <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${decisionBadgeClasses(item.decision)}`}>
-                        {item.decision}
+                        {decisionLabel(item.decision)}
                       </span>
                     </td>
                     <td className="px-3 py-3 text-xs text-slate-700">
