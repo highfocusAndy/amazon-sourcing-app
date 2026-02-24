@@ -19,6 +19,10 @@ It supports manual ASIN/UPC lookups and bulk spreadsheet uploads, enriches produ
 
 - **Smart decision logic**
   - Auto-flags **BAD** if Amazon is a seller or BSR is over 100,000.
+  - Adds seller-account risk checks from Listings Restrictions API:
+    - approval required
+    - listing restricted for your account
+    - IP complaint risk signals from restriction reasons
   - Ungating calculator for restricted brands:
     - 10-unit invoice cost
     - break-even unit estimate
@@ -29,7 +33,7 @@ It supports manual ASIN/UPC lookups and bulk spreadsheet uploads, enriches produ
   - Color coded rows:
     - Green: profitable and low risk
     - Yellow: ungating opportunity
-    - Red: bad rank or low margin
+    - Red: bad rank, low margin, or no margin (deficit)
 
 - **Security**
   - Credentials are loaded from `.env.local`.
@@ -93,6 +97,7 @@ npm run dev
 ## Notes
 
 - Batch uploads are capped at 200 rows per request to reduce SP-API rate-limit pressure.
-- Batch analysis concurrency can be tuned with `BATCH_ANALYZE_CONCURRENCY` in `.env.local` (default: 3).
+- Batch analysis concurrency can be tuned with `BATCH_ANALYZE_CONCURRENCY` in `.env.local` (default: 6, max: 10). Higher values speed up Excel uploads but may hit SP-API rate limits.
 - If Amazon seller detection needs marketplace-specific IDs, set `AMAZON_SELLER_IDS` as a comma-separated list.
 - Restricted brand matching comes from `RESTRICTED_BRANDS` in `.env.local` (comma-separated).
+- If testing from another device/browser origin in dev, set `ALLOWED_DEV_ORIGINS` (comma-separated full origins).

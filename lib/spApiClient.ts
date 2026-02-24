@@ -38,6 +38,7 @@ export interface CatalogItem {
   title: string;
   brand: string;
   rank: number | null;
+  imageUrl: string | null;
 }
 
 export interface CompetitivePricing {
@@ -51,6 +52,14 @@ export interface FeeEstimate {
   totalFees: number;
 }
 
+export interface ListingRestrictionsAssessment {
+  restricted: boolean;
+  approvalRequired: boolean;
+  ipComplaintRisk: boolean;
+  reasonCodes: string[];
+  reasonMessages: string[];
+}
+
 const AMAZON_RETAIL_SELLER_ID = "ATVPDKIKX0DER";
 const ASIN_REGEX = /^[A-Z0-9]{10}$/i;
 const UPC_EAN_REGEX = /^\d{8,14}$/;
@@ -59,6 +68,7 @@ const RETRYABLE_HTTP_STATUS = new Set([429, 500, 502, 503, 504]);
 let lwaTokenCache: LwaTokenCache | null = null;
 let assumedRoleCache: AwsCredentials | null = null;
 let spApiClientSingleton: SpApiClient | null = null;
+const listingRestrictionsCache = new Map<string, ListingRestrictionsAssessment>();
 
 function defaultSpApiHost(awsRegion: string): string {
   if (awsRegion.startsWith("eu-")) {
@@ -153,6 +163,10 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
+}
+
+function unique(values: string[]): string[] {
+  return [...new Set(values)];
 }
 
 function toCurrency(value: number): number {
@@ -449,7 +463,23 @@ export class SpApiClient {
       }
     }
 
-    return { asin, title, brand, rank };
+    let imageUrl: string | null = null;
+    const imagesByMkt = asArray(itemObj.images);
+    const firstMktImages = asObject(imagesByMkt[0]);
+    const imageList = asArray(firstMktImages?.images);
+    for (const imgRaw of imageList) {
+      const img = asObject(imgRaw);
+      if (readString(img?.variant)?.toUpperCase() === "MAIN") {
+        imageUrl = readString(img?.link);
+        break;
+      }
+    }
+    if (!imageUrl && imageList.length > 0) {
+      const firstImg = asObject(imageList[0]);
+      imageUrl = readString(firstImg?.link);
+    }
+
+    return { asin, title, brand, rank, imageUrl };
   }
 
   private extractPricing(data: unknown): CompetitivePricing {
@@ -605,24 +635,69 @@ export class SpApiClient {
     };
   }
 
+  private extractListingRestrictions(data: unknown): ListingRestrictionsAssessment {
+    const root = asObject(data);
+    const restrictions = asArray(getField(root, ["restrictions", "Restrictions"]));
+
+    const reasonCodes: string[] = [];
+    const reasonMessages: string[] = [];
+
+    for (const restrictionRaw of restrictions) {
+      const restriction = asObject(restrictionRaw);
+      if (!restriction) {
+        continue;
+      }
+
+      const reasons = asArray(getField(restriction, ["reasons", "Reasons"]));
+      for (const reasonRaw of reasons) {
+        const reason = asObject(reasonRaw);
+        if (!reason) {
+          continue;
+        }
+
+        const code = (readString(getField(reason, ["reasonCode", "ReasonCode"])) ?? "").trim();
+        const message = (readString(getField(reason, ["reasonDescription", "ReasonDescription"])) ?? "").trim();
+        if (code) {
+          reasonCodes.push(code.toUpperCase());
+        }
+        if (message) {
+          reasonMessages.push(message);
+        }
+      }
+    }
+
+    const allSignals = unique([...reasonCodes, ...reasonMessages.map((msg) => msg.toUpperCase())]).join(" | ");
+    const approvalRequired = /APPROVAL|RESTRICT|GATED|NOT_ELIGIBLE|REQUIRES|APPLICATION/.test(allSignals);
+    const ipComplaintRisk = /INTELLECTUAL|IP|TRADEMARK|PATENT|COPYRIGHT|COUNTERFEIT|BRAND_PROTECTION/.test(allSignals);
+    const restricted = restrictions.length > 0;
+
+    return {
+      restricted,
+      approvalRequired,
+      ipComplaintRisk,
+      reasonCodes: unique(reasonCodes),
+      reasonMessages: unique(reasonMessages),
+    };
+  }
+
   async fetchCatalogItem(asin: string): Promise<CatalogItem | null> {
     const response = await this.request<unknown>("GET", `/catalog/2022-04-01/items/${asin}`, {
       query: {
         marketplaceIds: this.config.marketplaceId,
-        includedData: "summaries,salesRanks,identifiers",
+        includedData: "summaries,salesRanks,identifiers,images",
       },
     });
 
     return this.extractCatalogItem(response);
   }
 
-  private async searchCatalogByIdentifier(identifierType: "UPC" | "EAN", identifier: string): Promise<CatalogItem | null> {
+  private async searchCatalogByIdentifier(identifierType: "UPC" | "EAN" | "GTIN", identifier: string): Promise<CatalogItem | null> {
     const response = await this.request<unknown>("GET", "/catalog/2022-04-01/items", {
       query: {
         marketplaceIds: this.config.marketplaceId,
         identifiersType: identifierType,
         identifiers: identifier,
-        includedData: "summaries,salesRanks,identifiers",
+        includedData: "summaries,salesRanks,identifiers,images",
       },
     });
 
@@ -645,7 +720,7 @@ export class SpApiClient {
       query: {
         marketplaceIds: this.config.marketplaceId,
         keywords: query,
-        includedData: "summaries,salesRanks,identifiers",
+        includedData: "summaries,salesRanks,identifiers,images",
         pageSize: "20",
       },
     });
@@ -691,8 +766,12 @@ export class SpApiClient {
     if (UPC_EAN_REGEX.test(digits)) {
       const identifierCandidates = buildNumericIdentifierCandidates(digits);
       for (const candidate of identifierCandidates) {
-        const identifierTypes: Array<"UPC" | "EAN"> =
-          candidate.length === 13 ? ["EAN", "UPC"] : candidate.length === 12 ? ["UPC", "EAN"] : ["UPC", "EAN"];
+      const identifierTypes: Array<"UPC" | "EAN" | "GTIN"> =
+        candidate.length === 13
+          ? ["EAN", "GTIN", "UPC"]
+          : candidate.length === 12
+            ? ["UPC", "GTIN", "EAN"]
+            : ["GTIN", "UPC", "EAN"];
 
         for (const identifierType of identifierTypes) {
           // Sequential tries improve reliability for mixed UPC/EAN supplier data.
@@ -704,8 +783,7 @@ export class SpApiClient {
       }
     }
 
-    // Last resort: keyword lookup can recover noisy supplier identifiers/titles.
-    return this.searchCatalogByKeyword(normalized).catch(() => null);
+    return null;
   }
 
   async fetchCompetitivePricing(asin: string): Promise<CompetitivePricing> {
@@ -789,6 +867,27 @@ export class SpApiClient {
     });
 
     return this.extractFeeEstimate(response);
+  }
+
+  async fetchListingRestrictions(asin: string): Promise<ListingRestrictionsAssessment> {
+    const cacheKey = `${this.config.marketplaceId}:${this.config.sellerId}:${asin}`;
+    const cached = listingRestrictionsCache.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    const response = await this.request<unknown>("GET", "/listings/2021-08-01/restrictions", {
+      query: {
+        asin,
+        sellerId: this.config.sellerId,
+        marketplaceIds: this.config.marketplaceId,
+        conditionType: "new_new",
+      },
+    });
+
+    const parsed = this.extractListingRestrictions(response);
+    listingRestrictionsCache.set(cacheKey, parsed);
+    return parsed;
   }
 }
 

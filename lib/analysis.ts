@@ -6,7 +6,7 @@ const BAD_SALES_RANK_THRESHOLD = 100_000;
 const MIN_HEALTHY_ROI_PERCENT = 10;
 const ESTIMATED_REFERRAL_RATE = 0.15;
 const ASIN_REGEX = /^[A-Z0-9]{10}$/i;
-const DEFAULT_BATCH_CONCURRENCY = 3;
+const DEFAULT_BATCH_CONCURRENCY = 6;
 
 function toCurrency(value: number | null): number | null {
   if (value === null || !Number.isFinite(value)) {
@@ -36,6 +36,12 @@ function normalizeBrand(value: string): string {
 
 function normalizeSellerType(value: ProductInput["sellerType"]): SellerType {
   return value === "FBM" ? "FBM" : "FBA";
+}
+
+function addReasonUnique(reasons: string[], reason: string): void {
+  if (!reasons.includes(reason)) {
+    reasons.push(reason);
+  }
 }
 
 function isPermissionError(message: string): boolean {
@@ -83,8 +89,13 @@ function buildBaseResult(input: ProductInput): ProductAnalysis {
     wholesalePrice: normalizeNumber(input.wholesalePrice),
     shippingCost: sellerType === "FBM" ? Math.max(0, normalizeNumber(input.shippingCost)) : 0,
     buyBoxPrice: null,
+    imageUrl: null,
     salesRank: null,
     amazonIsSeller: null,
+    listingRestricted: null,
+    approvalRequired: null,
+    ipComplaintRisk: null,
+    restrictionReasonCodes: [],
     referralFee: 0,
     fbaFee: 0,
     totalFees: 0,
@@ -103,31 +114,43 @@ function buildBaseResult(input: ProductInput): ProductAnalysis {
 }
 
 function evaluateDecision(result: ProductAnalysis, projectedMonthlyUnits: number): ProductAnalysis {
-  const reasons: string[] = [];
+  const reasons: string[] = [...result.reasons];
 
   const restricted = isRestrictedBrand(result.brand, getServerEnv().restrictedBrands);
   result.restrictedBrand = restricted;
 
   if (result.amazonIsSeller === true) {
-    reasons.push("Amazon is currently a seller on this listing.");
+    addReasonUnique(reasons, "Amazon is currently a seller on this listing.");
   } else if (result.amazonIsSeller === null) {
-    reasons.push("Amazon seller presence could not be determined from available pricing data.");
+    addReasonUnique(reasons, "Amazon seller presence could not be determined from available pricing data.");
+  }
+
+  if (result.approvalRequired === true) {
+    addReasonUnique(reasons, "This ASIN requires approval for your seller account.");
+  }
+
+  if (result.listingRestricted === true) {
+    addReasonUnique(reasons, "Listing restrictions were returned for this ASIN in your account.");
+  }
+
+  if (result.ipComplaintRisk === true) {
+    addReasonUnique(reasons, "Potential IP/brand complaint risk detected from restriction reasons.");
   }
 
   if (result.salesRank !== null && result.salesRank > BAD_SALES_RANK_THRESHOLD) {
-    reasons.push(`Sales rank ${result.salesRank.toLocaleString()} is above 100,000.`);
+    addReasonUnique(reasons, `Sales rank ${result.salesRank.toLocaleString()} is above 100,000.`);
   }
 
   if (result.netProfit !== null && result.netProfit <= 0) {
-    reasons.push("Net profit is non-positive after wholesale and fee costs.");
+    addReasonUnique(reasons, "Net profit is non-positive after wholesale and fee costs.");
   }
 
   if (result.roiPercent !== null && result.roiPercent < MIN_HEALTHY_ROI_PERCENT) {
-    reasons.push(`ROI is below ${MIN_HEALTHY_ROI_PERCENT}%.`);
+    addReasonUnique(reasons, `ROI is below ${MIN_HEALTHY_ROI_PERCENT}%.`);
   }
 
   if (restricted) {
-    reasons.push("Brand is in the restricted list.");
+    addReasonUnique(reasons, "Brand is in the restricted list.");
     result.ungatingCost10Units = toCurrency(result.wholesalePrice * 10);
 
     if (result.netProfit !== null) {
@@ -144,26 +167,40 @@ function evaluateDecision(result: ProductAnalysis, projectedMonthlyUnits: number
       result.projectedMonthlyProfit > result.ungatingCost10Units * 2
     ) {
       result.worthUngating = true;
-      reasons.push("Projected monthly profit is greater than 2x ungating invoice cost.");
+      addReasonUnique(reasons, "Projected monthly profit is greater than 2x ungating invoice cost.");
     } else if (result.projectedMonthlyProfit !== null && result.ungatingCost10Units !== null) {
-      reasons.push("Projected monthly profit does not exceed 2x ungating invoice cost.");
+      addReasonUnique(reasons, "Projected monthly profit does not exceed 2x ungating invoice cost.");
     }
   }
 
   let decision: Decision = "UNKNOWN";
   let rowColor: RowColor = "red";
 
-  const forcedBad = result.amazonIsSeller === true || (result.salesRank !== null && result.salesRank > BAD_SALES_RANK_THRESHOLD);
+  const forcedBad =
+    result.amazonIsSeller === true ||
+    result.ipComplaintRisk === true ||
+    (result.salesRank !== null && result.salesRank > BAD_SALES_RANK_THRESHOLD);
+  const hasDeficit =
+    result.netProfit !== null &&
+    result.roiPercent !== null &&
+    (result.netProfit <= 0 || result.roiPercent < 0);
+
   if (forcedBad) {
     decision = "BAD";
     rowColor = "red";
-  } else if (restricted && result.worthUngating) {
+  } else if (hasDeficit) {
+    decision = "NO_MARGIN";
+    rowColor = "red";
+  } else if ((restricted || result.approvalRequired === true || result.listingRestricted === true) && result.worthUngating) {
     decision = "WORTH UNGATING";
     rowColor = "yellow";
+  } else if (result.approvalRequired === true || result.listingRestricted === true) {
+    decision = "LOW_MARGIN";
+    rowColor = "red";
   } else if (result.netProfit === null || result.roiPercent === null) {
     decision = "UNKNOWN";
     rowColor = "red";
-  } else if (result.netProfit <= 0 || result.roiPercent < MIN_HEALTHY_ROI_PERCENT || restricted) {
+  } else if (result.roiPercent < MIN_HEALTHY_ROI_PERCENT || restricted) {
     decision = "LOW_MARGIN";
     rowColor = "red";
   } else {
@@ -187,9 +224,9 @@ export async function analyzeProduct(input: ProductInput): Promise<ProductAnalys
       : getServerEnv().defaultProjectedMonthlyUnits;
 
   try {
-    if (!result.inputIdentifier && !requestedProductName) {
-      result.error = "Missing product reference.";
-      result.reasons = ["Provide ASIN/UPC/EAN or a product name to run analysis."];
+    if (!result.inputIdentifier?.trim()) {
+      result.error = "ASIN, UPC, or EAN required.";
+      result.reasons = ["Provide an ASIN (10 chars), UPC, or EAN. Product name lookup is not used."];
       return result;
     }
 
@@ -204,31 +241,6 @@ export async function analyzeProduct(input: ProductInput): Promise<ProductAnalys
       }
     }
 
-    if (!catalog) {
-      const keywordSeed = requestedProductName || (!ASIN_REGEX.test(result.inputIdentifier) ? result.inputIdentifier : "");
-      const keywordQueries = uniqueNonEmpty([
-        keywordSeed,
-        result.brand && keywordSeed ? `${result.brand} ${keywordSeed}` : "",
-        result.brand && keywordSeed ? `${keywordSeed} ${result.brand}` : "",
-      ]);
-
-      for (const keywordQuery of keywordQueries) {
-        try {
-          // Try best-to-broadest keyword combinations.
-          catalog = await spApiClient.searchCatalogByKeyword(keywordQuery);
-          if (catalog) {
-            result.reasons.push("Catalog match resolved from keyword search.");
-            if (!result.inputIdentifier) {
-              result.inputIdentifier = requestedProductName;
-            }
-            break;
-          }
-        } catch (error) {
-          catalogErrorMessage = error instanceof Error ? error.message : "Catalog keyword search failed.";
-        }
-      }
-    }
-
     if (!catalog && result.inputIdentifier && ASIN_REGEX.test(result.inputIdentifier) && catalogErrorMessage) {
       if (isPermissionError(catalogErrorMessage)) {
         result.asin = result.inputIdentifier.toUpperCase();
@@ -237,8 +249,8 @@ export async function analyzeProduct(input: ProductInput): Promise<ProductAnalys
     }
 
     if (!catalog && !result.asin) {
-      result.error = "No ASIN found for the provided product reference.";
-      result.reasons = ["Could not resolve catalog metadata from Amazon SP-API."];
+      result.error = "No product found for this ASIN/UPC/EAN.";
+      result.reasons = ["Could not resolve catalog from Amazon SP-API."];
       if (catalogErrorMessage) {
         result.reasons.push(catalogErrorMessage);
       } else {
@@ -250,6 +262,7 @@ export async function analyzeProduct(input: ProductInput): Promise<ProductAnalys
     if (catalog) {
       result.asin = catalog.asin;
       result.title = catalog.title;
+      result.imageUrl = catalog.imageUrl ?? null;
       result.salesRank = catalog.rank;
       if (!result.brand && catalog.brand) {
         result.brand = catalog.brand;
@@ -263,9 +276,33 @@ export async function analyzeProduct(input: ProductInput): Promise<ProductAnalys
       return result;
     }
 
-    const pricing = await spApiClient.fetchCompetitivePricing(resolvedAsin);
+    const [pricing, listingRestrictionsResult] = await Promise.all([
+      spApiClient.fetchCompetitivePricing(resolvedAsin),
+      spApiClient
+        .fetchListingRestrictions(resolvedAsin)
+        .then((data) => ({ data, error: null as string | null }))
+        .catch((error) => ({
+          data: null,
+          error: error instanceof Error ? error.message : "Listing restrictions lookup failed.",
+        })),
+    ]);
     result.buyBoxPrice = pricing.buyBoxPrice;
     result.amazonIsSeller = pricing.amazonIsSeller;
+    const listingRestrictions = listingRestrictionsResult.data;
+    if (listingRestrictions) {
+      result.listingRestricted = listingRestrictions.restricted;
+      result.approvalRequired = listingRestrictions.approvalRequired;
+      result.ipComplaintRisk = listingRestrictions.ipComplaintRisk;
+      result.restrictionReasonCodes = listingRestrictions.reasonCodes;
+      if (listingRestrictions.reasonCodes.length > 0) {
+        addReasonUnique(result.reasons, `Restriction codes: ${listingRestrictions.reasonCodes.join(", ")}`);
+      }
+      if (listingRestrictions.reasonMessages.length > 0) {
+        addReasonUnique(result.reasons, listingRestrictions.reasonMessages[0]);
+      }
+    } else if (listingRestrictionsResult.error) {
+      addReasonUnique(result.reasons, `Listing restriction check unavailable: ${listingRestrictionsResult.error}`);
+    }
 
     if (result.buyBoxPrice !== null) {
       try {
@@ -332,7 +369,7 @@ export async function analyzeBatch(inputs: ProductInput[]): Promise<ProductAnaly
   }
 
   const configuredConcurrency = Number(process.env.BATCH_ANALYZE_CONCURRENCY ?? DEFAULT_BATCH_CONCURRENCY);
-  const concurrency = Math.max(1, Math.min(6, Number.isFinite(configuredConcurrency) ? configuredConcurrency : DEFAULT_BATCH_CONCURRENCY));
+  const concurrency = Math.max(1, Math.min(10, Number.isFinite(configuredConcurrency) ? configuredConcurrency : DEFAULT_BATCH_CONCURRENCY));
   const results = new Array<ProductAnalysis>(inputs.length);
   let nextIndex = 0;
 

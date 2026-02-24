@@ -17,6 +17,10 @@ function toStructuredOutput(result: ProductAnalysis) {
     netProfit: result.netProfit,
     roi: result.roiPercent,
     rank: result.salesRank,
+    approvalRequired: result.approvalRequired,
+    listingRestricted: result.listingRestricted,
+    ipComplaintRisk: result.ipComplaintRisk,
+    restrictionReasonCodes: result.restrictionReasonCodes,
   };
 }
 

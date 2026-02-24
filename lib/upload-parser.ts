@@ -432,8 +432,8 @@ function inferColumnsFromValues(headers: string[], rawRows: Array<Record<string,
 
   let headerProductNameKey = pickProductNameKey(headerMeta, new Set([headerBrandKey, headerCasePackKey].filter(Boolean) as string[]));
   const identifierExists = Boolean(identifierKey);
-  if (!identifierExists && !headerProductNameKey) {
-    throw new Error("No identifier or product name column found. Expected ASIN/UPC/EAN/barcode or product title/name.");
+  if (!identifierExists) {
+    throw new Error("No ASIN/UPC/EAN column found. Expected a column with ASIN (10 chars), UPC, or EAN.");
   }
 
   let casePackKey = headerCasePackKey;
@@ -532,8 +532,8 @@ export function detectColumns(headers: string[]): DetectedColumns {
     new Set([identifierKey, costKey, brandKey, casePackKey].filter(Boolean) as string[]),
   );
 
-  if (!identifierKey && !productNameKey) {
-    throw new Error("No identifier or product name column found. Expected ASIN/UPC/EAN/barcode or product title/name.");
+  if (!identifierKey) {
+    throw new Error("No ASIN/UPC/EAN column found. Expected a column with ASIN (10 chars), UPC, or EAN.");
   }
 
   return { identifierKey, productNameKey, costKey, brandKey, casePackKey };
@@ -574,16 +574,10 @@ function parseSheetData(sheet: XLSX.WorkSheet): SheetParseResult {
 
   const rows: ParsedUploadRow[] = [];
   for (const rawRow of rawRows) {
-    let identifier = identifierKeys.length > 0 ? getFirstIdentifierValue(rawRow, identifierKeys) : "";
-    let productName = detected.productNameKey ? String(rawRow[detected.productNameKey] ?? "").trim() : "";
+    const identifier = identifierKeys.length > 0 ? getFirstIdentifierValue(rawRow, identifierKeys) : "";
+    const productName = detected.productNameKey ? String(rawRow[detected.productNameKey] ?? "").trim() : "";
 
-    // If a candidate identifier is actually a product title, switch to keyword-based lookup.
-    if (identifier && !looksLikeResolvableIdentifier(identifier) && !productName) {
-      productName = identifier;
-      identifier = "";
-    }
-
-    if (!identifier && !productName) {
+    if (!identifier || !looksLikeResolvableIdentifier(identifier)) {
       continue;
     }
 
