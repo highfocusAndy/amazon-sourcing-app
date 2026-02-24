@@ -15,6 +15,7 @@ import type { ProductAnalysis, SellerType } from "@/lib/types";
 
 type SortColumn =
   | "inputIdentifier"
+  | "imageUrl"
   | "asin"
   | "brand"
   | "sellerType"
@@ -228,6 +229,18 @@ function rowColorClasses(color: ProductAnalysis["rowColor"]): string {
   return "bg-rose-50";
 }
 
+function decisionDisplayLabel(decision: ProductAnalysis["decision"]): string {
+  const labels: Record<ProductAnalysis["decision"], string> = {
+    BUY: "Buy",
+    "WORTH UNGATING": "Worth ungating",
+    LOW_MARGIN: "Low margin",
+    NO_MARGIN: "No margin",
+    BAD: "Bad",
+    UNKNOWN: "Unknown",
+  };
+  return labels[decision] ?? decision;
+}
+
 function decisionBadgeClasses(decision: ProductAnalysis["decision"]): string {
   if (decision === "BUY") {
     return "bg-emerald-100 text-emerald-800";
@@ -235,26 +248,13 @@ function decisionBadgeClasses(decision: ProductAnalysis["decision"]): string {
   if (decision === "WORTH UNGATING") {
     return "bg-amber-100 text-amber-800";
   }
-  if (decision === "LOSS") {
-    return "bg-rose-200 text-rose-900";
-  }
-  if (decision === "THIN_MARGIN" || decision === "LOW_MARGIN") {
+  if (decision === "LOW_MARGIN") {
     return "bg-orange-100 text-orange-800";
   }
-  if (decision === "BAD") {
+  if (decision === "NO_MARGIN" || decision === "BAD") {
     return "bg-rose-100 text-rose-800";
   }
   return "bg-slate-100 text-slate-700";
-}
-
-function decisionLabel(decision: ProductAnalysis["decision"]): string {
-  if (decision === "THIN_MARGIN") {
-    return "THIN MARGIN";
-  }
-  if (decision === "LOW_MARGIN") {
-    return "THIN MARGIN";
-  }
-  return decision;
 }
 
 function buildAiInsight(item: ProductAnalysis): string {
@@ -271,21 +271,23 @@ function buildAiInsight(item: ProductAnalysis): string {
   }
 
   if (item.decision === "BUY") {
-    return item.amazonIsSeller === true
-      ? "Profitable but Amazon is on listing. Watch buy box share and price volatility."
-      : "Strong candidate. Profit and ROI are acceptable with current market snapshot.";
+    const base =
+      item.amazonIsSeller === true
+        ? "Profitable but Amazon is on listing. Watch buy box share and price volatility."
+        : "Strong candidate. Profit and ROI are acceptable with current market snapshot.";
+    return `${base} Verify the product exists in your Seller Central (Inventory > Add a product) before sourcing.`;
   }
 
   if (item.decision === "WORTH UNGATING") {
     return "Potentially attractive after ungating. Confirm docs and post-ungating margin stability.";
   }
 
-  if (item.decision === "LOSS") {
-    return "This item is running at a loss. Reduce buy cost or skip.";
+  if (item.decision === "LOW_MARGIN") {
+    return "Margin is thin. Negotiate lower cost, reduce shipping, or skip.";
   }
 
-  if (item.decision === "THIN_MARGIN" || item.decision === "LOW_MARGIN") {
-    return "Margin is thin. Negotiate lower cost, reduce shipping, or skip.";
+  if (item.decision === "NO_MARGIN") {
+    return "No margin or deficit. Do not source at current costs.";
   }
 
   return "Needs deeper review: compare offer depth, rank trend, and competition before buying.";
@@ -365,6 +367,9 @@ export default function Home() {
   const [scannerError, setScannerError] = useState<string | null>(null);
   const [scannerRunNonce, setScannerRunNonce] = useState(0);
   const [manualIdentifierResolved, setManualIdentifierResolved] = useState(false);
+  const [marketplaceDomain, setMarketplaceDomain] = useState("amazon.com");
+  const [selectedProduct, setSelectedProduct] = useState<ProductAnalysis | null>(null);
+  const [popupQuantity, setPopupQuantity] = useState("");
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const scannerStreamRef = useRef<MediaStream | null>(null);
   const scannerFrameRef = useRef<number | null>(null);
@@ -460,6 +465,7 @@ export default function Home() {
 
           setManualIdentifierResolved(true);
           setResults([analysisResult]);
+          setSelectedProduct(null);
           setLastRunMode("manual");
           setInfoMessage(
             isScannerTriggered
@@ -470,6 +476,7 @@ export default function Home() {
         }
 
         setManualIdentifierResolved(true);
+        setSelectedProduct(null);
 
         if (isAutoRerun) {
           setResults([analysisResult]);
@@ -649,6 +656,15 @@ export default function Home() {
   }, [isScannerOpen, scannerRunNonce, stopScanner, isManualLoading, isUploadLoading, sellerType, runManualAnalysis]);
 
   useEffect(() => {
+    fetch("/api/config")
+      .then((res) => res.json())
+      .then((data: { marketplaceDomain?: string }) => {
+        if (data.marketplaceDomain) setMarketplaceDomain(data.marketplaceDomain);
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
     if (!manualIdentifierResolved) {
       lastAutoManualCalcKeyRef.current = "";
       return;
@@ -707,24 +723,21 @@ export default function Home() {
     const ungating = results.filter((item) => item.decision === "WORTH UNGATING").length;
     const bad = results.filter(
       (item) =>
-        item.decision === "BAD" ||
-        item.decision === "LOSS" ||
-        item.decision === "THIN_MARGIN" ||
-        item.decision === "LOW_MARGIN",
+        item.decision === "BAD" || item.decision === "LOW_MARGIN" || item.decision === "NO_MARGIN",
     ).length;
     return { profitable, ungating, bad };
   }, [results]);
 
   const manualResult = lastRunMode === "manual" && results.length > 0 ? results[0] : null;
-  const parsedUnitPrice = parseNonNegativeInput(wholesalePrice);
+  const detailProduct = selectedProduct ?? manualResult;
   const parsedUnitQuantity = parsePositiveInput(projectedMonthlyUnits);
+  const detailWholesalePrice =
+    detailProduct?.wholesalePrice ?? (parseNonNegativeInput(wholesalePrice) ?? 0);
   const totalBuyCost =
-    parsedUnitPrice !== null && parsedUnitQuantity !== null
-      ? roundToTwo(parsedUnitPrice * parsedUnitQuantity)
-      : null;
+    parsedUnitQuantity !== null ? roundToTwo(detailWholesalePrice * parsedUnitQuantity) : null;
   const projectedProfitForQuantity =
-    manualResult?.netProfit !== null && manualResult?.netProfit !== undefined && parsedUnitQuantity !== null
-      ? roundToTwo(manualResult.netProfit * parsedUnitQuantity)
+    detailProduct?.netProfit != null && parsedUnitQuantity !== null
+      ? roundToTwo(detailProduct.netProfit * parsedUnitQuantity)
       : null;
 
   function handleSort(column: SortColumn): void {
@@ -802,7 +815,7 @@ export default function Home() {
     }
 
     setErrorMessage(null);
-    setInfoMessage(null);
+    setInfoMessage(isAutoRerun ? `Re-analyzing for ${selectedSellerType}...` : null);
     setIsUploadLoading(true);
 
     try {
@@ -829,6 +842,7 @@ export default function Home() {
       }
 
       setResults(json.results);
+      setSelectedProduct(null);
       setInfoMessage(
         isAutoRerun
           ? `Batch analysis re-analyzed for ${selectedSellerType}.`
@@ -853,7 +867,11 @@ export default function Home() {
     }
     setSellerType(nextSellerType);
 
-    if (isManualLoading || isUploadLoading || results.length === 0) {
+    if (isManualLoading || isUploadLoading) {
+      return;
+    }
+
+    if (results.length === 0) {
       return;
     }
 
@@ -875,36 +893,27 @@ export default function Home() {
   }
 
   const tableHeaders: Array<{ key: SortColumn; label: string }> = [
-    { key: "inputIdentifier", label: "Input" },
-    { key: "asin", label: "ASIN" },
-    { key: "brand", label: "Brand" },
-    { key: "sellerType", label: "Seller" },
-    { key: "buyBoxPrice", label: "Buy Box" },
-    { key: "wholesalePrice", label: "Wholesale" },
-    { key: "shippingCost", label: "Shipping" },
-    { key: "totalFees", label: "Fees" },
-    { key: "netProfit", label: "Net Profit" },
-    { key: "roiPercent", label: "ROI%" },
+    { key: "imageUrl", label: "" },
+    { key: "asin", label: "Product" },
     { key: "salesRank", label: "BSR" },
     { key: "decision", label: "Decision" },
   ];
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 p-6">
+    <div className="flex min-h-screen w-full">
+      <main className={`flex-1 min-w-0 flex flex-col gap-6 p-6 ${!selectedProduct ? "mx-auto max-w-7xl" : ""}`}>
       <header className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         <h1 className="text-2xl font-semibold text-slate-900">Amazon FBA/FBM Wholesale Sourcing Dashboard</h1>
         <p className="mt-2 text-sm text-slate-600">
           Upload wholesale catalogs or search a single ASIN/UPC, then evaluate Buy Box pricing, fees, ROI, and ungating opportunity.
         </p>
+        <p className="mt-1 text-xs text-slate-500">
+          Data from Amazon ({marketplaceDomain}). If you can&apos;t find a product in Seller Central, check that your MARKETPLACE_ID matches your seller account region. No Buy Box = no offers in that marketplace (out of stock, restricted, or not listed).
+        </p>
       </header>
 
       <form onSubmit={handleManualSubmit} className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-lg font-semibold text-slate-900">Manual Single Lookup</h2>
-          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-            {manualIdentifierResolved ? "Step 2: Cost + Units" : "Step 1: Product Lookup"}
-          </span>
-        </div>
+        <h2 className="text-lg font-semibold text-slate-900">Manual Single Lookup</h2>
         <p className="mt-1 text-sm text-slate-600">Enter or scan ASIN/UPC first.</p>
 
         <div className="mt-4 grid gap-3">
@@ -928,63 +937,17 @@ export default function Home() {
             </div>
           </label>
 
-          {manualIdentifierResolved ? (
-            <div className="grid gap-3 md:grid-cols-3">
-              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-                <p className="text-xs uppercase tracking-wide text-slate-500">Brand (auto)</p>
-                <p className="mt-1 font-semibold">{brand || "-"}</p>
-              </div>
-              <label className="text-sm font-medium text-slate-700">
-                Unit Price
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={wholesalePrice}
-                  onChange={(event) => setWholesalePrice(event.target.value)}
-                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-sky-400 focus:ring"
-                  placeholder="e.g. 7.25"
-                  required
-                />
-              </label>
-              <label className="text-sm font-medium text-slate-700">
-                Unit Quantity
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={projectedMonthlyUnits}
-                  onChange={(event) => setProjectedMonthlyUnits(event.target.value)}
-                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-sky-400 focus:ring"
-                  placeholder="e.g. 30 or 1/2"
-                  required
-                />
-              </label>
-            </div>
-          ) : (
-            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-              Complete product lookup to continue.
-            </div>
-          )}
         </div>
 
         <div className="mt-5 flex flex-wrap items-center gap-3">
-          <button
-            type="submit"
-            disabled={isManualLoading}
-            className="inline-flex items-center rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {isManualLoading
-              ? manualIdentifierResolved
-                ? "Calculating..."
-                : "Loading Product..."
-              : manualIdentifierResolved
-                ? "Calculate Profit"
-                : "Get Product Data"}
-          </button>
-          {manualIdentifierResolved ? (
-            <p className="text-xs text-slate-600">
-              Profit calculation runs automatically when Unit Price or Unit Quantity changes.
-            </p>
+          {!manualIdentifierResolved ? (
+            <button
+              type="submit"
+              disabled={isManualLoading}
+              className="inline-flex items-center rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isManualLoading ? "Loading Product..." : "Get Product Data"}
+            </button>
           ) : null}
         </div>
       </form>
@@ -1019,30 +982,96 @@ export default function Home() {
         </div>
       </section>
 
-      {manualResult ? (
+      {detailProduct && !selectedProduct ? (
         <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">General Profit</h3>
-            <span className={`rounded-full px-3 py-1 text-xs font-semibold ${decisionBadgeClasses(manualResult.decision)}`}>
-              {decisionLabel(manualResult.decision)}
+            <span className={`rounded-full px-3 py-1 text-xs font-semibold ${decisionBadgeClasses(detailProduct.decision)}`}>
+              {decisionDisplayLabel(detailProduct.decision)}
             </span>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-3">
+            {detailProduct.imageUrl ? (
+              <img
+                src={detailProduct.imageUrl}
+                alt={detailProduct.title || "Product"}
+                referrerPolicy="no-referrer"
+                className="h-16 w-16 shrink-0 rounded border border-slate-200 object-contain"
+              />
+            ) : null}
+            <div className="min-w-0 flex-1">
+              <p className="font-medium text-slate-900">{detailProduct.title || detailProduct.asin || "Product"}</p>
+              {detailProduct.asin ? (
+                <p className="text-xs text-slate-500">
+                  ASIN: {detailProduct.asin}
+                  {marketplaceDomain ? (
+                    <>
+                      {" · "}
+                      <a
+                        href={`https://www.${marketplaceDomain}/dp/${detailProduct.asin}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sky-600 hover:underline"
+                      >
+                        View on Amazon
+                      </a>
+                    </>
+                  ) : null}
+                </p>
+              ) : null}
+            </div>
+          </div>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <label className="text-sm font-medium text-slate-700">
+              Unit Price
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={wholesalePrice}
+                onChange={(event) => setWholesalePrice(event.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-sky-400 focus:ring"
+                placeholder="e.g. 7.25"
+              />
+            </label>
+            <label className="text-sm font-medium text-slate-700">
+              Unit Quantity
+              <input
+                type="text"
+                inputMode="decimal"
+                value={projectedMonthlyUnits}
+                onChange={(event) => setProjectedMonthlyUnits(event.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-sky-400 focus:ring"
+                placeholder="e.g. 30 or 1/2"
+              />
+            </label>
+            <div className="flex items-end sm:col-span-2 lg:col-span-1">
+              <button
+                type="button"
+                onClick={() => void runManualAnalysis(sellerType, false)}
+                disabled={isManualLoading}
+                className="w-full rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isManualLoading ? "Calculating..." : "Calculate Profit"}
+              </button>
+            </div>
           </div>
           <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
             <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
               <p className="text-xs text-slate-500">Net Profit</p>
-              <p className="text-lg font-semibold text-slate-900">{formatCurrency(manualResult.netProfit)}</p>
+              <p className="text-lg font-semibold text-slate-900">{formatCurrency(detailProduct.netProfit)}</p>
             </div>
             <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
               <p className="text-xs text-slate-500">ROI</p>
-              <p className="text-lg font-semibold text-slate-900">{formatPercent(manualResult.roiPercent)}</p>
+              <p className="text-lg font-semibold text-slate-900">{formatPercent(detailProduct.roiPercent)}</p>
             </div>
             <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
               <p className="text-xs text-slate-500">Buy Box</p>
-              <p className="text-lg font-semibold text-slate-900">{formatCurrency(manualResult.buyBoxPrice)}</p>
+              <p className="text-lg font-semibold text-slate-900">{formatCurrency(detailProduct.buyBoxPrice)}</p>
             </div>
             <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
               <p className="text-xs text-slate-500">Total Fees</p>
-              <p className="text-lg font-semibold text-slate-900">{formatCurrency(manualResult.totalFees)}</p>
+              <p className="text-lg font-semibold text-slate-900">{formatCurrency(detailProduct.totalFees)}</p>
             </div>
             <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
               <p className="text-xs text-slate-500">Total Buy Cost ({projectedMonthlyUnits})</p>
@@ -1055,7 +1084,7 @@ export default function Home() {
           </div>
           <p className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
             <span className="font-semibold text-slate-900">AI Hint: </span>
-            {buildAiInsight(manualResult)}
+            {buildAiInsight(detailProduct)}
           </p>
         </section>
       ) : null}
@@ -1063,7 +1092,7 @@ export default function Home() {
       <form onSubmit={handleUploadSubmit} className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         <h2 className="text-lg font-semibold text-slate-900">Upload Wholesale File</h2>
         <p className="mt-1 text-sm text-slate-600">
-          Include product identifier (ASIN/UPC/EAN/barcode) or product name/title, plus wholesale cost.
+          Include ASIN, UPC, or EAN plus wholesale cost per unit.
         </p>
 
         <div
@@ -1104,7 +1133,7 @@ export default function Home() {
             Ungate: <span className="font-semibold">{stats.ungating}</span>
           </span>
           <span className="text-rose-700">
-            Bad/Loss/Thin Margin: <span className="font-semibold">{stats.bad}</span>
+            Skip (bad / low / no margin): <span className="font-semibold">{stats.bad}</span>
           </span>
         </div>
       </section>
@@ -1121,8 +1150,9 @@ export default function Home() {
 
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
-          <label className="text-sm font-medium text-slate-700">
-            View
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="text-sm font-medium text-slate-700">
+              View
             <select
               value={viewFilter}
               onChange={(event) => setViewFilter(event.target.value as ViewFilter)}
@@ -1135,8 +1165,19 @@ export default function Home() {
               <option value="needs_review">Needs review (undecided)</option>
             </select>
           </label>
+            {results.length > 0 && lastRunMode === "upload" ? (
+              <button
+                type="button"
+                onClick={() => void handleSellerTypeChange(sellerType === "FBA" ? "FBM" : "FBA")}
+                disabled={isUploadLoading}
+                className="rounded-full border border-slate-300 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+              >
+                {sellerType} → Switch to {sellerType === "FBA" ? "FBM" : "FBA"}
+              </button>
+            ) : null}
+          </div>
           <p className="text-xs text-slate-600">
-            Showing {filteredSortedResults.length} of {results.length} products
+            Showing {filteredSortedResults.length} of {results.length} products · Click a row for details
           </p>
         </div>
         <div className="overflow-x-auto">
@@ -1157,13 +1198,12 @@ export default function Home() {
                     </button>
                   </th>
                 ))}
-                <th className="px-3 py-3">AI / Notes</th>
               </tr>
             </thead>
             <tbody>
               {filteredSortedResults.length === 0 ? (
                 <tr>
-                  <td colSpan={13} className="px-3 py-8 text-center text-sm text-slate-500">
+                  <td colSpan={4} className="px-3 py-8 text-center text-sm text-slate-500">
                     {results.length === 0
                       ? "No results yet. Run a manual lookup or upload a file."
                       : "No products match the selected view filter."}
@@ -1171,61 +1211,40 @@ export default function Home() {
                 </tr>
               ) : (
                 filteredSortedResults.map((item) => (
-                  <tr key={item.id} className={`${rowColorClasses(item.rowColor)} border-t border-slate-200 align-top`}>
-                    <td className="px-3 py-3">{item.inputIdentifier}</td>
-                    <td className="px-3 py-3">{item.asin ?? "-"}</td>
-                    <td className="px-3 py-3">{item.brand || "-"}</td>
-                    <td className="px-3 py-3">{item.sellerType}</td>
-                    <td className="px-3 py-3">{formatCurrency(item.buyBoxPrice)}</td>
-                    <td className="px-3 py-3">{formatCurrency(item.wholesalePrice)}</td>
-                    <td className="px-3 py-3">{item.sellerType === "FBM" ? formatCurrency(item.shippingCost) : "-"}</td>
-                    <td className="px-3 py-3">
-                      <div>Total: {formatCurrency(item.totalFees)}</div>
-                      <div className="text-xs text-slate-600">
-                        Ref {formatCurrency(item.referralFee)} /{" "}
-                        {item.sellerType === "FBA"
-                          ? `FBA ${formatCurrency(item.fbaFee)}`
-                          : `Ship ${formatCurrency(item.shippingCost)}`}
-                      </div>
-                    </td>
-                    <td className="px-3 py-3 font-semibold">{formatCurrency(item.netProfit)}</td>
-                    <td className="px-3 py-3">{formatPercent(item.roiPercent)}</td>
-                    <td className="px-3 py-3">
-                      <div>{formatNumber(item.salesRank)}</div>
-                      <div className="text-xs text-slate-600">
-                        {item.amazonIsSeller === true
-                          ? "Amazon seller: Yes"
-                          : item.amazonIsSeller === false
-                            ? "Amazon seller: No"
-                            : "Amazon seller: Unknown"}
-                      </div>
-                    </td>
-                    <td className="px-3 py-3">
-                      <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${decisionBadgeClasses(item.decision)}`}>
-                        {decisionLabel(item.decision)}
-                      </span>
-                    </td>
-                    <td className="px-3 py-3 text-xs text-slate-700">
-                      <div className="mb-2 rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-slate-700">
-                        <span className="font-semibold text-slate-900">AI:</span> {buildAiInsight(item)}
-                      </div>
-                      {item.restrictedBrand ? (
-                        <div className="mb-2 space-y-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5">
-                          <div>10-unit cost: {formatCurrency(item.ungatingCost10Units)}</div>
-                          <div>Break-even units: {formatNumber(item.breakEvenUnits)}</div>
-                          <div>Monthly profit: {formatCurrency(item.projectedMonthlyProfit)}</div>
-                        </div>
-                      ) : null}
-                      {item.error ? <div className="mb-1 text-rose-700">{item.error}</div> : null}
-                      {item.reasons.length > 0 ? (
-                        <ul className="list-disc space-y-1 pl-4">
-                          {item.reasons.map((reason) => (
-                            <li key={`${item.id}-${reason}`}>{reason}</li>
-                          ))}
-                        </ul>
+                  <tr
+                    key={item.id}
+                    onClick={() => {
+                      setSelectedProduct(item);
+                      setPopupQuantity("");
+                    }}
+                    className={`cursor-pointer border-t border-slate-200 transition hover:bg-slate-50 ${rowColorClasses(item.rowColor)} ${selectedProduct?.id === item.id ? "ring-2 ring-inset ring-sky-400" : ""}`}
+                  >
+                    <td className="px-3 py-2">
+                      {item.imageUrl ? (
+                        <img
+                          src={item.imageUrl}
+                          alt={item.title || "Product"}
+                          title={item.title || undefined}
+                          referrerPolicy="no-referrer"
+                          className="h-10 w-10 rounded border border-slate-200 object-contain"
+                        />
                       ) : (
-                        "-"
+                        <span className="inline-flex h-10 w-10 items-center justify-center rounded border border-slate-200 bg-slate-100 text-[9px] text-slate-400">—</span>
                       )}
+                    </td>
+                    <td className="px-3 py-2">
+                      <div className="max-w-[240px]">
+                        <p className="truncate font-medium text-slate-900" title={item.title || undefined}>
+                          {item.title || item.asin || item.inputIdentifier || "-"}
+                        </p>
+                        <p className="text-xs text-slate-500">{item.asin ?? item.inputIdentifier}</p>
+                      </div>
+                    </td>
+                    <td className="px-3 py-2">{formatNumber(item.salesRank)}</td>
+                    <td className="px-3 py-2">
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${decisionBadgeClasses(item.decision)}`}>
+                        {decisionDisplayLabel(item.decision)}
+                      </span>
                     </td>
                   </tr>
                 ))
@@ -1278,5 +1297,185 @@ export default function Home() {
         </div>
       ) : null}
     </main>
+
+      {selectedProduct ? (
+        <aside className="fixed right-0 top-0 z-50 h-screen w-80 overflow-y-auto rounded-l-xl border border-r-0 border-slate-200 bg-white shadow-xl lg:w-96">
+          <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3">
+            <h3 className="text-base font-semibold text-slate-900">Details</h3>
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedProduct(null);
+                setPopupQuantity("");
+              }}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+            >
+              Close
+            </button>
+          </div>
+          <div className="p-4">
+            <div className="flex flex-wrap gap-3">
+              {selectedProduct.imageUrl ? (
+                <img
+                  src={selectedProduct.imageUrl}
+                  alt={selectedProduct.title || "Product"}
+                  referrerPolicy="no-referrer"
+                  className="h-16 w-16 shrink-0 rounded border border-slate-200 object-contain"
+                />
+              ) : null}
+              <div className="min-w-0 flex-1">
+                <p className="font-medium text-slate-900">{selectedProduct.title || selectedProduct.asin || "Product"}</p>
+                {selectedProduct.asin ? (
+                  <p className="text-xs text-slate-500">
+                    ASIN: {selectedProduct.asin}
+                    {marketplaceDomain ? (
+                      <>
+                        {" · "}
+                        <a
+                          href={`https://www.${marketplaceDomain}/dp/${selectedProduct.asin}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sky-600 hover:underline"
+                        >
+                          View on Amazon
+                        </a>
+                      </>
+                    ) : null}
+                  </p>
+                ) : null}
+              </div>
+              <span className={`rounded-full px-3 py-1 text-xs font-semibold ${decisionBadgeClasses(selectedProduct.decision)}`}>
+                {decisionDisplayLabel(selectedProduct.decision)}
+              </span>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                  <p className="text-xs text-slate-500">Buy Box</p>
+                  <p className="font-semibold text-slate-900">{formatCurrency(selectedProduct.buyBoxPrice)}</p>
+                </div>
+                {!(lastRunMode === "manual" && results.length === 1) ? (
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                    <p className="text-xs text-slate-500">Wholesale</p>
+                    <p className="font-semibold text-slate-900">{formatCurrency(selectedProduct.wholesalePrice)}</p>
+                  </div>
+                ) : null}
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                  <p className="text-xs text-slate-500">Net Profit</p>
+                  <p className="font-semibold text-slate-900">{formatCurrency(selectedProduct.netProfit)}</p>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                  <p className="text-xs text-slate-500">ROI</p>
+                  <p className="font-semibold text-slate-900">{formatPercent(selectedProduct.roiPercent)}</p>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                <p className="text-xs text-slate-500">Fees (tax / referral / FBA)</p>
+                <p className="font-semibold text-slate-900">{formatCurrency(selectedProduct.totalFees)}</p>
+                <p className="mt-1 text-xs text-slate-600">
+                  Ref {formatCurrency(selectedProduct.referralFee)}
+                  {selectedProduct.sellerType === "FBA" ? ` · FBA ${formatCurrency(selectedProduct.fbaFee)}` : ` · Ship ${formatCurrency(selectedProduct.shippingCost)}`}
+                </p>
+              </div>
+
+              {(() => {
+                const estMonthlyFromBsr =
+                  selectedProduct.salesRank != null && selectedProduct.salesRank > 0
+                    ? Math.round(1_000_000 / selectedProduct.salesRank)
+                    : null;
+                const sellPerMonthQty = estMonthlyFromBsr;
+                return (
+                  <>
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                      <p className="text-xs text-slate-500">Sell per month (est. from BSR)</p>
+                      <p className="font-semibold text-slate-900">{sellPerMonthQty != null ? formatNumber(sellPerMonthQty) : "—"}</p>
+                    </div>
+                    <div className="grid grid-cols-1 gap-2">
+                      <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                        <p className="text-xs text-slate-500">Total Buy Cost</p>
+                        <p className="font-semibold text-slate-900">
+                          {sellPerMonthQty !== null && sellPerMonthQty > 0
+                            ? formatCurrency(roundToTwo(selectedProduct.wholesalePrice * sellPerMonthQty))
+                            : "—"}
+                        </p>
+                      </div>
+                      <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                        <p className="text-xs text-slate-500">Projected profit (est. qty × unit profit)</p>
+                        <p className="font-semibold text-slate-900">
+                          {selectedProduct.netProfit != null && sellPerMonthQty != null && sellPerMonthQty > 0
+                            ? formatCurrency(roundToTwo(selectedProduct.netProfit * sellPerMonthQty))
+                            : "—"}
+                        </p>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
+
+              {selectedProduct.salesRank != null ? (
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                  <p className="text-xs text-slate-500">BSR (Best Seller Rank)</p>
+                  <p className="font-semibold text-slate-900">{formatNumber(selectedProduct.salesRank)}</p>
+                </div>
+              ) : null}
+
+              {selectedProduct.amazonIsSeller !== null ? (
+                <p className="text-xs text-slate-600">
+                  Amazon is seller: {selectedProduct.amazonIsSeller ? "Yes" : "No"}
+                </p>
+              ) : null}
+
+              {(() => {
+                const codes = selectedProduct.restrictionReasonCodes;
+                const hasHazmat = codes.some((c) => /HAZMAT|HAZARD|DANGEROUS/i.test(c));
+                const hasVariation = codes.some((c) => /VARIATION|VAR\b|PARENT_CHILD/i.test(c));
+                return (
+                  <div className="grid grid-cols-1 gap-2">
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                      <p className="text-xs text-slate-500">IP / complaint risk</p>
+                      <p className="text-sm font-medium text-slate-900">{selectedProduct.ipComplaintRisk ? "Yes" : "No"}</p>
+                    </div>
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                      <p className="text-xs text-slate-500">Hazmat</p>
+                      <p className="text-sm font-medium text-slate-900">{hasHazmat ? "Yes" : "No"}</p>
+                    </div>
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                      <p className="text-xs text-slate-500">Variation</p>
+                      <p className="text-sm font-medium text-slate-900">{hasVariation ? "Yes" : "No"}</p>
+                    </div>
+                  </div>
+                );
+              })()}
+
+            {selectedProduct.reasons.length > 0 || selectedProduct.restrictionReasonCodes.length > 0 || selectedProduct.error ? (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+                <p className="text-xs font-semibold text-amber-900">Alerts / Amazon info</p>
+                {selectedProduct.error ? (
+                  <p className="mt-1 text-sm text-rose-700">{selectedProduct.error}</p>
+                ) : null}
+                {selectedProduct.listingRestricted ? <p className="mt-1 text-xs text-amber-800">Listing restricted</p> : null}
+                {selectedProduct.approvalRequired ? <p className="mt-1 text-xs text-amber-800">Approval required</p> : null}
+                {selectedProduct.restrictionReasonCodes.length > 0 ? (
+                  <p className="mt-1 text-xs text-amber-800">Codes: {selectedProduct.restrictionReasonCodes.join(", ")}</p>
+                ) : null}
+                <ul className="mt-2 list-disc space-y-0.5 pl-4 text-xs text-amber-900">
+                  {selectedProduct.reasons.map((r) => (
+                    <li key={r}>{r}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
+            <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+              <span className="font-semibold text-slate-900">AI: </span>
+              {buildAiInsight(selectedProduct)}
+            </p>
+            </div>
+          </div>
+        </aside>
+      ) : null}
+    </div>
   );
 }

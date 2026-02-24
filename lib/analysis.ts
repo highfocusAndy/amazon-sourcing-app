@@ -6,7 +6,7 @@ const BAD_SALES_RANK_THRESHOLD = 100_000;
 const MIN_HEALTHY_ROI_PERCENT = 10;
 const ESTIMATED_REFERRAL_RATE = 0.15;
 const ASIN_REGEX = /^[A-Z0-9]{10}$/i;
-const DEFAULT_BATCH_CONCURRENCY = 3;
+const DEFAULT_BATCH_CONCURRENCY = 6;
 
 function toCurrency(value: number | null): number | null {
   if (value === null || !Number.isFinite(value)) {
@@ -89,6 +89,7 @@ function buildBaseResult(input: ProductInput): ProductAnalysis {
     wholesalePrice: normalizeNumber(input.wholesalePrice),
     shippingCost: sellerType === "FBM" ? Math.max(0, normalizeNumber(input.shippingCost)) : 0,
     buyBoxPrice: null,
+    imageUrl: null,
     salesRank: null,
     amazonIsSeller: null,
     listingRestricted: null,
@@ -179,23 +180,28 @@ function evaluateDecision(result: ProductAnalysis, projectedMonthlyUnits: number
     result.amazonIsSeller === true ||
     result.ipComplaintRisk === true ||
     (result.salesRank !== null && result.salesRank > BAD_SALES_RANK_THRESHOLD);
+  const hasDeficit =
+    result.netProfit !== null &&
+    result.roiPercent !== null &&
+    (result.netProfit <= 0 || result.roiPercent < 0);
+
   if (forcedBad) {
     decision = "BAD";
+    rowColor = "red";
+  } else if (hasDeficit) {
+    decision = "NO_MARGIN";
     rowColor = "red";
   } else if ((restricted || result.approvalRequired === true || result.listingRestricted === true) && result.worthUngating) {
     decision = "WORTH UNGATING";
     rowColor = "yellow";
-  } else if (result.netProfit !== null && result.netProfit <= 0) {
-    decision = "LOSS";
-    rowColor = "red";
   } else if (result.approvalRequired === true || result.listingRestricted === true) {
-    decision = "THIN_MARGIN";
+    decision = "LOW_MARGIN";
     rowColor = "red";
   } else if (result.netProfit === null || result.roiPercent === null) {
     decision = "UNKNOWN";
     rowColor = "red";
   } else if (result.roiPercent < MIN_HEALTHY_ROI_PERCENT || restricted) {
-    decision = "THIN_MARGIN";
+    decision = "LOW_MARGIN";
     rowColor = "red";
   } else {
     decision = "BUY";
@@ -218,9 +224,9 @@ export async function analyzeProduct(input: ProductInput): Promise<ProductAnalys
       : getServerEnv().defaultProjectedMonthlyUnits;
 
   try {
-    if (!result.inputIdentifier && !requestedProductName) {
-      result.error = "Missing product reference.";
-      result.reasons = ["Provide ASIN/UPC/EAN or a product name to run analysis."];
+    if (!result.inputIdentifier?.trim()) {
+      result.error = "ASIN, UPC, or EAN required.";
+      result.reasons = ["Provide an ASIN (10 chars), UPC, or EAN. Product name lookup is not used."];
       return result;
     }
 
@@ -235,31 +241,6 @@ export async function analyzeProduct(input: ProductInput): Promise<ProductAnalys
       }
     }
 
-    if (!catalog) {
-      const keywordSeed = requestedProductName || (!ASIN_REGEX.test(result.inputIdentifier) ? result.inputIdentifier : "");
-      const keywordQueries = uniqueNonEmpty([
-        keywordSeed,
-        result.brand && keywordSeed ? `${result.brand} ${keywordSeed}` : "",
-        result.brand && keywordSeed ? `${keywordSeed} ${result.brand}` : "",
-      ]);
-
-      for (const keywordQuery of keywordQueries) {
-        try {
-          // Try best-to-broadest keyword combinations.
-          catalog = await spApiClient.searchCatalogByKeyword(keywordQuery);
-          if (catalog) {
-            result.reasons.push("Catalog match resolved from keyword search.");
-            if (!result.inputIdentifier) {
-              result.inputIdentifier = requestedProductName;
-            }
-            break;
-          }
-        } catch (error) {
-          catalogErrorMessage = error instanceof Error ? error.message : "Catalog keyword search failed.";
-        }
-      }
-    }
-
     if (!catalog && result.inputIdentifier && ASIN_REGEX.test(result.inputIdentifier) && catalogErrorMessage) {
       if (isPermissionError(catalogErrorMessage)) {
         result.asin = result.inputIdentifier.toUpperCase();
@@ -268,8 +249,8 @@ export async function analyzeProduct(input: ProductInput): Promise<ProductAnalys
     }
 
     if (!catalog && !result.asin) {
-      result.error = "No ASIN found for the provided product reference.";
-      result.reasons = ["Could not resolve catalog metadata from Amazon SP-API."];
+      result.error = "No product found for this ASIN/UPC/EAN.";
+      result.reasons = ["Could not resolve catalog from Amazon SP-API."];
       if (catalogErrorMessage) {
         result.reasons.push(catalogErrorMessage);
       } else {
@@ -281,6 +262,7 @@ export async function analyzeProduct(input: ProductInput): Promise<ProductAnalys
     if (catalog) {
       result.asin = catalog.asin;
       result.title = catalog.title;
+      result.imageUrl = catalog.imageUrl ?? null;
       result.salesRank = catalog.rank;
       if (!result.brand && catalog.brand) {
         result.brand = catalog.brand;
@@ -387,7 +369,7 @@ export async function analyzeBatch(inputs: ProductInput[]): Promise<ProductAnaly
   }
 
   const configuredConcurrency = Number(process.env.BATCH_ANALYZE_CONCURRENCY ?? DEFAULT_BATCH_CONCURRENCY);
-  const concurrency = Math.max(1, Math.min(6, Number.isFinite(configuredConcurrency) ? configuredConcurrency : DEFAULT_BATCH_CONCURRENCY));
+  const concurrency = Math.max(1, Math.min(10, Number.isFinite(configuredConcurrency) ? configuredConcurrency : DEFAULT_BATCH_CONCURRENCY));
   const results = new Array<ProductAnalysis>(inputs.length);
   let nextIndex = 0;
 

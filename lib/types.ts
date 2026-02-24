@@ -1,11 +1,4 @@
-export type Decision =
-  | "BUY"
-  | "WORTH UNGATING"
-  | "BAD"
-  | "THIN_MARGIN"
-  | "LOSS"
-  | "LOW_MARGIN"
-  | "UNKNOWN";
+export type Decision = "BUY" | "WORTH UNGATING" | "BAD" | "LOW_MARGIN" | "NO_MARGIN" | "UNKNOWN";
 export type RowColor = "green" | "yellow" | "red";
 export type SellerType = "FBA" | "FBM";
 
@@ -30,6 +23,7 @@ export interface ProductAnalysis {
   inputIdentifier: string;
   asin: string | null;
   title: string;
+  imageUrl: string | null;
   brand: string;
   sellerType: SellerType;
   wholesalePrice: number;

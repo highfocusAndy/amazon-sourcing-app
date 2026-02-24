@@ -38,6 +38,7 @@ export interface CatalogItem {
   title: string;
   brand: string;
   rank: number | null;
+  imageUrl: string | null;
 }
 
 export interface CompetitivePricing {
@@ -462,7 +463,23 @@ export class SpApiClient {
       }
     }
 
-    return { asin, title, brand, rank };
+    let imageUrl: string | null = null;
+    const imagesByMkt = asArray(itemObj.images);
+    const firstMktImages = asObject(imagesByMkt[0]);
+    const imageList = asArray(firstMktImages?.images);
+    for (const imgRaw of imageList) {
+      const img = asObject(imgRaw);
+      if (readString(img?.variant)?.toUpperCase() === "MAIN") {
+        imageUrl = readString(img?.link);
+        break;
+      }
+    }
+    if (!imageUrl && imageList.length > 0) {
+      const firstImg = asObject(imageList[0]);
+      imageUrl = readString(firstImg?.link);
+    }
+
+    return { asin, title, brand, rank, imageUrl };
   }
 
   private extractPricing(data: unknown): CompetitivePricing {
@@ -667,7 +684,7 @@ export class SpApiClient {
     const response = await this.request<unknown>("GET", `/catalog/2022-04-01/items/${asin}`, {
       query: {
         marketplaceIds: this.config.marketplaceId,
-        includedData: "summaries,salesRanks,identifiers",
+        includedData: "summaries,salesRanks,identifiers,images",
       },
     });
 
@@ -680,7 +697,7 @@ export class SpApiClient {
         marketplaceIds: this.config.marketplaceId,
         identifiersType: identifierType,
         identifiers: identifier,
-        includedData: "summaries,salesRanks,identifiers",
+        includedData: "summaries,salesRanks,identifiers,images",
       },
     });
 
@@ -703,7 +720,7 @@ export class SpApiClient {
       query: {
         marketplaceIds: this.config.marketplaceId,
         keywords: query,
-        includedData: "summaries,salesRanks,identifiers",
+        includedData: "summaries,salesRanks,identifiers,images",
         pageSize: "20",
       },
     });
@@ -766,8 +783,7 @@ export class SpApiClient {
       }
     }
 
-    // Last resort: keyword lookup can recover noisy supplier identifiers/titles.
-    return this.searchCatalogByKeyword(normalized).catch(() => null);
+    return null;
   }
 
   async fetchCompetitivePricing(asin: string): Promise<CompetitivePricing> {
