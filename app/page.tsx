@@ -351,7 +351,7 @@ export default function Home() {
   const [brand, setBrand] = useState("");
   const [sellerType, setSellerType] = useState<SellerType>("FBA");
   const [shippingCost, setShippingCost] = useState("0");
-  const [projectedMonthlyUnits, setProjectedMonthlyUnits] = useState("30");
+  const [projectedMonthlyUnits, setProjectedMonthlyUnits] = useState("1");
   const [file, setFile] = useState<File | null>(null);
   const [dragging, setDragging] = useState(false);
   const [isManualLoading, setIsManualLoading] = useState(false);
@@ -901,7 +901,7 @@ export default function Home() {
 
   return (
     <div className="flex min-h-screen w-full">
-      <main className={`flex-1 min-w-0 flex flex-col gap-6 p-6 ${!selectedProduct ? "mx-auto max-w-7xl" : ""}`}>
+      <main className={`flex-1 min-w-0 flex flex-col gap-6 p-6 ${!selectedProduct ? "mx-auto max-w-7xl" : "mr-0 lg:mr-80 xl:mr-96"}`}>
       <header className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         <h1 className="text-2xl font-semibold text-slate-900">Amazon FBA/FBM Wholesale Sourcing Dashboard</h1>
         <p className="mt-2 text-sm text-slate-600">
@@ -1299,7 +1299,7 @@ export default function Home() {
     </main>
 
       {selectedProduct ? (
-        <aside className="fixed right-0 top-0 z-50 h-screen w-80 overflow-y-auto rounded-l-xl border border-r-0 border-slate-200 bg-white shadow-xl lg:w-96">
+        <aside className="fixed inset-0 z-50 overflow-y-auto bg-white shadow-xl lg:inset-auto lg:right-0 lg:top-0 lg:h-screen lg:w-80 lg:rounded-l-xl lg:border lg:border-r-0 lg:border-slate-200 xl:w-96">
           <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3">
             <h3 className="text-base font-semibold text-slate-900">Details</h3>
             <button
@@ -1380,39 +1380,28 @@ export default function Home() {
                 </p>
               </div>
 
-              {(() => {
-                const estMonthlyFromBsr =
-                  selectedProduct.salesRank != null && selectedProduct.salesRank > 0
-                    ? Math.round(1_000_000 / selectedProduct.salesRank)
-                    : null;
-                const sellPerMonthQty = estMonthlyFromBsr;
-                return (
-                  <>
-                    <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                      <p className="text-xs text-slate-500">Sell per month (est. from BSR)</p>
-                      <p className="font-semibold text-slate-900">{sellPerMonthQty != null ? formatNumber(sellPerMonthQty) : "—"}</p>
-                    </div>
-                    <div className="grid grid-cols-1 gap-2">
-                      <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                        <p className="text-xs text-slate-500">Total Buy Cost</p>
-                        <p className="font-semibold text-slate-900">
-                          {sellPerMonthQty !== null && sellPerMonthQty > 0
-                            ? formatCurrency(roundToTwo(selectedProduct.wholesalePrice * sellPerMonthQty))
-                            : "—"}
-                        </p>
-                      </div>
-                      <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                        <p className="text-xs text-slate-500">Projected profit (est. qty × unit profit)</p>
-                        <p className="font-semibold text-slate-900">
-                          {selectedProduct.netProfit != null && sellPerMonthQty != null && sellPerMonthQty > 0
-                            ? formatCurrency(roundToTwo(selectedProduct.netProfit * sellPerMonthQty))
-                            : "—"}
-                        </p>
-                      </div>
-                    </div>
-                  </>
-                );
-              })()}
+              <div className="grid grid-cols-1 gap-2">
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                  <p className="text-xs text-slate-500">Total Buy Cost ({projectedMonthlyUnits} units)</p>
+                  <p className="font-semibold text-slate-900">
+                    {(() => {
+                      const qty = parsePositiveInput(projectedMonthlyUnits);
+                      return qty !== null ? formatCurrency(roundToTwo(selectedProduct.wholesalePrice * qty)) : "—";
+                    })()}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                  <p className="text-xs text-slate-500">Projected profit ({projectedMonthlyUnits} × net profit)</p>
+                  <p className="font-semibold text-slate-900">
+                    {(() => {
+                      const qty = parsePositiveInput(projectedMonthlyUnits);
+                      return selectedProduct.netProfit != null && qty !== null
+                        ? formatCurrency(roundToTwo(selectedProduct.netProfit * qty))
+                        : "—";
+                    })()}
+                  </p>
+                </div>
+              </div>
 
               {selectedProduct.salesRank != null ? (
                 <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
