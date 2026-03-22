@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { auth } from "@/auth";
+import { getSpApiClientForUserOrGlobal } from "@/lib/amazonAccount";
 import { analyzeProduct } from "@/lib/analysis";
 import type { ProductAnalysis } from "@/lib/types";
 
@@ -17,9 +19,19 @@ function toStructuredOutput(result: ProductAnalysis) {
     netProfit: result.netProfit,
     roi: result.roiPercent,
     rank: result.salesRank,
+    salesRankCategory: result.salesRankCategory,
+    estimatedMonthlySales: result.estimatedMonthlySales,
+    amazonSalesVolumeLabel: result.amazonSalesVolumeLabel,
+    offerCount: result.offerCount,
+    fbaOfferCount: result.fbaOfferCount,
+    fbmOfferCount: result.fbmOfferCount,
+    sellerIds: result.sellerIds,
+    sellerDetails: result.sellerDetails,
     approvalRequired: result.approvalRequired,
     listingRestricted: result.listingRestricted,
     ipComplaintRisk: result.ipComplaintRisk,
+    meltableRisk: result.meltableRisk,
+    privateLabelRisk: result.privateLabelRisk,
     restrictionReasonCodes: result.restrictionReasonCodes,
   };
 }
@@ -49,14 +61,19 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const result = await analyzeProduct({
-      identifier: body.identifier,
-      wholesalePrice: Number(body.wholesalePrice ?? 0),
-      brand: body.brand,
-      projectedMonthlyUnits: Number(body.projectedMonthlyUnits ?? 0),
-      sellerType: body.sellerType === "FBM" ? "FBM" : "FBA",
-      shippingCost: Number(body.shippingCost ?? 0),
-    });
+    const session = await auth();
+    const client = await getSpApiClientForUserOrGlobal(session?.user?.id);
+    const result = await analyzeProduct(
+      {
+        identifier: body.identifier,
+        wholesalePrice: Number(body.wholesalePrice ?? 0),
+        brand: body.brand,
+        projectedMonthlyUnits: Number(body.projectedMonthlyUnits ?? 0),
+        sellerType: body.sellerType === "FBM" ? "FBM" : "FBA",
+        shippingCost: Number(body.shippingCost ?? 0),
+      },
+      client,
+    );
 
     return NextResponse.json({
       ok: !result.error,

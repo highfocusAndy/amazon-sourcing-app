@@ -1,9 +1,15 @@
+import { extractAmazonSalesVolume } from "@/lib/amazonSalesVolume";
 import { getServerEnv } from "@/lib/env";
-import { getSpApiClient } from "@/lib/spApiClient";
+import { getListingTypeFromTitle } from "@/lib/listingLabel";
+import { fetchMainBsr } from "@/lib/paApiClient";
+import { SpApiClient, tryReadSpApiConfig } from "@/lib/spApiClient";
+import type { CatalogItem } from "@/lib/spApiClient";
+import { estimateMonthlySalesFromBsr } from "@/lib/salesEstimate";
 import type { Decision, ProductAnalysis, ProductInput, RowColor, SellerType } from "@/lib/types";
 
 const BAD_SALES_RANK_THRESHOLD = 100_000;
 const MIN_HEALTHY_ROI_PERCENT = 10;
+const HIGH_ABSOLUTE_PROFIT_THRESHOLD = 20;
 const ESTIMATED_REFERRAL_RATE = 0.15;
 const ASIN_REGEX = /^[A-Z0-9]{10}$/i;
 const DEFAULT_BATCH_CONCURRENCY = 6;
@@ -91,10 +97,19 @@ function buildBaseResult(input: ProductInput): ProductAnalysis {
     buyBoxPrice: null,
     imageUrl: null,
     salesRank: null,
-    amazonIsSeller: null,
+    salesRankCategory: null,
+    estimatedMonthlySales: null,
+    amazonSalesVolumeLabel: null,
+    offerCount: null,
+    fbaOfferCount: null,
+    fbmOfferCount: null,
+    sellerIds: [],
+    sellerDetails: [],
     listingRestricted: null,
     approvalRequired: null,
     ipComplaintRisk: null,
+    meltableRisk: null,
+    privateLabelRisk: null,
     restrictionReasonCodes: [],
     referralFee: 0,
     fbaFee: 0,
@@ -119,12 +134,6 @@ function evaluateDecision(result: ProductAnalysis, projectedMonthlyUnits: number
   const restricted = isRestrictedBrand(result.brand, getServerEnv().restrictedBrands);
   result.restrictedBrand = restricted;
 
-  if (result.amazonIsSeller === true) {
-    addReasonUnique(reasons, "Amazon is currently a seller on this listing.");
-  } else if (result.amazonIsSeller === null) {
-    addReasonUnique(reasons, "Amazon seller presence could not be determined from available pricing data.");
-  }
-
   if (result.approvalRequired === true) {
     addReasonUnique(reasons, "This ASIN requires approval for your seller account.");
   }
@@ -137,6 +146,14 @@ function evaluateDecision(result: ProductAnalysis, projectedMonthlyUnits: number
     addReasonUnique(reasons, "Potential IP/brand complaint risk detected from restriction reasons.");
   }
 
+  if (result.meltableRisk === true) {
+    addReasonUnique(reasons, "Meltable / heat-sensitive product; may have FBA or shipping restrictions.");
+  }
+
+  if (result.privateLabelRisk === true) {
+    addReasonUnique(reasons, "Possible private label or brand-gated listing; not typical wholesale.");
+  }
+
   if (result.salesRank !== null && result.salesRank > BAD_SALES_RANK_THRESHOLD) {
     addReasonUnique(reasons, `Sales rank ${result.salesRank.toLocaleString()} is above 100,000.`);
   }
@@ -145,8 +162,17 @@ function evaluateDecision(result: ProductAnalysis, projectedMonthlyUnits: number
     addReasonUnique(reasons, "Net profit is non-positive after wholesale and fee costs.");
   }
 
-  if (result.roiPercent !== null && result.roiPercent < MIN_HEALTHY_ROI_PERCENT) {
-    addReasonUnique(reasons, `ROI is below ${MIN_HEALTHY_ROI_PERCENT}%.`);
+  if (
+    result.roiPercent !== null &&
+    result.roiPercent < MIN_HEALTHY_ROI_PERCENT &&
+    (result.netProfit ?? 0) < HIGH_ABSOLUTE_PROFIT_THRESHOLD
+  ) {
+    addReasonUnique(
+      reasons,
+      `ROI is below ${MIN_HEALTHY_ROI_PERCENT}% and net profit is under $${HIGH_ABSOLUTE_PROFIT_THRESHOLD.toFixed(
+        0,
+      )}.`,
+    );
   }
 
   if (restricted) {
@@ -177,7 +203,6 @@ function evaluateDecision(result: ProductAnalysis, projectedMonthlyUnits: number
   let rowColor: RowColor = "red";
 
   const forcedBad =
-    result.amazonIsSeller === true ||
     result.ipComplaintRisk === true ||
     (result.salesRank !== null && result.salesRank > BAD_SALES_RANK_THRESHOLD);
   const hasDeficit =
@@ -194,13 +219,14 @@ function evaluateDecision(result: ProductAnalysis, projectedMonthlyUnits: number
   } else if ((restricted || result.approvalRequired === true || result.listingRestricted === true) && result.worthUngating) {
     decision = "WORTH UNGATING";
     rowColor = "yellow";
-  } else if (result.approvalRequired === true || result.listingRestricted === true) {
-    decision = "LOW_MARGIN";
-    rowColor = "red";
   } else if (result.netProfit === null || result.roiPercent === null) {
     decision = "UNKNOWN";
     rowColor = "red";
-  } else if (result.roiPercent < MIN_HEALTHY_ROI_PERCENT || restricted) {
+  } else if (
+    ((result.roiPercent ?? 0) < MIN_HEALTHY_ROI_PERCENT &&
+      (result.netProfit ?? 0) < HIGH_ABSOLUTE_PROFIT_THRESHOLD) ||
+    restricted
+  ) {
     decision = "LOW_MARGIN";
     rowColor = "red";
   } else {
@@ -214,9 +240,102 @@ function evaluateDecision(result: ProductAnalysis, projectedMonthlyUnits: number
   return result;
 }
 
-export async function analyzeProduct(input: ProductInput): Promise<ProductAnalysis> {
+/** Build a catalog-only ProductAnalysis for a variation (e.g. Single, 2-Pack) — no pricing/fees until user selects. */
+export function buildCatalogOnlyResult(
+  catalog: CatalogItem,
+  inputIdentifier: string,
+): ProductAnalysis {
+  const offerLabel = getListingTypeFromTitle(catalog.title);
+  return {
+    id: crypto.randomUUID(),
+    inputIdentifier,
+    asin: catalog.asin,
+    title: catalog.title,
+    imageUrl: catalog.imageUrl ?? null,
+    brand: catalog.brand ?? "",
+    sellerType: "FBA",
+    wholesalePrice: 0,
+    shippingCost: 0,
+    buyBoxPrice: null,
+    salesRank: catalog.rank,
+    salesRankCategory: null,
+    estimatedMonthlySales: null,
+    amazonSalesVolumeLabel: null,
+    offerCount: null,
+    fbaOfferCount: null,
+    fbmOfferCount: null,
+    sellerIds: [],
+    sellerDetails: [],
+    listingRestricted: null,
+    approvalRequired: null,
+    ipComplaintRisk: null,
+    meltableRisk: null,
+    privateLabelRisk: null,
+    restrictionReasonCodes: [],
+    referralFee: 0,
+    fbaFee: 0,
+    totalFees: 0,
+    netProfit: null,
+    roiPercent: null,
+    restrictedBrand: false,
+    ungatingCost10Units: null,
+    breakEvenUnits: null,
+    projectedMonthlyProfit: null,
+    worthUngating: false,
+    decision: "UNKNOWN",
+    rowColor: "red",
+    reasons: [],
+    createdAt: new Date().toISOString(),
+    offerLabel,
+  };
+}
+
+/** Build a ProductAnalysis for one offer (listing) from base result + offer price + fee estimate. */
+export function buildAnalysisForOffer(
+  base: ProductAnalysis,
+  offer: { landedPrice: number; channel: SellerType; condition?: string },
+  feeEstimate: { referralFee: number; fulfillmentFee: number; totalFees: number },
+  projectedMonthlyUnits: number,
+): ProductAnalysis {
+  const copy: ProductAnalysis = { ...base, id: crypto.randomUUID(), reasons: [...base.reasons] };
+  copy.buyBoxPrice = offer.landedPrice;
+  copy.sellerType = offer.channel;
+  const condition = (offer.condition ?? "New").trim();
+  copy.offerLabel = `${condition} · ${offer.channel} · $${offer.landedPrice.toFixed(2)}`;
+  copy.referralFee = feeEstimate.referralFee;
+  if (offer.channel === "FBA") {
+    copy.fbaFee = feeEstimate.fulfillmentFee;
+    const sumFees = copy.referralFee + copy.fbaFee;
+    copy.totalFees = toCurrency(Math.min(sumFees, copy.buyBoxPrice ?? Infinity)) ?? 0;
+  } else {
+    copy.fbaFee = 0;
+    copy.totalFees = toCurrency(copy.referralFee + copy.shippingCost) ?? 0;
+  }
+  copy.netProfit = toCurrency(copy.buyBoxPrice! - copy.wholesalePrice - copy.totalFees);
+  copy.roiPercent =
+    copy.wholesalePrice > 0 && copy.netProfit !== null
+      ? toPercent((copy.netProfit / copy.wholesalePrice) * 100)
+      : null;
+  return evaluateDecision(copy, projectedMonthlyUnits);
+}
+
+export async function analyzeProduct(
+  input: ProductInput,
+  client?: SpApiClient | null,
+): Promise<ProductAnalysis> {
   const result = buildBaseResult(input);
-  const spApiClient = getSpApiClient();
+  const spApiClient =
+    client ??
+    (() => {
+      const cfg = tryReadSpApiConfig();
+      return cfg ? new SpApiClient(cfg) : null;
+    })();
+  if (!spApiClient) {
+    result.error =
+      "Amazon SP-API is not configured. Connect Amazon (OAuth) in the app or set SP_API_* and AWS credentials on the server.";
+    result.reasons = [result.error];
+    return result;
+  }
   const requestedProductName = String(input.productName ?? "").trim();
   const projectedMonthlyUnits =
     normalizeNumber(input.projectedMonthlyUnits) > 0
@@ -276,7 +395,27 @@ export async function analyzeProduct(input: ProductInput): Promise<ProductAnalys
       return result;
     }
 
-    const [pricing, listingRestrictionsResult] = await Promise.all([
+    // Prefer main product-page BSR from PA-API when configured; otherwise keep SP-API catalog rank.
+    try {
+      const mainBsr = await fetchMainBsr(resolvedAsin);
+      if (mainBsr) {
+        result.salesRank = mainBsr.salesRank;
+        result.salesRankCategory = mainBsr.categoryName;
+      }
+    } catch {
+      // PA-API optional; keep existing result.salesRank from catalog if any.
+    }
+
+    if (result.salesRank !== null) {
+      result.estimatedMonthlySales = estimateMonthlySalesFromBsr(
+        result.salesRank,
+        result.salesRankCategory
+      );
+    }
+
+    const env = getServerEnv();
+    const marketplaceId = spApiClient.marketplaceId ?? env.marketplaceId;
+    const [pricing, listingRestrictionsResult, amazonSalesVolumeLabel] = await Promise.all([
       spApiClient.fetchCompetitivePricing(resolvedAsin),
       spApiClient
         .fetchListingRestrictions(resolvedAsin)
@@ -285,14 +424,22 @@ export async function analyzeProduct(input: ProductInput): Promise<ProductAnalys
           data: null,
           error: error instanceof Error ? error.message : "Listing restrictions lookup failed.",
         })),
+      extractAmazonSalesVolume(resolvedAsin, marketplaceId),
     ]);
     result.buyBoxPrice = pricing.buyBoxPrice;
-    result.amazonIsSeller = pricing.amazonIsSeller;
+    result.amazonSalesVolumeLabel = amazonSalesVolumeLabel ?? null;
+    result.offerCount = pricing.offerCount;
+    result.fbaOfferCount = pricing.fbaOfferCount;
+    result.fbmOfferCount = pricing.fbmOfferCount;
+    result.sellerIds = pricing.sellerIds ?? [];
+    result.sellerDetails = pricing.sellerDetails ?? [];
     const listingRestrictions = listingRestrictionsResult.data;
     if (listingRestrictions) {
       result.listingRestricted = listingRestrictions.restricted;
       result.approvalRequired = listingRestrictions.approvalRequired;
       result.ipComplaintRisk = listingRestrictions.ipComplaintRisk;
+      result.meltableRisk = listingRestrictions.meltableRisk ?? null;
+      result.privateLabelRisk = listingRestrictions.privateLabelRisk ?? null;
       result.restrictionReasonCodes = listingRestrictions.reasonCodes;
       if (listingRestrictions.reasonCodes.length > 0) {
         addReasonUnique(result.reasons, `Restriction codes: ${listingRestrictions.reasonCodes.join(", ")}`);
@@ -306,7 +453,12 @@ export async function analyzeProduct(input: ProductInput): Promise<ProductAnalys
 
     if (result.buyBoxPrice !== null) {
       try {
-        const feeEstimate = await spApiClient.fetchFeeEstimate(resolvedAsin, result.buyBoxPrice, result.sellerType);
+        const listingForFees = pricing.listingPrice ?? result.buyBoxPrice;
+        const shippingForFees = pricing.shippingAmount ?? 0;
+        const feeEstimate = await spApiClient.fetchFeeEstimate(resolvedAsin, {
+          listingPrice: listingForFees,
+          shippingAmount: shippingForFees,
+        }, result.sellerType);
         let referralFee = feeEstimate.referralFee;
         let fulfillmentFee = feeEstimate.fulfillmentFee;
 
@@ -329,7 +481,9 @@ export async function analyzeProduct(input: ProductInput): Promise<ProductAnalys
         result.referralFee = referralFee;
         if (result.sellerType === "FBA") {
           result.fbaFee = fulfillmentFee;
-          result.totalFees = feeEstimate.totalFees > 0 ? feeEstimate.totalFees : toCurrency(result.referralFee + result.fbaFee) ?? 0;
+          // Use referral + FBA only for profit (exclude "other" fees). Cap at buyBox so we never show negative profit from a bad API total.
+          const sumFees = result.referralFee + result.fbaFee;
+          result.totalFees = toCurrency(Math.min(sumFees, result.buyBoxPrice ?? Infinity)) ?? 0;
         } else {
           result.fbaFee = 0;
           result.totalFees = toCurrency(result.referralFee + result.shippingCost) ?? 0;
@@ -357,8 +511,13 @@ export async function analyzeProduct(input: ProductInput): Promise<ProductAnalys
 
     return evaluateDecision(result, projectedMonthlyUnits);
   } catch (error) {
-    result.error = error instanceof Error ? error.message : "Unexpected analysis error.";
-    result.reasons.push("SP-API request failed; verify credentials and marketplace configuration.");
+    const message = error instanceof Error ? error.message : "Unexpected analysis error.";
+    result.error = message;
+    if (/rate limit|QuotaExceeded|wait a few minutes/i.test(message)) {
+      result.reasons.push("Amazon has temporarily limited API requests. Wait a few minutes and try again.");
+    } else {
+      result.reasons.push("SP-API request failed; verify credentials and marketplace configuration.");
+    }
     return result;
   }
 }

@@ -1,0 +1,6 @@
+# Deploy on https://railway.app — attach a volume at /data for SQLite (see DEPLOY.md).
+[build]
+builder = "NIXPACKS"
+
+[deploy]
+startCommand = "npm run start:deploy"

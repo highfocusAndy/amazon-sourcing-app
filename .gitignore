@@ -13,4 +13,9 @@ pnpm-debug.log*
 .env*
 !.env.example
 
+# Local SQLite (use file:/data/prod.db on Railway, not this file)
+prisma/*.db
+prisma/*.db-journal
+tsconfig.tsbuildinfo
+
 coverage

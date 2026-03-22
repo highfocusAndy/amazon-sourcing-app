@@ -31,16 +31,16 @@ const IDENTIFIER_PRIORITY: string[][] = [
 ];
 
 const COST_PRIORITY: string[][] = [
+  ["wholesale"],
   ["unit_cost", "unitcost"],
   ["price_per_unit", "priceperunit"],
   ["buy_price", "buyprice"],
-  ["wholesale"],
   ["case_cost", "casecost"],
   ["cost"],
 ];
 
 const BRAND_PRIORITY: string[][] = [["brand"], ["manufacturer"], ["vendor"], ["supplier"]];
-const CASE_PACK_PRIORITY: string[][] = [["case_pack", "casepack"]];
+const CASE_PACK_PRIORITY: string[][] = [["case_pack", "casepack"], ["case_size", "casesize"], ["case size"]];
 const PRODUCT_NAME_PRIORITY: string[][] = [
   ["product_name", "productname"],
   ["item_name", "itemname"],
@@ -49,7 +49,10 @@ const PRODUCT_NAME_PRIORITY: string[][] = [
   ["name"],
 ];
 const ASIN_VALUE_REGEX = /^[A-Z0-9]{10}$/i;
-const UPC_EAN_VALUE_REGEX = /^\d{8,14}$/;
+/** 6–14 digits: 8–14 is standard UPC/EAN; 6–7 allows Productid or leading zero lost in Excel */
+const UPC_EAN_VALUE_REGEX = /^\d{6,14}$/;
+const AMAZON_DP_ASIN_REGEX = /\/dp\/([A-Z0-9]{10})(?:\/|$)/i;
+const AMAZON_GP_PRODUCT_REGEX = /\/gp\/product\/([A-Z0-9]{10})(?:\/|$)/i;
 
 type ColumnStats = {
   nonEmpty: number;
@@ -83,7 +86,7 @@ function parseNumber(value: unknown): number | null {
   }
 
   if (typeof value === "string") {
-    const sanitized = value.trim().replace(/[$,%\s,]/g, "");
+    const sanitized = value.trim().replace(/[$£€%\s,]/g, "");
     if (!sanitized) {
       return null;
     }
@@ -171,7 +174,8 @@ function normalizeIdentifier(value: unknown): string {
     return String(value);
   }
 
-  const normalized = String(value ?? "").trim().replace(/\u200b/g, "");
+  let normalized = String(value ?? "").trim().replace(/\u200b/g, "");
+  if (normalized.startsWith("'")) normalized = normalized.slice(1).trim();
   if (!normalized) {
     return "";
   }
@@ -296,6 +300,34 @@ function getFirstIdentifierValue(row: Record<string, unknown>, identifierKeys: s
   return "";
 }
 
+/** Extract ASIN from a cell that may contain an Amazon product URL (e.g. amazon.com/dp/B0795CFH7P). */
+function extractAsinFromUrl(value: unknown): string | null {
+  const s = String(value ?? "").trim();
+  const dpMatch = s.match(AMAZON_DP_ASIN_REGEX);
+  if (dpMatch) return dpMatch[1] ?? null;
+  const gpMatch = s.match(AMAZON_GP_PRODUCT_REGEX);
+  if (gpMatch) return gpMatch[1] ?? null;
+  return null;
+}
+
+/** When primary identifier column is empty, scan all columns for a value that looks like ASIN or UPC/EAN, or an Amazon URL. */
+function getIdentifierFromAnyColumn(
+  row: Record<string, unknown>,
+  headers: string[],
+  excludeKeys: Set<string>,
+): string {
+  for (const header of headers) {
+    if (excludeKeys.has(header)) continue;
+    const raw = row[header];
+    const asinFromUrl = extractAsinFromUrl(raw);
+    if (asinFromUrl) return asinFromUrl;
+    const value = normalizeIdentifier(raw);
+    if (!value) continue;
+    if (looksLikeResolvableIdentifier(value)) return value;
+  }
+  return "";
+}
+
 function isCaseCostKey(header: string): boolean {
   const normalized = normalizeHeader(header);
   return normalized.includes("case_cost") || normalized.includes("casecost");
@@ -323,6 +355,23 @@ function resolveUnitCost(
     return parsedCost;
   }
 
+  return null;
+}
+
+/** When primary cost columns are empty for this row, try any column whose header looks like price/wholesale/cost. */
+function resolveUnitCostFallback(
+  row: Record<string, unknown>,
+  headers: string[],
+  excludeKeys: Set<string>,
+): number | null {
+  for (const header of headers) {
+    if (excludeKeys.has(header)) continue;
+    const norm = normalizeHeader(header);
+    if (!/wholesale|unit_cost|price|buy_price|cost/.test(norm)) continue;
+    if (/case_size|casesize|case_pack|casepack/.test(norm)) continue;
+    const v = parseNumber(row[header]);
+    if (v !== null && v > 0 && v < 100000) return v;
+  }
   return null;
 }
 
@@ -459,7 +508,12 @@ function inferColumnsFromValues(headers: string[], rawRows: Array<Record<string,
   }
 
   const costCandidate = headers
-    .filter((header) => header !== identifierKey && header !== headerProductNameKey)
+    .filter((header) => {
+      if (header === identifierKey || header === headerProductNameKey) return false;
+      const norm = normalizeHeader(header);
+      if (/case_size|casesize|case_pack|casepack/.test(norm)) return false;
+      return true;
+    })
     .map((header) => {
       const s = stats.get(header)!;
       const numericRate = rate(s.numeric, s.nonEmpty);
@@ -515,11 +569,20 @@ function inferColumnsFromValues(headers: string[], rawRows: Array<Record<string,
   };
 }
 
+function isCasePackHeader(header: string): boolean {
+  const norm = normalizeHeader(header);
+  return /case_size|casesize|case_pack|casepack/.test(norm);
+}
+
 export function detectColumns(headers: string[]): DetectedColumns {
   const normalizedHeaders = toHeaderMeta(headers);
   const identifierKey = findKeysByPriority(normalizedHeaders, IDENTIFIER_PRIORITY)[0];
 
-  const costKey = findKeysByPriority(normalizedHeaders, COST_PRIORITY)[0];
+  const costCandidates = findKeysByPriority(
+    normalizedHeaders.filter((h) => !isCasePackHeader(h.original)),
+    COST_PRIORITY,
+  );
+  const costKey = costCandidates[0];
 
   if (!costKey) {
     throw new Error("No cost column found. Expected cost, wholesale, unit_cost, buy_price, case_cost, or price_per_unit.");
@@ -571,20 +634,44 @@ function parseSheetData(sheet: XLSX.WorkSheet): SheetParseResult {
     ? ensurePrimaryFirst(detected.identifierKey, findKeysByPriority(headerMeta, IDENTIFIER_PRIORITY))
     : [];
   const costKeys = ensurePrimaryFirst(detected.costKey, findKeysByPriority(headerMeta, COST_PRIORITY));
+  const excludeFromScan = new Set([
+    ...costKeys,
+    ...(detected.productNameKey ? [detected.productNameKey] : []),
+    ...(detected.brandKey ? [detected.brandKey] : []),
+    ...(detected.casePackKey ? [detected.casePackKey] : []),
+  ]);
+  const linkColumnHeaders = headers.filter((h) =>
+    /amazon|link|url|reference|dp\s*\/|product\s*link/i.test(h),
+  );
 
   const rows: ParsedUploadRow[] = [];
   for (const rawRow of rawRows) {
-    const identifier = identifierKeys.length > 0 ? getFirstIdentifierValue(rawRow, identifierKeys) : "";
+    let rawIdentifier = "";
+    for (const linkHeader of linkColumnHeaders) {
+      const asin = extractAsinFromUrl(rawRow[linkHeader]);
+      if (asin) {
+        rawIdentifier = asin;
+        break;
+      }
+    }
+    if (!rawIdentifier && identifierKeys.length > 0) {
+      rawIdentifier = getFirstIdentifierValue(rawRow, identifierKeys);
+    }
+    if (!rawIdentifier.trim()) {
+      rawIdentifier = getIdentifierFromAnyColumn(rawRow, headers, excludeFromScan);
+    }
+    const identifier = rawIdentifier.trim();
     const productName = detected.productNameKey ? String(rawRow[detected.productNameKey] ?? "").trim() : "";
 
-    if (!identifier || !looksLikeResolvableIdentifier(identifier)) {
+    if (!identifier) {
       continue;
     }
 
-    const wholesalePrice = resolveUnitCost(rawRow, costKeys, detected.casePackKey);
-    if (wholesalePrice === null) {
-      continue;
+    let resolvedCost = resolveUnitCost(rawRow, costKeys, detected.casePackKey);
+    if (resolvedCost === null) {
+      resolvedCost = resolveUnitCostFallback(rawRow, headers, excludeFromScan);
     }
+    const wholesalePrice = resolvedCost === null ? 0 : resolvedCost;
 
     rows.push({
       identifier,

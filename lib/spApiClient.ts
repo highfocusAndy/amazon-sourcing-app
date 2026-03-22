@@ -25,12 +25,54 @@ interface SpApiConfig {
   awsSessionToken?: string;
   awsRoleArn?: string;
   awsRoleSessionName: string;
-  amazonSellerIds: Set<string>;
+}
+
+/** Build SP-API config from env (used for per-user accounts: app credentials from env, rest from DB). */
+export function buildSpApiConfigFromEnvAndAccount(account: {
+  refreshToken: string;
+  sellerId: string;
+  marketplaceId: string;
+  awsAccessKeyId: string;
+  awsSecretAccessKey: string;
+  awsRegion: string;
+  spApiHost: string | null;
+  awsRoleArn?: string | null;
+  awsRoleSessionName?: string | null;
+}): SpApiConfig | null {
+  const clientId = process.env.SP_API_CLIENT_ID?.trim();
+  const clientSecret = process.env.SP_API_CLIENT_SECRET?.trim();
+  if (!clientId || !clientSecret) {
+    return null;
+  }
+  const awsRegion = account.awsRegion?.trim() || "us-east-1";
+  const spApiHost = account.spApiHost?.trim() || defaultSpApiHost(awsRegion);
+  return {
+    clientId,
+    clientSecret,
+    refreshToken: account.refreshToken,
+    awsAccessKeyId: account.awsAccessKeyId,
+    awsSecretAccessKey: account.awsSecretAccessKey,
+    awsRegion,
+    sellerId: account.sellerId,
+    marketplaceId: account.marketplaceId,
+    spApiHost,
+    awsSessionToken: process.env.AWS_SESSION_TOKEN?.trim(),
+    awsRoleArn: account.awsRoleArn ?? undefined,
+    awsRoleSessionName: account.awsRoleSessionName ?? "next-sp-api-session",
+  };
 }
 
 interface LwaTokenCache {
   token: string;
   expiresAt: number;
+}
+
+/** Per-offer seller info from Get Item Offers (SellerId, channel, feedback when API returns it). */
+export interface SellerOfferDetail {
+  sellerId: string;
+  channel: "FBA" | "FBM";
+  feedbackCount: number | null;
+  feedbackPercent: number | null;
 }
 
 export interface CatalogItem {
@@ -43,7 +85,32 @@ export interface CatalogItem {
 
 export interface CompetitivePricing {
   buyBoxPrice: number | null;
-  amazonIsSeller: boolean | null;
+  /** Item price (without shipping) when available; used for fee API. */
+  listingPrice: number | null;
+  /** Shipping amount when available; used for fee API. */
+  shippingAmount: number | null;
+  /** Total number of offers (sellers) on the listing; null when not available (e.g. fallback API). */
+  offerCount: number | null;
+  /** Number of FBA offers; null when not available. */
+  fbaOfferCount: number | null;
+  /** Number of FBM (merchant-fulfilled) offers; null when not available. */
+  fbmOfferCount: number | null;
+  /** Seller IDs from Get Item Offers when returned by the API; empty if not available. */
+  sellerIds: string[];
+  /** Per-offer seller details (ID, channel, feedback) when from Get Item Offers; empty when fallback. */
+  sellerDetails: SellerOfferDetail[];
+}
+
+/** Single offer (listing) from Get Item Offers for "all listings" view. */
+export interface ItemOfferRow {
+  listingPrice: number;
+  shippingAmount: number;
+  landedPrice: number;
+  channel: "FBA" | "FBM";
+  condition: string;
+  sellerId: string | null;
+  feedbackCount: number | null;
+  feedbackPercent: number | null;
 }
 
 export interface FeeEstimate {
@@ -56,19 +123,21 @@ export interface ListingRestrictionsAssessment {
   restricted: boolean;
   approvalRequired: boolean;
   ipComplaintRisk: boolean;
+  /** Meltable product (heat-sensitive); separate from general hazmat. */
+  meltableRisk: boolean;
+  /** Likely private label / brand-gated (approval + brand/IP signals). */
+  privateLabelRisk: boolean;
   reasonCodes: string[];
   reasonMessages: string[];
 }
 
-const AMAZON_RETAIL_SELLER_ID = "ATVPDKIKX0DER";
 const ASIN_REGEX = /^[A-Z0-9]{10}$/i;
 const UPC_EAN_REGEX = /^\d{8,14}$/;
 const RETRYABLE_HTTP_STATUS = new Set([429, 500, 502, 503, 504]);
 
-let lwaTokenCache: LwaTokenCache | null = null;
-let assumedRoleCache: AwsCredentials | null = null;
-let spApiClientSingleton: SpApiClient | null = null;
 const listingRestrictionsCache = new Map<string, ListingRestrictionsAssessment>();
+
+let spApiClientSingleton: SpApiClient | null = null;
 
 function defaultSpApiHost(awsRegion: string): string {
   if (awsRegion.startsWith("eu-")) {
@@ -78,21 +147,6 @@ function defaultSpApiHost(awsRegion: string): string {
     return "sellingpartnerapi-fe.amazon.com";
   }
   return "sellingpartnerapi-na.amazon.com";
-}
-
-function parseAmazonSellerIds(raw: string | undefined, marketplaceId: string): Set<string> {
-  const values = new Set<string>([AMAZON_RETAIL_SELLER_ID, marketplaceId.toUpperCase()]);
-  if (!raw) {
-    return values;
-  }
-
-  for (const value of raw.split(",")) {
-    const normalized = value.trim().toUpperCase();
-    if (normalized) {
-      values.add(normalized);
-    }
-  }
-  return values;
 }
 
 function requiredEnv(name: string): string {
@@ -222,9 +276,11 @@ function buildNumericIdentifierCandidates(rawDigits: string): string[] {
   return [...candidates].filter((candidate) => UPC_EAN_REGEX.test(candidate));
 }
 
-function readSpApiConfig(): SpApiConfig {
+function readSpApiConfig(marketplaceIdOverride?: string): SpApiConfig {
   const awsRegion = process.env.AWS_REGION?.trim() || "us-east-1";
-  const marketplaceId = requiredEnvFromList(["MARKETPLACE_ID", "SP_API_MARKETPLACE_ID"]);
+  const marketplaceId =
+    marketplaceIdOverride?.trim() ||
+    requiredEnvFromList(["MARKETPLACE_ID", "SP_API_MARKETPLACE_ID"]);
   const sellerId = requiredEnv("SELLER_ID");
 
   return {
@@ -240,17 +296,32 @@ function readSpApiConfig(): SpApiConfig {
     awsSessionToken: process.env.AWS_SESSION_TOKEN?.trim(),
     awsRoleArn: process.env.AWS_ROLE_ARN?.trim(),
     awsRoleSessionName: process.env.AWS_ROLE_SESSION_NAME?.trim() || "next-sp-api-session",
-    amazonSellerIds: parseAmazonSellerIds(process.env.AMAZON_SELLER_IDS, marketplaceId),
   };
 }
 
+/** Same as readSpApiConfig but returns null if any required env var is missing. */
+export function tryReadSpApiConfig(marketplaceIdOverride?: string | null): SpApiConfig | null {
+  try {
+    return readSpApiConfig(marketplaceIdOverride ?? undefined);
+  } catch {
+    return null;
+  }
+}
+
 export class SpApiClient {
+  private lwaTokenCache: LwaTokenCache | null = null;
+  private assumedRoleCache: AwsCredentials | null = null;
+
   constructor(private readonly config: SpApiConfig = readSpApiConfig()) {}
+
+  get marketplaceId(): string {
+    return this.config.marketplaceId;
+  }
 
   private async getLwaAccessToken(): Promise<string> {
     const now = Date.now();
-    if (lwaTokenCache && lwaTokenCache.expiresAt - 60_000 > now) {
-      return lwaTokenCache.token;
+    if (this.lwaTokenCache && this.lwaTokenCache.expiresAt - 60_000 > now) {
+      return this.lwaTokenCache.token;
     }
 
     const payload = new URLSearchParams({
@@ -289,7 +360,7 @@ export class SpApiClient {
     }
 
     const expiresIn = readNumber(json.expires_in) ?? 3600;
-    lwaTokenCache = {
+    this.lwaTokenCache = {
       token,
       expiresAt: now + expiresIn * 1000,
     };
@@ -306,8 +377,8 @@ export class SpApiClient {
     }
 
     const now = Date.now();
-    if (assumedRoleCache?.expiresAt && assumedRoleCache.expiresAt - 60_000 > now) {
-      return assumedRoleCache;
+    if (this.assumedRoleCache?.expiresAt && this.assumedRoleCache.expiresAt - 60_000 > now) {
+      return this.assumedRoleCache;
     }
 
     const stsClient = new STSClient({
@@ -332,14 +403,14 @@ export class SpApiClient {
       throw new Error("Failed to assume AWS role for SP-API credentials");
     }
 
-    assumedRoleCache = {
+    this.assumedRoleCache = {
       accessKeyId: credentials.AccessKeyId,
       secretAccessKey: credentials.SecretAccessKey,
       sessionToken: credentials.SessionToken,
       expiresAt: credentials.Expiration ? credentials.Expiration.getTime() : now + 3600 * 1000,
     };
 
-    return assumedRoleCache;
+    return this.assumedRoleCache;
   }
 
   private async request<T>(
@@ -400,9 +471,12 @@ export class SpApiClient {
         return json as T;
       }
 
-      const responseError = new Error(
-        `SP-API request failed (${response.status}) on ${method} ${path}${raw ? `: ${raw.slice(0, 500)}` : ""}`,
-      );
+      const isQuotaError = response.status === 429 || /QuotaExceeded|rate limit|throttl/i.test(raw);
+      const userMessage = isQuotaError
+        ? "Amazon API rate limit reached. Please wait a few minutes and try again. Amazon limits how many requests we can make per hour."
+        : `SP-API request failed (${response.status}) on ${method} ${path}${raw ? `: ${raw.slice(0, 500)}` : ""}`;
+
+      const responseError = new Error(userMessage);
       lastError = responseError;
 
       if (attempt < maxAttempts && RETRYABLE_HTTP_STATUS.has(response.status)) {
@@ -415,6 +489,30 @@ export class SpApiClient {
     }
 
     throw lastError ?? new Error(`SP-API request failed on ${method} ${path}`);
+  }
+
+  /**
+   * Store / seller display name from Sellers API marketplace participations.
+   */
+  async fetchSellerStoreDisplayName(preferredMarketplaceId?: string | null): Promise<string | null> {
+    type ParticipationRow = {
+      storeName?: string;
+      marketplace?: { id?: string };
+    };
+    type MpResponse = { payload?: ParticipationRow[] };
+    const data = await this.request<MpResponse>("GET", "/sellers/v1/marketplaceParticipations");
+    const list = Array.isArray(data.payload) ? data.payload : [];
+    const pref = preferredMarketplaceId?.trim();
+    if (pref) {
+      const row = list.find((p) => p.marketplace?.id === pref);
+      const n = row?.storeName?.trim();
+      if (n) return n;
+    }
+    for (const p of list) {
+      const n = p.storeName?.trim();
+      if (n) return n;
+    }
+    return null;
   }
 
   private extractCatalogItem(item: unknown): CatalogItem | null {
@@ -438,10 +536,17 @@ export class SpApiClient {
       readString(summary?.itemNameByMarketplace) ??
       readString(summary?.itemNameByLanguage) ??
       "";
-    const brand = readString(summary?.brandName) ?? "";
+    let brand = readString(getField(summary ?? null, ["brandName", "brand", "BrandName", "Brand", "manufacturer", "Manufacturer"])) ?? "";
+    if (!brand && summaries.length > 1) {
+      for (let i = 1; i < summaries.length; i++) {
+        const s = asObject(summaries[i]);
+        brand = readString(getField(s ?? null, ["brandName", "brand", "BrandName", "Brand", "manufacturer", "Manufacturer"])) ?? "";
+        if (brand) break;
+      }
+    }
 
     const salesRanks = asArray(itemObj.salesRanks);
-    let rank: number | null = null;
+    const allRanks: number[] = [];
     for (const rankGroupRaw of salesRanks) {
       const rankGroup = asObject(rankGroupRaw);
       if (!rankGroup) {
@@ -452,16 +557,14 @@ export class SpApiClient {
       for (const rankRaw of groupedRanks) {
         const rankObj = asObject(rankRaw);
         const parsedRank = readNumber(rankObj?.rank);
-        if (parsedRank !== null) {
-          rank = parsedRank;
-          break;
+        if (parsedRank !== null && parsedRank >= 1) {
+          allRanks.push(parsedRank);
         }
       }
-
-      if (rank !== null) {
-        break;
-      }
     }
+    // Use the highest (worst) rank to match Seller Central's main Sales Rank. SP-API returns multiple
+    // ranks (e.g. #241 in a small subcategory, #22,860 in main category); Seller Central shows the main one.
+    const rank: number | null = allRanks.length > 0 ? Math.max(...allRanks) : null;
 
     let imageUrl: string | null = null;
     const imagesByMkt = asArray(itemObj.images);
@@ -484,15 +587,27 @@ export class SpApiClient {
 
   private extractPricing(data: unknown): CompetitivePricing {
     const root = asObject(data);
-    const payload = asObject(getField(root, ["payload", "Payload"]));
+    // Get Item Offers returns { payload: { Summary, Offers, ASIN } }; allow Summary/Offers at root too.
+    let payload = asObject(getField(root, ["payload", "Payload"]));
+    if (!payload || (!getField(payload, ["Summary", "summary"]) && !getField(payload, ["Offers", "offers"]))) {
+      payload = root;
+    }
     const summary = asObject(getField(payload, ["Summary", "summary"]));
     const offers = asArray(getField(payload, ["Offers", "offers"]));
 
     const buyBoxPrices = asArray(getField(summary, ["BuyBoxPrices", "buyBoxPrices"]));
     const buyBox = asObject(buyBoxPrices[0]);
     const buyBoxLandedPrice = asObject(getField(buyBox, ["LandedPrice", "landedPrice"]));
+    const buyBoxListingPrice = asObject(getField(buyBox, ["ListingPrice", "listingPrice"]));
+    const buyBoxShipping = asObject(getField(buyBox, ["Shipping", "shipping"]));
 
     let buyBoxPrice = readNumber(buyBoxLandedPrice?.Amount);
+    let listingPrice: number | null = readNumber(buyBoxListingPrice?.Amount);
+    let shippingAmount: number | null = readNumber(buyBoxShipping?.Amount) ?? 0;
+    if (buyBoxPrice !== null && (listingPrice === null || listingPrice === undefined)) {
+      listingPrice = buyBoxPrice;
+      shippingAmount = 0;
+    }
     if (buyBoxPrice === null) {
       const lowestPrices = asArray(getField(summary, ["LowestPrices", "lowestPrices"]));
       const lowest = asObject(lowestPrices[0]);
@@ -500,32 +615,128 @@ export class SpApiClient {
       buyBoxPrice = readNumber(landed?.Amount);
     }
 
-    if (buyBoxPrice === null) {
-      for (const offerRaw of offers) {
-        const offer = asObject(offerRaw);
-        const listingPrice = asObject(getField(offer, ["ListingPrice", "listingPrice"]));
-        const shippingPrice = asObject(getField(offer, ["Shipping", "shipping"]));
-        const listing = readNumber(listingPrice?.Amount);
-        const shipping = readNumber(shippingPrice?.Amount) ?? 0;
-        if (listing === null) {
-          continue;
-        }
-        const landed = listing + shipping;
-        if (buyBoxPrice === null || landed < buyBoxPrice) {
-          buyBoxPrice = landed;
-        }
+    // Prefer offer marked as Buy Box winner over lowest price, so displayed price matches Amazon.
+    let buyBoxWinnerLanded: number | null = null;
+    let buyBoxWinnerListing: number | null = null;
+    let buyBoxWinnerShipping: number | null = null;
+    let lowestLanded: number | null = null;
+    let lowestListing: number | null = null;
+    let lowestShipping: number | null = null;
+
+    for (const offerRaw of offers) {
+      const offer = asObject(offerRaw);
+      const listingPriceObj = asObject(getField(offer, ["ListingPrice", "listingPrice"]));
+      const shippingPriceObj = asObject(getField(offer, ["Shipping", "shipping"]));
+      const listing = readNumber(listingPriceObj?.Amount);
+      const shipping = readNumber(shippingPriceObj?.Amount) ?? 0;
+      if (listing === null) continue;
+      const landed = listing + shipping;
+      const rawWinner = getField(offer, ["IsBuyBoxWinner", "isBuyBoxWinner"]);
+      const isWinner = rawWinner === true || (typeof rawWinner === "string" && rawWinner.trim().toLowerCase() === "true");
+      if (isWinner && (buyBoxWinnerLanded === null || landed < buyBoxWinnerLanded)) {
+        buyBoxWinnerLanded = landed;
+        buyBoxWinnerListing = listing;
+        buyBoxWinnerShipping = shipping;
+      }
+      if (lowestLanded === null || landed < lowestLanded) {
+        lowestLanded = landed;
+        lowestListing = listing;
+        lowestShipping = shipping;
       }
     }
 
-    const amazonIsSeller = offers.some((offerRaw) => {
+    // Use the lowest of Summary buy box, Summary lowest, and IsBuyBoxWinner offer so we don't show an inflated price (e.g. $41 when Amazon shows $12.49).
+    const summaryLowest = (() => {
+      const lowestPrices = asArray(getField(summary, ["LowestPrices", "lowestPrices"]));
+      const lowest = asObject(lowestPrices[0]);
+      const landed = asObject(getField(lowest, ["LandedPrice", "landedPrice"]));
+      return readNumber(landed?.Amount);
+    })();
+    const candidates: Array<{ landed: number; listing: number | null; shipping: number }> = [];
+    if (buyBoxPrice !== null) candidates.push({ landed: buyBoxPrice, listing: listingPrice, shipping: shippingAmount ?? 0 });
+    if (summaryLowest !== null) candidates.push({ landed: summaryLowest, listing: summaryLowest, shipping: 0 });
+    if (buyBoxWinnerLanded !== null) candidates.push({ landed: buyBoxWinnerLanded, listing: buyBoxWinnerListing, shipping: buyBoxWinnerShipping ?? 0 });
+    if (lowestLanded !== null) candidates.push({ landed: lowestLanded, listing: lowestListing, shipping: lowestShipping ?? 0 });
+    if (candidates.length > 0) {
+      const best = candidates.reduce((a, b) => (a.landed <= b.landed ? a : b));
+      buyBoxPrice = best.landed;
+      listingPrice = best.listing;
+      shippingAmount = best.shipping;
+    } else if (buyBoxPrice === null && lowestLanded !== null) {
+      buyBoxPrice = lowestLanded;
+      listingPrice = lowestListing;
+      shippingAmount = lowestShipping ?? 0;
+    }
+
+    const sellerDetails: SellerOfferDetail[] = [];
+    const sellerIds: string[] = [];
+    const seenIds = new Set<string>();
+    let fbaOfferCount = 0;
+    let fbmOfferCount = 0;
+
+    for (const offerRaw of offers) {
       const offer = asObject(offerRaw);
-      const sellerId = readString(getField(offer, ["SellerId", "sellerId"]))?.toUpperCase();
-      return Boolean(sellerId && this.config.amazonSellerIds.has(sellerId));
-    });
+      const fulfilledByAmazon = getField(offer, ["IsFulfilledByAmazon", "isFulfilledByAmazon"]);
+      const channelRaw = getField(offer, ["FulfillmentChannel", "fulfillmentChannel", "FulfillmentChannelCode", "fulfillmentChannelCode"]);
+      const channel = (typeof channelRaw === "string" ? channelRaw : "").trim().toUpperCase();
+      const explicitlyMerchant = /^MERCHANT$|^DEFAULT$|^MFN$/.test(channel);
+      const explicitlyAmazon = /^AMAZON$|^AFN$|^FBA$/.test(channel);
+      const isFba =
+        explicitlyMerchant ? false : (explicitlyAmazon || fulfilledByAmazon === true || (typeof fulfilledByAmazon === "string" && fulfilledByAmazon.trim().toLowerCase() === "true"));
+      if (isFba) {
+        fbaOfferCount += 1;
+      } else {
+        fbmOfferCount += 1;
+      }
+      const sellerId = readString(
+        getField(offer, ["SellerId", "sellerId", "SellerID", "seller_id"]),
+      )?.trim();
+      if (!sellerId) continue;
+      const feedback = asObject(getField(offer, ["SellerFeedbackRating", "sellerFeedbackRating"]));
+      const feedbackCount = readNumber(getField(feedback ?? null, ["FeedbackCount", "feedbackCount"]));
+      const feedbackPercent = readNumber(
+        getField(feedback ?? null, ["SellerPositiveFeedbackRating", "sellerPositiveFeedbackRating"]),
+      );
+      if (!seenIds.has(sellerId.toUpperCase())) {
+        seenIds.add(sellerId.toUpperCase());
+        sellerIds.push(sellerId);
+      }
+      sellerDetails.push({
+        sellerId,
+        channel: isFba ? "FBA" : "FBM",
+        feedbackCount: feedbackCount ?? null,
+        feedbackPercent: feedbackPercent ?? null,
+      });
+    }
+    if (fbaOfferCount === 0 && fbmOfferCount === 0 && offers.length > 0) {
+      fbmOfferCount = offers.length;
+    }
+    if (offers.length > 0 && fbaOfferCount + fbmOfferCount !== offers.length) {
+      const numberOfOffers = asArray(getField(summary, ["NumberOfOffers", "numberOfOffers"]));
+      let summaryFba = 0;
+      let summaryFbm = 0;
+      for (const noRaw of numberOfOffers) {
+        const no = asObject(noRaw);
+        const fc = (readString(getField(no, ["FulfillmentChannel", "fulfillmentChannel"])) ?? "").toUpperCase();
+        const count = readNumber(getField(no, ["OfferCount", "offerCount"])) ?? 0;
+        if (/^AMAZON$|^AFN$|^FBA$/.test(fc)) summaryFba += count;
+        else if (/^MERCHANT$|^DEFAULT$|^MFN$/.test(fc) || fc === "") summaryFbm += count;
+      }
+      if (summaryFba + summaryFbm > 0) {
+        fbaOfferCount = summaryFba;
+        fbmOfferCount = summaryFbm;
+      }
+    }
 
     return {
       buyBoxPrice: buyBoxPrice === null ? null : toCurrency(buyBoxPrice),
-      amazonIsSeller,
+      listingPrice: listingPrice !== null ? toCurrency(listingPrice) : null,
+      shippingAmount: shippingAmount !== null ? toCurrency(shippingAmount) : null,
+      offerCount: offers.length,
+      fbaOfferCount,
+      fbmOfferCount,
+      sellerIds,
+      sellerDetails,
     };
   }
 
@@ -533,7 +744,7 @@ export class SpApiClient {
     const root = asObject(data);
     const payload = asArray(getField(root, ["payload", "Payload"]));
     if (payload.length === 0) {
-      return { buyBoxPrice: null, amazonIsSeller: null };
+      return { buyBoxPrice: null, listingPrice: null, shippingAmount: null, offerCount: null, fbaOfferCount: null, fbmOfferCount: null, sellerIds: [], sellerDetails: [] };
     }
 
     let bestPrice: number | null = null;
@@ -572,7 +783,13 @@ export class SpApiClient {
 
     return {
       buyBoxPrice: bestPrice === null ? null : toCurrency(bestPrice),
-      amazonIsSeller: null,
+      listingPrice: null,
+      shippingAmount: null,
+      offerCount: null,
+      fbaOfferCount: null,
+      fbmOfferCount: null,
+      sellerIds: [],
+      sellerDetails: [],
     };
   }
 
@@ -668,13 +885,19 @@ export class SpApiClient {
 
     const allSignals = unique([...reasonCodes, ...reasonMessages.map((msg) => msg.toUpperCase())]).join(" | ");
     const approvalRequired = /APPROVAL|RESTRICT|GATED|NOT_ELIGIBLE|REQUIRES|APPLICATION/.test(allSignals);
-    const ipComplaintRisk = /INTELLECTUAL|IP|TRADEMARK|PATENT|COPYRIGHT|COUNTERFEIT|BRAND_PROTECTION/.test(allSignals);
+    const ipComplaintRisk = /INTELLECTUAL|IP\b|TRADEMARK|PATENT|COPYRIGHT|COUNTERFEIT|BRAND_PROTECTION/.test(allSignals);
+    const meltableRisk = /MELTABLE|MELT\s|HEAT\s*SENSITIVE/.test(allSignals);
+    const privateLabelRisk = Boolean(
+      approvalRequired && (ipComplaintRisk || /BRAND\s*GAT|BRAND_GAT|REGISTRY|PRIVATE\s*LABEL/.test(allSignals)),
+    );
     const restricted = restrictions.length > 0;
 
     return {
       restricted,
       approvalRequired,
       ipComplaintRisk,
+      meltableRisk,
+      privateLabelRisk,
       reasonCodes: unique(reasonCodes),
       reasonMessages: unique(reasonMessages),
     };
@@ -748,6 +971,109 @@ export class SpApiClient {
     return parsedItems[0];
   }
 
+  /** Returns catalog items for keyword search, paginating until maxResults or no more pages. Amazon caps at 1000 per search. */
+  async searchCatalogByKeywordMultiple(
+    keyword: string,
+    maxResults: number = 1000,
+  ): Promise<CatalogItem[]> {
+    const query = keyword.trim();
+    if (!query) {
+      return [];
+    }
+
+    const pageSize = 20;
+    const allItems: CatalogItem[] = [];
+    let pageToken: string | null = null;
+
+    do {
+      const queryParams: Record<string, string> = {
+        marketplaceIds: this.config.marketplaceId,
+        keywords: query,
+        includedData: "summaries,salesRanks,identifiers,images",
+        pageSize: String(pageSize),
+      };
+      if (pageToken) {
+        queryParams.pageToken = pageToken;
+      }
+
+      const response = await this.request<unknown>("GET", "/catalog/2022-04-01/items", {
+        query: queryParams,
+      });
+
+      const root = asObject(response);
+      const items = asArray(root?.items);
+      const parsedItems = items
+        .map((item) => this.extractCatalogItem(item))
+        .filter((item): item is CatalogItem => Boolean(item));
+      allItems.push(...parsedItems);
+
+      if (allItems.length >= maxResults) {
+        break;
+      }
+
+      const pagination = asObject(getField(root, ["pagination", "Pagination"]));
+      const nextToken = readString(getField(pagination, ["nextToken", "NextToken"]));
+      pageToken = nextToken || null;
+    } while (pageToken);
+
+    return allItems.slice(0, maxResults);
+  }
+
+  /**
+   * Fetches one page of catalog search results (e.g. 500 at a time).
+   * Use nextPageToken from the response for the next "Load more" request.
+   */
+  async searchCatalogByKeywordPage(
+    keyword: string,
+    pageToken?: string | null,
+    pageSize: number = 500,
+  ): Promise<{ items: CatalogItem[]; nextPageToken: string | null }> {
+    const query = keyword.trim();
+    if (!query) {
+      return { items: [], nextPageToken: null };
+    }
+
+    const perRequest = 20;
+    const items: CatalogItem[] = [];
+    let token: string | null = pageToken ?? null;
+
+    while (items.length < pageSize) {
+      const queryParams: Record<string, string> = {
+        marketplaceIds: this.config.marketplaceId,
+        keywords: query,
+        includedData: "summaries,salesRanks,identifiers,images",
+        pageSize: String(perRequest),
+      };
+      if (token) {
+        queryParams.pageToken = token;
+      }
+
+      const response = await this.request<unknown>("GET", "/catalog/2022-04-01/items", {
+        query: queryParams,
+      });
+
+      const root = asObject(response);
+      const rawItems = asArray(root?.items);
+      const parsedItems = rawItems
+        .map((item) => this.extractCatalogItem(item))
+        .filter((item): item is CatalogItem => Boolean(item));
+      items.push(...parsedItems);
+
+      const pagination = asObject(getField(root, ["pagination", "Pagination"]));
+      const nextToken = readString(getField(pagination, ["nextToken", "NextToken"]));
+      token = nextToken || null;
+
+      if (!token || items.length >= pageSize) {
+        break;
+      }
+    }
+
+    return {
+      items: items.slice(0, pageSize),
+      nextPageToken: token,
+    };
+  }
+
   async resolveCatalogItem(identifier: string): Promise<CatalogItem | null> {
     const normalized = normalizeIdentifier(identifier);
     if (!normalized) {
@@ -788,7 +1114,16 @@ export class SpApiClient {
 
   async fetchCompetitivePricing(asin: string): Promise<CompetitivePricing> {
     let primaryError: Error | null = null;
-    let primaryPricing: CompetitivePricing = { buyBoxPrice: null, amazonIsSeller: null };
+    let primaryPricing: CompetitivePricing = {
+      buyBoxPrice: null,
+      listingPrice: null,
+      shippingAmount: null,
+      offerCount: null,
+      fbaOfferCount: null,
+      fbmOfferCount: null,
+      sellerIds: [],
+      sellerDetails: [],
+    };
 
     try {
       const response = await this.request<unknown>("GET", `/products/pricing/v0/items/${asin}/offers`, {
@@ -816,12 +1151,16 @@ export class SpApiClient {
       });
       const fallbackPricing = this.extractCompetitivePricingFallback(fallbackResponse);
       if (fallbackPricing.buyBoxPrice !== null) {
+        const hasOffersData = primaryError === null;
         return {
           buyBoxPrice: fallbackPricing.buyBoxPrice,
-          amazonIsSeller:
-            primaryPricing.amazonIsSeller === true
-              ? true
-              : fallbackPricing.amazonIsSeller,
+          listingPrice: fallbackPricing.listingPrice,
+          shippingAmount: fallbackPricing.shippingAmount,
+          offerCount: hasOffersData ? primaryPricing.offerCount : null,
+          fbaOfferCount: hasOffersData ? primaryPricing.fbaOfferCount : null,
+          fbmOfferCount: hasOffersData ? primaryPricing.fbmOfferCount : null,
+          sellerIds: hasOffersData ? (primaryPricing.sellerIds ?? []) : [],
+          sellerDetails: hasOffersData ? (primaryPricing.sellerDetails ?? []) : [],
         };
       }
     } catch (fallbackError) {
@@ -838,7 +1177,70 @@ export class SpApiClient {
     return primaryPricing;
   }
 
-  async fetchFeeEstimate(asin: string, buyBoxPrice: number, sellerType: SellerType): Promise<FeeEstimate> {
+  /**
+   * Fetch all offers (listings) for an ASIN for "all listings" view (like Seller Central).
+   * Returns one row per offer with price, channel, condition, and optional seller/feedback.
+   */
+  async fetchItemOffersList(asin: string): Promise<ItemOfferRow[]> {
+    const response = await this.request<unknown>("GET", `/products/pricing/v0/items/${asin}/offers`, {
+      query: {
+        MarketplaceId: this.config.marketplaceId,
+        ItemCondition: "New",
+        CustomerType: "Consumer",
+      },
+    });
+    return this.extractOffersList(response);
+  }
+
+  private extractOffersList(data: unknown): ItemOfferRow[] {
+    const root = asObject(data);
+    let payload = asObject(getField(root, ["payload", "Payload"]));
+    if (!payload) payload = root;
+    const offers = asArray(getField(payload, ["Offers", "offers"]));
+    const out: ItemOfferRow[] = [];
+    for (const offerRaw of offers) {
+      const offer = asObject(offerRaw);
+      const listingPriceObj = asObject(getField(offer, ["ListingPrice", "listingPrice"]));
+      const shippingObj = asObject(getField(offer, ["Shipping", "shipping"]));
+      const listing = readNumber(listingPriceObj?.Amount);
+      const shipping = readNumber(shippingObj?.Amount) ?? 0;
+      if (listing === null) continue;
+      const landed = toCurrency(listing + shipping);
+      const listingR = toCurrency(listing);
+      const fulfilledByAmazon = getField(offer, ["IsFulfilledByAmazon", "isFulfilledByAmazon"]);
+      const channelRaw = getField(offer, ["FulfillmentChannel", "fulfillmentChannel", "FulfillmentChannelCode", "fulfillmentChannelCode"]);
+      const channelStr = (typeof channelRaw === "string" ? channelRaw : "").trim().toUpperCase();
+      const explicitlyMerchant = /^MERCHANT$|^DEFAULT$|^MFN$/.test(channelStr);
+      const explicitlyAmazon = /^AMAZON$|^AFN$|^FBA$/.test(channelStr);
+      const isFba =
+        explicitlyMerchant ? false : (explicitlyAmazon || fulfilledByAmazon === true || (typeof fulfilledByAmazon === "string" && fulfilledByAmazon.trim().toLowerCase() === "true"));
+      const condition = readString(getField(offer, ["Condition", "condition", "ConditionSubcondition", "conditionSubcondition"])) ?? "New";
+      const sellerId = readString(getField(offer, ["SellerId", "sellerId", "SellerID", "seller_id"]))?.trim() ?? null;
+      const feedback = asObject(getField(offer, ["SellerFeedbackRating", "sellerFeedbackRating"]));
+      const feedbackCount = readNumber(getField(feedback ?? null, ["FeedbackCount", "feedbackCount"]));
+      const feedbackPercent = readNumber(
+        getField(feedback ?? null, ["SellerPositiveFeedbackRating", "sellerPositiveFeedbackRating"]),
+      );
+      out.push({
+        listingPrice: listingR,
+        shippingAmount: toCurrency(shipping),
+        landedPrice: landed,
+        channel: isFba ? "FBA" : "FBM",
+        condition,
+        sellerId,
+        feedbackCount: feedbackCount ?? null,
+        feedbackPercent: feedbackPercent ?? null,
+      });
+    }
+    return out;
+  }
+
+  async fetchFeeEstimate(
+    asin: string,
+    priceForFees: { listingPrice: number; shippingAmount: number },
+    sellerType: SellerType,
+  ): Promise<FeeEstimate> {
+    const { listingPrice, shippingAmount } = priceForFees;
     const response = await this.request<unknown>("POST", `/products/fees/v0/items/${asin}/feesEstimate`, {
       body: {
         FeesEstimateRequest: {
@@ -848,11 +1250,11 @@ export class SpApiClient {
           PriceToEstimateFees: {
             ListingPrice: {
               CurrencyCode: "USD",
-              Amount: buyBoxPrice,
+              Amount: listingPrice,
             },
             Shipping: {
               CurrencyCode: "USD",
-              Amount: 0,
+              Amount: shippingAmount,
             },
             Points: {
               PointsNumber: 0,
@@ -891,9 +1293,24 @@ export class SpApiClient {
   }
 }
 
-export function getSpApiClient(): SpApiClient {
+const spApiClientByMarketplace = new Map<string, SpApiClient>();
+
+/**
+ * Returns an SP-API client. When marketplaceIdOverride is provided (e.g. from user preferences),
+ * uses that marketplace; otherwise uses MARKETPLACE_ID from env.
+ */
+export function getSpApiClient(marketplaceIdOverride?: string | null): SpApiClient {
+  if (marketplaceIdOverride?.trim()) {
+    const key = marketplaceIdOverride.trim();
+    let client = spApiClientByMarketplace.get(key);
+    if (!client) {
+      client = new SpApiClient(readSpApiConfig(key));
+      spApiClientByMarketplace.set(key, client);
+    }
+    return client;
+  }
   if (!spApiClientSingleton) {
-    spApiClientSingleton = new SpApiClient();
+    spApiClientSingleton = new SpApiClient(readSpApiConfig());
   }
   return spApiClientSingleton;
 }

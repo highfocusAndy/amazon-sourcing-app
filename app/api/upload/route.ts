@@ -6,7 +6,7 @@ import type { ProductInput } from "@/lib/types";
 
 export const runtime = "nodejs";
 
-const MAX_BATCH_SIZE = 200;
+const MAX_BATCH_SIZE = 2000;
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
@@ -27,6 +27,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const buffer = Buffer.from(await file.arrayBuffer());
     const parsed = parseSourcingFile(buffer);
 
+    const validRowCount = parsed.rows.length;
     const batchInput: ProductInput[] = parsed.rows.slice(0, MAX_BATCH_SIZE).map((row) => ({
       identifier: row.identifier,
       productName: row.productName,
@@ -41,6 +42,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({
       results,
       parsedRows: parsed.rowCount,
+      validRows: validRowCount,
       analyzedRows: results.length,
       maxBatchSize: MAX_BATCH_SIZE,
     });

@@ -1,0 +1,64 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                   String   @id @default(cuid())
+  email                String   @unique
+  passwordHash         String
+  name                 String?
+  createdAt            DateTime @default(now())
+  amazonAccount        AmazonAccount?
+  explorerFilterSettings UserExplorerFilters?
+  preferences          UserPreferences?
+}
+
+model UserPreferences {
+  id                        String   @id @default(cuid())
+  userId                    String   @unique
+  user                      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  defaultSellerType         String   @default("FBA")   // "FBA" | "FBM"
+  defaultShippingCostFbm    Float    @default(0)
+  catalogPageSize           Int      @default(30)      // 10–100
+  marketplaceId             String?  // e.g. ATVPDKIKX0DER (US), A2EUQ1WTGCTBG2 (CA), A1AM78C64UM0Y8 (MX)
+  updatedAt                 DateTime @updatedAt
+}
+
+model AmazonAccount {
+  id                  String   @id @default(cuid())
+  userId              String   @unique
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Optional legacy display — prefer SP-API OAuth for seller access.
+  amazonEmail         String?
+  amazonPasswordHash  String?
+  /// AES-GCM encrypted LWA refresh token (SP-API website OAuth).
+  spRefreshTokenEnc   String?
+  /// Selling partner ID from OAuth (same as SELLER_ID for that account).
+  sellerId            String?
+  /// Display name from Sellers API (marketplace participations store name).
+  amazonStoreName     String?
+  /// Marketplace used when starting OAuth (e.g. user preference).
+  oauthMarketplaceId  String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+model UserExplorerFilters {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  showKeyword       Boolean  @default(true)
+  showSort          Boolean  @default(true)
+  showBsr           Boolean  @default(true)
+  showMinRoi        Boolean  @default(false)
+  showMinProfit     Boolean  @default(false)
+  showFbaFbm        Boolean  @default(false)
+  showRestriction   Boolean  @default(false)
+  showPriceRange    Boolean  @default(false)
+  updatedAt         DateTime @updatedAt
+}

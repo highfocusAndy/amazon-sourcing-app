@@ -1,0 +1,55 @@
+import { auth } from "@/auth";
+import { NextResponse } from "next/server";
+
+export default auth((req) => {
+  const path = req.nextUrl.pathname;
+  // Allow unauthenticated GET to catalog categories + search only (not restrictions)
+  const isCatalogGet =
+    (path === "/api/catalog/categories" ||
+      path.startsWith("/api/catalog/search")) &&
+    (typeof req.method === "undefined" || req.method === "GET");
+  const isDebugGet =
+    process.env.NODE_ENV === "development" &&
+    path.startsWith("/api/debug/") &&
+    (typeof req.method === "undefined" || req.method === "GET");
+  const isResetPassword =
+    process.env.NODE_ENV === "development" &&
+    path === "/api/reset-password" &&
+    (typeof req.method === "undefined" || req.method === "POST");
+  /** SP-API website OAuth: Amazon redirects the browser here before the app session may exist. */
+  const isAmazonOAuthPublicGet =
+    (path === "/api/amazon/oauth/login" || path === "/api/amazon/oauth/callback") &&
+    (typeof req.method === "undefined" || req.method === "GET");
+  /**
+   * OAuth start must be reachable without a session so the route can redirect to /login?callbackUrl=…
+   * (otherwise middleware returned 401 JSON and "Connect Amazon" looked broken).
+   */
+  const isAmazonOAuthStartGet =
+    path === "/api/amazon/oauth/start" &&
+    (typeof req.method === "undefined" || req.method === "GET");
+  if (
+    path.startsWith("/api/") &&
+    !path.startsWith("/api/auth") &&
+    !path.startsWith("/api/register") &&
+    !isCatalogGet &&
+    !isDebugGet &&
+    !isResetPassword &&
+    !isAmazonOAuthPublicGet &&
+    !isAmazonOAuthStartGet &&
+    !req.auth
+  ) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  return NextResponse.next();
+});
+
+export const config = {
+  matcher: [
+    /*
+     * Match all request paths except:
+     * - api/auth (auth API - handled by NextAuth route)
+     * - _next/static, _next/image, favicon, images
+     */
+    "/((?!api/auth|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+  ],
+};
