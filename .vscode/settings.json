@@ -1,0 +1,6 @@
+{
+    "git.enableSmartCommit": true,
+    "git.enableCommitSigning": true,
+    "git.branchRandomName.enable": true,
+    "git.blame.editorDecoration.enabled": true
+}
