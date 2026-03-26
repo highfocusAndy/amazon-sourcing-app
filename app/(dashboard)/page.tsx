@@ -116,6 +116,7 @@ export default function ExplorerPage() {
   const [catalogNextPageToken, setCatalogNextPageToken] = useState<string | null>(null);
   const [loadMoreLoading, setLoadMoreLoading] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<ProductAnalysis | null>(null);
+  const [mobileDetailsOpen, setMobileDetailsOpen] = useState(false);
   const [panelAnalysisLoading, setPanelAnalysisLoading] = useState(false);
   const [detailPanelCost, setDetailPanelCost] = useState("");
   const [sellerType, setSellerType] = useState<SellerType>("FBA");
@@ -523,6 +524,7 @@ export default function ExplorerPage() {
       const cached = getByAsin(item.asin);
       if (cached) {
         setSelectedProduct(cached);
+        setMobileDetailsOpen(true);
         setInfoMessage(null);
         setAnalyzeRequiresAuth(false);
         return;
@@ -560,6 +562,7 @@ export default function ExplorerPage() {
         const result = json.result as ProductAnalysis;
         addProduct(result);
         setSelectedProduct(result);
+        setMobileDetailsOpen(true);
         setDetailPanelCost("");
       } catch (e) {
         setError(e instanceof Error ? e.message : "Could not load product.");
@@ -924,19 +927,36 @@ export default function ExplorerPage() {
         )}
       </main>
 
-      {/* Right panel: Product details only */}
-      <aside className="fixed inset-0 z-50 overflow-y-auto bg-slate-800 border-l border-slate-700 shadow-xl lg:inset-auto lg:right-0 lg:top-0 lg:h-screen lg:w-80 xl:w-96">
+      {/* Right panel: Product details (mobile opens only when selected) */}
+      <aside
+        className={`fixed inset-0 z-50 overflow-y-auto bg-slate-800 border-l border-slate-700 shadow-xl lg:inset-auto lg:right-0 lg:top-0 lg:h-screen lg:w-80 xl:w-96 ${
+          mobileDetailsOpen ? "block" : "hidden"
+        } lg:block`}
+      >
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-700 bg-slate-800 px-4 py-3">
           <h3 className="text-base font-semibold text-slate-100">Product details</h3>
-          {selectedProduct ? (
+          <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => { setSelectedProduct(null); setDetailPanelCost(""); }}
-              className="rounded-lg border border-slate-600 bg-slate-700 px-3 py-1.5 text-sm font-semibold text-slate-200 hover:bg-slate-600"
+              onClick={() => setMobileDetailsOpen(false)}
+              className="rounded-lg border border-slate-600 bg-slate-700 px-3 py-1.5 text-sm font-semibold text-slate-200 hover:bg-slate-600 lg:hidden"
             >
-              Clear
+              Back
             </button>
-          ) : null}
+            {selectedProduct ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedProduct(null);
+                  setDetailPanelCost("");
+                  setMobileDetailsOpen(false);
+                }}
+                className="rounded-lg border border-slate-600 bg-slate-700 px-3 py-1.5 text-sm font-semibold text-slate-200 hover:bg-slate-600"
+              >
+                Clear
+              </button>
+            ) : null}
+          </div>
         </div>
         <div className="p-4 text-[13px] text-slate-200">
           {!selectedProduct ? (

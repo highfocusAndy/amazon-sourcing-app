@@ -440,6 +440,7 @@ function AnalyzerPageContent() {
   const [manualIdentifierResolved, setManualIdentifierResolved] = useState(false);
   const [marketplaceDomain, setMarketplaceDomain] = useState("amazon.com");
   const [selectedProduct, setSelectedProduct] = useState<ProductAnalysis | null>(null);
+  const [mobileDetailsOpen, setMobileDetailsOpen] = useState(false);
   const [popupQuantity, setPopupQuantity] = useState("");
   const [sellerModalFilter, setSellerModalFilter] = useState<null | "all" | "FBA" | "FBM">(null);
   const [panelAnalysisLoading, setPanelAnalysisLoading] = useState(false);
@@ -517,6 +518,7 @@ function AnalyzerPageContent() {
       const cached = getByAsin(asin);
       if (cached) {
         setSelectedProduct(cached);
+        setMobileDetailsOpen(true);
         setDetailPanelCost("");
         setInfoMessage("Loaded from saved products (no API call).");
       }
@@ -644,6 +646,7 @@ function AnalyzerPageContent() {
           setResults(analysisResults);
           addProduct(analysisResult);
           setSelectedProduct(analysisResult);
+          setMobileDetailsOpen(true);
           setDetailPanelCost("");
           setLastRunMode("manual");
           setInfoMessage(
@@ -658,6 +661,7 @@ function AnalyzerPageContent() {
 
         setManualIdentifierResolved(true);
         setSelectedProduct(analysisResult);
+        setMobileDetailsOpen(true);
         addProduct(analysisResult);
 
         if (isAutoRerun) {
@@ -2061,22 +2065,36 @@ function AnalyzerPageContent() {
       ) : null}
     </main>
 
-      <aside className="fixed inset-0 z-50 overflow-y-auto bg-slate-800 border-l border-slate-700 shadow-xl lg:inset-auto lg:right-0 lg:top-0 lg:h-screen lg:w-80 lg:rounded-l-xl xl:w-96">
+      <aside
+        className={`fixed inset-0 z-50 overflow-y-auto bg-slate-800 border-l border-slate-700 shadow-xl lg:inset-auto lg:right-0 lg:top-0 lg:h-screen lg:w-80 lg:rounded-l-xl xl:w-96 ${
+          mobileDetailsOpen ? "block" : "hidden"
+        } lg:block`}
+      >
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-700 bg-slate-800 px-4 py-3">
           <h3 className="text-base font-semibold text-slate-100">Product details</h3>
-          {selectedProduct ? (
+          <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => {
-                setSelectedProduct(null);
-                setPopupQuantity("");
-                setDetailPanelCost("");
-              }}
-              className="rounded-lg border border-slate-600 bg-slate-700 px-3 py-1.5 text-sm font-semibold text-slate-200 hover:bg-slate-600"
+              onClick={() => setMobileDetailsOpen(false)}
+              className="rounded-lg border border-slate-600 bg-slate-700 px-3 py-1.5 text-sm font-semibold text-slate-200 hover:bg-slate-600 lg:hidden"
             >
-              Clear
+              Back
             </button>
-          ) : null}
+            {selectedProduct ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedProduct(null);
+                  setPopupQuantity("");
+                  setDetailPanelCost("");
+                  setMobileDetailsOpen(false);
+                }}
+                className="rounded-lg border border-slate-600 bg-slate-700 px-3 py-1.5 text-sm font-semibold text-slate-200 hover:bg-slate-600"
+              >
+                Clear
+              </button>
+            ) : null}
+          </div>
         </div>
         <div className="p-4 text-[13px] text-slate-200">
           {getRightPanelBody()}
