@@ -26,7 +26,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const mpCookie = request.cookies.get(AMAZON_OAUTH_MARKETPLACE_COOKIE)?.value;
 
   const fail = (msg: string) =>
-    NextResponse.redirect(`${base}/settings?amazon_error=${encodeURIComponent(msg)}`);
+    NextResponse.redirect(`${base}/?amazon_error=${encodeURIComponent(msg)}`);
 
   if (!state || !cookieState || state !== cookieState) {
     return fail("Invalid or missing OAuth state. Try connecting again.");
@@ -82,7 +82,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   const secure = process.env.NODE_ENV === "production";
-  const res = NextResponse.redirect(`${base}/settings?amazon_connected=1`);
+  const res = NextResponse.redirect(`${base}/?amazon_connected=1`);
   res.cookies.set(AMAZON_OAUTH_STATE_COOKIE, "", {
     maxAge: 0,
     path: "/",

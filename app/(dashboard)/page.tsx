@@ -5,6 +5,7 @@ import { useExplorerCategory } from "@/app/context/ExplorerCategoryContext";
 import { getSubcategoriesForCategory } from "@/lib/catalogCategories";
 import { DashboardHeaderAccount } from "@/app/components/DashboardHeaderAccount";
 import { AmazonAccountModal } from "@/app/settings/AmazonAccountModal";
+import { AmazonOAuthAlerts } from "@/app/settings/AmazonOAuthAlerts";
 import type { CatalogItem } from "@/lib/spApiClient";
 import type { ProductAnalysis, SellerType } from "@/lib/types";
 import Link from "next/link";
@@ -621,6 +622,7 @@ export default function ExplorerPage() {
           onClose={() => setShowAmazonAccountModal(false)}
         />
       )}
+      <AmazonOAuthAlerts />
       <main className="flex-1 min-w-0 flex flex-col gap-6 p-6 mr-0 lg:mr-80 xl:mr-96">
         <header className="sticky top-0 z-20 rounded-xl border border-slate-600/80 bg-slate-800/95 px-4 py-4 shadow-lg shadow-black/10 border-t-4 border-t-teal-500 backdrop-blur">
           <div className="flex items-center justify-between gap-3">
