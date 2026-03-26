@@ -5,10 +5,27 @@ import { Suspense } from "react";
 import { AmazonOAuthAlerts } from "./AmazonOAuthAlerts";
 import { SettingsContent } from "./SettingsContent";
 
-export default async function SettingsPage() {
+type SearchParams = Record<string, string | string[] | undefined>;
+
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams?: SearchParams;
+}) {
   const session = await auth();
   if (!session?.user) {
     redirect("/login");
+  }
+
+  // If Amazon OAuth redirected here, immediately return to the dashboard.
+  // This avoids forcing the user to click "Back to dashboard".
+  const amazonConnected = searchParams?.amazon_connected;
+  const amazonError = searchParams?.amazon_error;
+  if (amazonConnected === "1") {
+    redirect("/?amazon_connected=1");
+  }
+  if (typeof amazonError === "string" && amazonError) {
+    redirect(`/?amazon_error=${amazonError}`);
   }
 
   return (
