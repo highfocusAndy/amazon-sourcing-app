@@ -14,7 +14,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const base = getAppBaseUrl(request);
   const failRedirect = (msg: string) =>
-    NextResponse.redirect(`${base}/settings?amazon_error=${encodeURIComponent(msg)}`);
+    NextResponse.redirect(`${base}/?amazon_error=${encodeURIComponent(msg)}`);
 
   if (!amazonCallbackUri || !amazonState) {
     return failRedirect("Missing Amazon OAuth parameters. Start from Connect Amazon again.");

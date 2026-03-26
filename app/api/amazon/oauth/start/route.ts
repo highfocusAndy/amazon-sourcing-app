@@ -25,7 +25,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const appId = process.env.SP_API_APPLICATION_ID?.trim();
   if (!appId) {
     return NextResponse.redirect(
-      `${base}/settings?amazon_error=${encodeURIComponent(
+      `${base}/?amazon_error=${encodeURIComponent(
         "Server missing SP_API_APPLICATION_ID. Add your Selling Partner application ID from Developer Central (.env).",
       )}`,
     );

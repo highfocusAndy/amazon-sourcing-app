@@ -10,7 +10,7 @@ import type { CatalogItem } from "@/lib/spApiClient";
 import type { ProductAnalysis, SellerType } from "@/lib/types";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type ProductSort = "bsr_asc" | "bsr_desc" | "name_asc" | "name_desc";
 
@@ -622,7 +622,9 @@ export default function ExplorerPage() {
           onClose={() => setShowAmazonAccountModal(false)}
         />
       )}
-      <AmazonOAuthAlerts />
+      <Suspense fallback={null}>
+        <AmazonOAuthAlerts />
+      </Suspense>
       <main className="flex-1 min-w-0 flex flex-col gap-6 p-6 mr-0 lg:mr-80 xl:mr-96">
         <header className="sticky top-0 z-20 rounded-xl border border-slate-600/80 bg-slate-800/95 px-4 py-4 shadow-lg shadow-black/10 border-t-4 border-t-teal-500 backdrop-blur">
           <div className="flex items-center justify-between gap-3">
