@@ -49,10 +49,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   confirm.searchParams.set("redirect_uri", redirectUri);
   confirm.searchParams.set("amazon_state", amazonState);
   confirm.searchParams.set("state", stateCookie);
-  const draft =
-    process.env.SP_API_OAUTH_DRAFT?.trim() === "1" ||
-    process.env.SP_API_OAUTH_DRAFT?.trim().toLowerCase() === "true";
-  if (draft) {
+  // Keep the same "beta for Draft apps" behavior as buildSellerCentralConsentUrl
+  const raw = process.env.SP_API_OAUTH_DRAFT?.trim();
+  const isDraft =
+    !raw || raw.toLowerCase() === "1" || raw.toLowerCase() === "true";
+  if (isDraft) {
     confirm.searchParams.set("version", "beta");
   }
 

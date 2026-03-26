@@ -19,6 +19,15 @@ const CONSENT_BASE_BY_MARKETPLACE: Record<string, string> = {
 export const AMAZON_OAUTH_STATE_COOKIE = "amazon_sp_oauth_state";
 export const AMAZON_OAUTH_MARKETPLACE_COOKIE = "amazon_sp_oauth_mp";
 
+function isOAuthDraftEnabled(): boolean {
+  const raw = process.env.SP_API_OAUTH_DRAFT?.trim();
+  // Default to Draft (beta consent) when the env var isn't provided.
+  // Your Amazon app is currently shown as Draft in Developer Central, so this prevents MD1000.
+  if (!raw) return true;
+  const v = raw.toLowerCase();
+  return v === "1" || v === "true";
+}
+
 export function getOAuthAuthSecret(): string | null {
   const s =
     process.env.AUTH_SECRET?.trim() ??
@@ -51,10 +60,7 @@ export function buildSellerCentralConsentUrl(params: {
   const url = new URL(`${base.replace(/\/$/, "")}/apps/authorize/consent`);
   url.searchParams.set("application_id", params.applicationId);
   url.searchParams.set("state", params.state);
-  const draft =
-    process.env.SP_API_OAUTH_DRAFT?.trim() === "1" ||
-    process.env.SP_API_OAUTH_DRAFT?.trim().toLowerCase() === "true";
-  if (draft) {
+  if (isOAuthDraftEnabled()) {
     url.searchParams.set("version", "beta");
   }
   return url.toString();
