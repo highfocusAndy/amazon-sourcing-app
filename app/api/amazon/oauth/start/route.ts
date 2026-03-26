@@ -52,18 +52,19 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   });
 
   const res = NextResponse.redirect(consentUrl);
-  const secure = process.env.NODE_ENV === "production";
+  const secure = true;
   res.cookies.set(AMAZON_OAUTH_STATE_COOKIE, state, {
     httpOnly: true,
     secure,
-    sameSite: "lax",
+    // OAuth is a cross-site redirect; ensure the state cookie is sent back on callback.
+    sameSite: "none",
     path: "/",
     maxAge: 60 * 15,
   });
   res.cookies.set(AMAZON_OAUTH_MARKETPLACE_COOKIE, marketplaceId, {
     httpOnly: true,
     secure,
-    sameSite: "lax",
+    sameSite: "none",
     path: "/",
     maxAge: 60 * 15,
   });

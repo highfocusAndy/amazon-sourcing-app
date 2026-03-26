@@ -81,21 +81,21 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     // Non-fatal: Explorer header can lazy-load store name via GET /api/settings/amazon-account
   }
 
-  const secure = process.env.NODE_ENV === "production";
+  const secure = true;
   const res = NextResponse.redirect(`${base}/?amazon_connected=1`);
   res.cookies.set(AMAZON_OAUTH_STATE_COOKIE, "", {
     maxAge: 0,
     path: "/",
     httpOnly: true,
     secure,
-    sameSite: "lax",
+    sameSite: "none",
   });
   res.cookies.set(AMAZON_OAUTH_MARKETPLACE_COOKIE, "", {
     maxAge: 0,
     path: "/",
     httpOnly: true,
     secure,
-    sameSite: "lax",
+    sameSite: "none",
   });
   res.headers.set("Referrer-Policy", "no-referrer");
   return res;
