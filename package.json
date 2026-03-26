@@ -27,6 +27,9 @@
     "url": "https://github.com/highfocusAndy/amazon-sourcing-app/issues"
   },
   "homepage": "https://github.com/highfocusAndy/amazon-sourcing-app#readme",
+  "engines": {
+    "node": ">=20.9.0"
+  },
   "dependencies": {
     "@aws-sdk/client-sts": "^3.995.0",
     "@prisma/client": "^5.22.0",
