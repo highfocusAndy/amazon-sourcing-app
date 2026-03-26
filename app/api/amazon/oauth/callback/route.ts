@@ -40,6 +40,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return fail("Session expired. Sign in and connect Amazon again.");
   }
 
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { id: true },
+  });
+  if (!user) {
+    return fail("User account not found. Sign out and sign in again, then reconnect Amazon.");
+  }
+
   const authSecret = getOAuthAuthSecret();
   if (!authSecret) {
     return fail("Server AUTH_SECRET is not configured.");
@@ -58,22 +66,31 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const enc = encryptAmazonRefreshToken(exchanged.refreshToken, authSecret);
   const oauthMp = resolveMarketplaceForOAuth(mpCookie);
 
-  await prisma.amazonAccount.upsert({
-    where: { userId: session.user.id },
-    create: {
-      userId: session.user.id,
-      amazonEmail: null,
-      amazonPasswordHash: null,
-      spRefreshTokenEnc: enc,
-      sellerId: sellingPartnerId.trim(),
-      oauthMarketplaceId: oauthMp,
-    },
-    update: {
-      spRefreshTokenEnc: enc,
-      sellerId: sellingPartnerId.trim(),
-      oauthMarketplaceId: oauthMp,
-    },
-  });
+  try {
+    await prisma.amazonAccount.upsert({
+      where: { userId: session.user.id },
+      create: {
+        userId: session.user.id,
+        amazonEmail: null,
+        amazonPasswordHash: null,
+        spRefreshTokenEnc: enc,
+        sellerId: sellingPartnerId.trim(),
+        oauthMarketplaceId: oauthMp,
+      },
+      update: {
+        spRefreshTokenEnc: enc,
+        sellerId: sellingPartnerId.trim(),
+        oauthMarketplaceId: oauthMp,
+      },
+    });
+  } catch (e) {
+    // Most common prod failure: JWT session refers to a userId that no longer exists in the DB (volume reset).
+    if (e && typeof e === "object" && "code" in e && (e as { code: string }).code === "P2003") {
+      return fail("Your session is out of sync with the database. Sign out and sign in again, then reconnect Amazon.");
+    }
+    console.error("Amazon OAuth callback upsert error:", e);
+    return fail("Could not save Amazon authorization. Please try again.");
+  }
 
   try {
     await refreshAmazonStoreNameForUser(session.user.id);
