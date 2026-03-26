@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useActionState } from "react";
+import type { FormEvent } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { loginAction, type LoginResult } from "./actions";
+import { signIn } from "next-auth/react";
 
 export function LoginForm() {
   const searchParams = useSearchParams();
@@ -15,9 +15,8 @@ export function LoginForm() {
     emailParam ? decodeURIComponent(emailParam) : ""
   );
   const [password, setPassword] = useState("");
-  const [state, formAction] = useActionState<LoginResult, FormData>(loginAction, {});
-  const error = state?.error ?? null;
-  const loading = false;
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (errorParam === "CredentialsSignin" || errorParam === "Credentials") {
@@ -29,8 +28,31 @@ export function LoginForm() {
     }
   }, [errorParam, emailParam, callbackUrl, router]);
 
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    setLoading(true);
+    try {
+      const result = await signIn("credentials", {
+        email: email.trim().toLowerCase(),
+        password,
+        redirect: false,
+      });
+      if (!result || result.error) {
+        setError("Invalid email or password.");
+        return;
+      }
+      router.replace(callbackUrl);
+      router.refresh();
+    } catch {
+      setError("Sign in failed. Try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
-    <form action={formAction} className="mt-6 flex flex-col gap-3">
+    <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-3">
       <input type="hidden" name="callbackUrl" value={callbackUrl} />
       {error && (
         <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -69,9 +91,10 @@ export function LoginForm() {
       </label>
       <button
         type="submit"
+        disabled={loading}
         className="w-full rounded-xl bg-gradient-to-r from-teal-500 to-cyan-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-teal-500/25 hover:from-teal-400 hover:to-cyan-500 transition-all disabled:opacity-50"
       >
-        Sign in
+        {loading ? "Signing in..." : "Sign in"}
       </button>
     </form>
   );
