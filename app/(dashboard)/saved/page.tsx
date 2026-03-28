@@ -26,9 +26,9 @@ export default function SavedPage() {
   const { products, remove, clearAll } = useSavedProducts();
 
   return (
-    <main className="flex-1 min-w-0 flex flex-col gap-6 p-6">
-      <header className="rounded-xl border border-slate-600/80 bg-slate-800/90 p-6 shadow-lg shadow-black/10 border-t-4 border-t-teal-500">
-        <h1 className="text-2xl font-bold text-slate-100 tracking-tight">Saved Products</h1>
+    <main className="flex-1 min-w-0 flex flex-col gap-4 p-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:gap-6 sm:p-6">
+      <header className="rounded-xl border border-slate-600/80 bg-slate-800/90 p-4 shadow-lg shadow-black/10 border-t-4 border-t-teal-500 sm:p-6">
+        <h1 className="text-xl font-bold tracking-tight text-slate-100 sm:text-2xl">Saved Products</h1>
         <p className="mt-2 text-sm text-slate-400">
           Products you’ve already looked up. Opening them here won’t call the API again—use Analyzer to refresh data.
         </p>
@@ -36,7 +36,7 @@ export default function SavedPage() {
       </header>
 
       <section className="rounded-xl border border-slate-600/80 bg-slate-800/90 shadow-lg shadow-black/10 overflow-hidden">
-        <div className="flex items-center justify-between gap-4 border-b border-slate-600/80 px-4 py-3 bg-slate-800/50">
+        <div className="flex flex-col gap-2 border-b border-slate-600/80 bg-slate-800/50 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-4">
           <p className="text-sm text-slate-400">
             {products.length === 0
               ? "No saved products yet. Use the Analyzer to search by ASIN, keyword, image, or bulk upload—each result is saved automatically."
@@ -64,7 +64,10 @@ export default function SavedPage() {
         ) : (
           <ul className="divide-y divide-slate-700">
             {products.map((p) => (
-              <li key={p.id} className="flex items-center gap-4 px-4 py-3 hover:bg-slate-700/40 transition-colors">
+              <li
+                key={p.id}
+                className="flex flex-col gap-3 px-3 py-3 transition-colors hover:bg-slate-700/40 sm:flex-row sm:items-center sm:gap-4 sm:px-4"
+              >
                 {p.imageUrl ? (
                   <img
                     src={p.imageUrl}
@@ -83,17 +86,17 @@ export default function SavedPage() {
                     {p.asin ?? p.inputIdentifier} · {decisionLabel(p.decision)} · {formatCurrency(p.buyBoxPrice)}
                   </p>
                 </div>
-                <div className="flex shrink-0 items-center gap-2">
+                <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
                   <Link
                     href={`/analyzer?asin=${encodeURIComponent(p.asin || p.inputIdentifier)}`}
-                    className="rounded-lg border border-slate-600 bg-slate-700/50 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-teal-600 hover:text-white hover:border-teal-500 transition-colors"
+                    className="inline-flex flex-1 justify-center rounded-lg border border-slate-600 bg-slate-700/50 px-3 py-2 text-xs font-medium text-slate-200 transition-colors hover:border-teal-500 hover:bg-teal-600 hover:text-white sm:flex-initial sm:justify-start sm:py-1.5"
                   >
                     Open in Analyzer
                   </Link>
                   <button
                     type="button"
                     onClick={() => remove(p.id)}
-                    className="rounded-lg border border-slate-600 bg-slate-700/50 px-3 py-1.5 text-xs font-medium text-slate-400 hover:bg-rose-900/50 hover:text-rose-200"
+                    className="inline-flex flex-1 justify-center rounded-lg border border-slate-600 bg-slate-700/50 px-3 py-2 text-xs font-medium text-slate-400 hover:bg-rose-900/50 hover:text-rose-200 sm:flex-initial sm:justify-start sm:py-1.5"
                   >
                     Remove
                   </button>

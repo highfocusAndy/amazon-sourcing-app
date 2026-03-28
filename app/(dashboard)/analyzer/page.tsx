@@ -510,6 +510,17 @@ function AnalyzerPageContent() {
     refreshAmazonHeaderStatus();
   }, [refreshAmazonHeaderStatus]);
 
+  useEffect(() => {
+    if (!mobileDetailsOpen || typeof document === "undefined") return;
+    const mq = window.matchMedia("(max-width: 1023px)");
+    if (!mq.matches) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [mobileDetailsOpen]);
+
   const searchParams = useSearchParams();
   useEffect(() => {
     const asin = searchParams.get("asin");
@@ -1708,18 +1719,18 @@ function AnalyzerPageContent() {
       {showAmazonAccountModal && (
         <AmazonAccountModal onClose={() => setShowAmazonAccountModal(false)} />
       )}
-      <main className="flex-1 min-w-0 flex flex-col gap-6 p-6 mr-0 lg:mr-80 xl:mr-96">
-        <header className="sticky top-0 z-20 rounded-xl border border-slate-600/80 bg-slate-800/95 px-4 py-4 shadow-lg shadow-black/10 border-t-4 border-t-teal-500 backdrop-blur">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-3">
-                <img
-                  src="/HF_LOGO.png"
-                  alt="HIGH FOCUS Professional"
-                  className="h-12 w-auto brightness-0 invert"
-                />
-                <h1 className="text-lg font-bold text-slate-100 tracking-tight">HIGH FOCUS Sourcing App</h1>
-              </div>
+      <main className="flex-1 min-w-0 flex flex-col gap-4 p-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:gap-6 sm:p-4 lg:mr-80 lg:gap-6 lg:p-6 xl:mr-96">
+        <header className="sticky top-0 z-20 rounded-xl border border-slate-600/80 bg-slate-800/95 px-3 py-3 shadow-lg shadow-black/10 border-t-4 border-t-teal-500 backdrop-blur sm:px-4 sm:py-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+              <img
+                src="/HF_LOGO.png"
+                alt="HIGH FOCUS Professional"
+                className="h-9 w-auto shrink-0 brightness-0 invert sm:h-12"
+              />
+              <h1 className="min-w-0 truncate text-base font-bold tracking-tight text-slate-100 sm:text-lg">
+                HIGH FOCUS Sourcing App
+              </h1>
             </div>
             <DashboardHeaderAccount
               session={session}
@@ -1731,7 +1742,7 @@ function AnalyzerPageContent() {
           </div>
         </header>
 
-      <form onSubmit={handleLookupSubmit} className="rounded-xl border border-slate-600/80 bg-slate-800/90 p-6 shadow-lg shadow-black/10">
+      <form onSubmit={handleLookupSubmit} className="rounded-xl border border-slate-600/80 bg-slate-800/90 p-4 shadow-lg shadow-black/10 sm:p-6">
         <div className="space-y-4">
           <label className="block">
             <span className="text-sm font-medium text-slate-300">Keyword</span>
@@ -1864,7 +1875,8 @@ function AnalyzerPageContent() {
             {filteredSortedResults.length > RESULTS_PAGE_SIZE
               ? ` · Page ${resultsPage} of ${totalPages} (${RESULTS_PAGE_SIZE} per page)`
               : ""}
-            {" · "}Click a row for details in the right panel
+            <span className="hidden lg:inline">{" · "}Click a row for details in the right panel.</span>
+            <span className="lg:hidden">{" · "}Tap a row for product details.</span>
           </p>
           {isKeywordMode && lastKeyword && (
             <div className="flex items-center gap-2">
@@ -1887,8 +1899,8 @@ function AnalyzerPageContent() {
             </div>
           )}
         </div>
-        <div className="max-h-[60vh] overflow-auto">
-          <table className="min-w-full border-collapse text-left text-sm">
+        <div className="max-h-[min(60vh,32rem)] overflow-auto overscroll-y-contain sm:max-h-[60vh]">
+          <table className="min-w-full touch-manipulation border-collapse text-left text-sm">
             <thead className="bg-slate-700/50 text-xs uppercase tracking-wide text-slate-400">
               <tr>
                 {tableHeaders.map((header) => (
@@ -1919,9 +1931,9 @@ function AnalyzerPageContent() {
                   <tr
                     key={item.id}
                     onClick={() => void handleSelectProduct(item)}
-                    className={`cursor-pointer border-t border-slate-700 transition hover:bg-slate-700/30 ${selectedProduct?.id === item.id ? "ring-2 ring-inset ring-teal-400" : ""}`}
+                    className={`cursor-pointer border-t border-slate-700 transition hover:bg-slate-700/30 active:bg-slate-700/50 ${selectedProduct?.id === item.id ? "ring-2 ring-inset ring-teal-400" : ""}`}
                   >
-                    <td className="px-3 py-1.5">
+                    <td className="px-3 py-2.5 sm:py-1.5">
                       {item.imageUrl ? (
                         <img
                           src={item.imageUrl}
@@ -1934,7 +1946,7 @@ function AnalyzerPageContent() {
                         <span className="inline-flex h-10 w-10 items-center justify-center rounded border border-slate-600 bg-slate-700/50 text-slate-500 text-[11px]">—</span>
                       )}
                     </td>
-                    <td className="px-3 py-1.5">
+                    <td className="px-3 py-2.5 sm:py-1.5">
                       <div className="max-w-[280px]">
                         <p className="truncate font-medium text-[13px] text-slate-200" title={item.title || undefined}>
                           {item.title || item.asin || item.inputIdentifier || "—"}
@@ -1946,8 +1958,8 @@ function AnalyzerPageContent() {
                         ) : null}
                       </div>
                     </td>
-                    <td className="px-3 py-1.5 text-[13px] text-slate-300">{formatNumber(item.salesRank)}</td>
-                    <td className="px-3 py-1.5 text-[13px] text-slate-300">{item.brand || "—"}</td>
+                    <td className="px-3 py-2.5 text-[13px] text-slate-300 sm:py-1.5">{formatNumber(item.salesRank)}</td>
+                    <td className="px-3 py-2.5 text-[13px] text-slate-300 sm:py-1.5">{item.brand || "—"}</td>
                   </tr>
                 ))
               )}
@@ -2066,11 +2078,11 @@ function AnalyzerPageContent() {
     </main>
 
       <aside
-        className={`fixed inset-0 z-50 overflow-y-auto bg-slate-800 border-l border-slate-700 shadow-xl lg:inset-auto lg:right-0 lg:top-0 lg:h-screen lg:w-80 lg:rounded-l-xl xl:w-96 ${
+        className={`fixed inset-0 z-[60] overflow-y-auto overscroll-y-contain bg-slate-800 border-l border-slate-700 shadow-xl lg:inset-auto lg:right-0 lg:top-0 lg:z-50 lg:h-screen lg:w-80 lg:rounded-l-xl xl:w-96 ${
           mobileDetailsOpen ? "block" : "hidden"
         } lg:block`}
       >
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-700 bg-slate-800 px-4 py-3">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-700 bg-slate-800 px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] lg:pt-3">
           <h3 className="text-base font-semibold text-slate-100">Product details</h3>
           <div className="flex items-center gap-2">
             <button
