@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { signOut } from "next-auth/react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { SavedProductsProvider } from "@/app/context/SavedProductsContext";
 import { ExplorerCategoryProvider, useExplorerCategoryOptional } from "@/app/context/ExplorerCategoryContext";
 import { TOP_LEVEL_CATEGORIES, getSubcategoriesForCategory } from "@/lib/catalogCategories";
@@ -39,13 +39,7 @@ function NavLink({
   );
 }
 
-function LeftNavWithCategories({
-  mobileNavOpen,
-  onCloseMobile,
-}: {
-  mobileNavOpen: boolean;
-  onCloseMobile: () => void;
-}) {
+function LeftNavWithCategories() {
   const pathname = usePathname();
   const ctx = useExplorerCategoryOptional();
   const { data: session, status } = useSession();
@@ -53,21 +47,7 @@ function LeftNavWithCategories({
   const [showSettingsModal, setShowSettingsModal] = useState(false);
 
   return (
-    <nav
-      id="dashboard-sidebar"
-      className={`fixed inset-y-0 left-0 z-50 flex h-[100dvh] w-56 max-w-[85vw] shrink-0 flex-col overflow-hidden border-r border-slate-700/80 bg-gradient-to-b from-slate-900 via-slate-800/95 to-slate-900 shadow-xl shadow-black/20 transition-transform duration-200 ease-out lg:static lg:z-auto lg:max-w-none ${
-        mobileNavOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
-      }`}
-    >
-      <div className="flex items-center justify-end border-b border-slate-700/80 px-2 py-2 pt-[max(0.5rem,env(safe-area-inset-top))] lg:hidden">
-        <button
-          type="button"
-          onClick={onCloseMobile}
-          className="rounded-lg px-3 py-1.5 text-sm font-medium text-slate-300 hover:bg-slate-700/80 hover:text-white"
-        >
-          Close menu
-        </button>
-      </div>
+    <nav className="sticky top-0 h-screen w-56 shrink-0 flex flex-col border-r border-slate-700/80 bg-gradient-to-b from-slate-900 via-slate-800/95 to-slate-900 overflow-hidden shadow-xl shadow-black/20">
       {/* Top: user avatar + name, or Login button */}
       <div className="border-b border-slate-700/80 px-3 py-4 bg-slate-800/40">
         {status === "loading" ? (
@@ -216,49 +196,12 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const pathname = usePathname();
-
-  useEffect(() => {
-    setMobileNavOpen(false);
-  }, [pathname]);
-
   return (
     <SavedProductsProvider>
       <ExplorerCategoryProvider>
-        <div className="flex min-h-screen min-h-[100dvh] w-full bg-slate-900/50">
-          {mobileNavOpen ? (
-            <button
-              type="button"
-              className="fixed inset-0 z-40 bg-black/60 backdrop-blur-[1px] lg:hidden"
-              aria-label="Close menu"
-              onClick={() => setMobileNavOpen(false)}
-            />
-          ) : null}
-          <LeftNavWithCategories
-            mobileNavOpen={mobileNavOpen}
-            onCloseMobile={() => setMobileNavOpen(false)}
-          />
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col pt-[env(safe-area-inset-top)] lg:pt-0">
-            <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-slate-700/80 bg-slate-900/95 px-3 py-2 backdrop-blur-md lg:hidden">
-              <button
-                type="button"
-                onClick={() => setMobileNavOpen(true)}
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-600 bg-slate-800 text-slate-200 hover:bg-slate-700"
-                aria-expanded={mobileNavOpen}
-                aria-controls="dashboard-sidebar"
-                aria-label="Open menu"
-              >
-                <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-                  <path d="M4 6h16M4 12h16M4 18h16" strokeLinecap="round" />
-                </svg>
-              </button>
-              <span className="min-w-0 truncate text-sm font-semibold tracking-tight text-slate-100">
-                HIGH FOCUS Sourcing
-              </span>
-            </header>
-            <div className="min-h-0 min-w-0 flex-1">{children}</div>
-          </div>
+        <div className="flex min-h-screen w-full bg-slate-900/50">
+          <LeftNavWithCategories />
+          {children}
         </div>
       </ExplorerCategoryProvider>
     </SavedProductsProvider>

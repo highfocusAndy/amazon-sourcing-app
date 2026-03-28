@@ -27,10 +27,9 @@ export function DashboardHeaderAccount({
       <button
         type="button"
         onClick={onConnectAmazon}
-        className="rounded-lg border border-teal-500/60 bg-teal-500/10 px-2.5 py-1.5 text-[11px] font-semibold text-teal-300 hover:bg-teal-500/20 hover:text-teal-200 transition-colors sm:px-3 sm:text-xs"
+        className="rounded-lg border border-teal-500/60 bg-teal-500/10 px-3 py-1.5 text-xs font-semibold text-teal-300 hover:bg-teal-500/20 hover:text-teal-200 transition-colors"
       >
-        <span className="sm:hidden">Connect Amazon</span>
-        <span className="hidden sm:inline">Connect Amazon account</span>
+        Connect Amazon account
       </button>
     );
   }

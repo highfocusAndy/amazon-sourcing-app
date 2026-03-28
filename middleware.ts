@@ -3,6 +3,26 @@ import { NextResponse } from "next/server";
 
 export default auth((req) => {
   const path = req.nextUrl.pathname;
+
+  const isPublicPage =
+    path.startsWith("/login") ||
+    path.startsWith("/signup") ||
+    path.startsWith("/reset-password");
+
+  /**
+   * NextAuth v5 runs this custom callback before the default "redirect if unauthorized"
+   * branch, so unauthenticated users would otherwise always get NextResponse.next() and
+   * see the dashboard. Send them to /login first; after sign-in they return via callbackUrl.
+   */
+  // Session JSON is always an object when present; use `user` like auth.ts `authorized` callback.
+  const isLoggedIn = Boolean(req.auth?.user);
+  if (!path.startsWith("/api/") && !isPublicPage && !isLoggedIn) {
+    const signIn = new URL("/login", req.nextUrl);
+    const callback = `${path}${req.nextUrl.search}`;
+    signIn.searchParams.set("callbackUrl", callback);
+    return NextResponse.redirect(signIn);
+  }
+
   // Allow unauthenticated GET to catalog categories + search only (not restrictions)
   const isCatalogGet =
     (path === "/api/catalog/categories" ||
@@ -36,7 +56,7 @@ export default auth((req) => {
     !isResetPassword &&
     !isAmazonOAuthPublicGet &&
     !isAmazonOAuthStartGet &&
-    !req.auth
+    !req.auth?.user
   ) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
