@@ -8,6 +8,7 @@ import { useState } from "react";
 import { SavedProductsProvider } from "@/app/context/SavedProductsContext";
 import { ExplorerCategoryProvider, useExplorerCategoryOptional } from "@/app/context/ExplorerCategoryContext";
 import { TOP_LEVEL_CATEGORIES, getSubcategoriesForCategory } from "@/lib/catalogCategories";
+import { BrandBackdrop } from "@/app/components/BrandBackdrop";
 import { AccountSettingsModal } from "@/app/settings/AccountSettingsModal";
 import { SettingsModal } from "@/app/settings/SettingsModal";
 
@@ -191,26 +192,6 @@ function LeftNavWithCategories() {
   );
 }
 
-function DashboardBrandBackdrop() {
-  return (
-    <div
-      className="pointer-events-none absolute inset-0 z-0 overflow-hidden"
-      aria-hidden
-    >
-      <div
-        className="absolute inset-[-20%] opacity-[0.035] sm:opacity-[0.05]"
-        style={{
-          backgroundImage: "url(/HF_LOGO.png)",
-          backgroundRepeat: "repeat",
-          backgroundSize: "clamp(72px, 14vw, 112px) auto",
-          backgroundPosition: "center",
-          filter: "brightness(0) invert(1)",
-        }}
-      />
-    </div>
-  );
-}
-
 export default function DashboardLayout({
   children,
 }: {
@@ -220,7 +201,7 @@ export default function DashboardLayout({
     <SavedProductsProvider>
       <ExplorerCategoryProvider>
         <div className="relative min-h-screen min-h-[100dvh] w-full bg-slate-900/50">
-          <DashboardBrandBackdrop />
+          <BrandBackdrop variant="onDark" />
           <div className="relative z-[1] flex min-h-screen min-h-[100dvh] w-full">
             <LeftNavWithCategories />
             {children}
