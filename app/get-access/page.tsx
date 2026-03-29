@@ -1,6 +1,7 @@
 import { BrandBackdrop } from "@/app/components/BrandBackdrop";
 import { auth } from "@/auth";
 import { defaultTrialDays, isSubscriptionsPaused, subscriptionsPausedMessage } from "@/lib/billing/access";
+import { supportContactEmail } from "@/lib/supportContact";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { GetAccessContent } from "./GetAccessContent";
@@ -29,6 +30,7 @@ export default async function GetAccessPage() {
           priceDisplay={priceDisplay}
           subscriptionsPaused={subscriptionsPaused}
           subscriptionsPausedMessage={pausedMessage}
+          supportEmail={supportContactEmail()}
         />
       </Suspense>
     </div>

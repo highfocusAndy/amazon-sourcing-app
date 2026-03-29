@@ -2,12 +2,19 @@
 
 import { useState, useEffect } from "react";
 import type { FormEvent } from "react";
+import Link from "next/link";
+import { SupportContactHint } from "@/app/components/SupportContactHint";
 import { useSearchParams, useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { startAuthentication } from "@simplewebauthn/browser";
 import type { PublicKeyCredentialRequestOptionsJSON } from "@simplewebauthn/types";
 
-export function LoginForm() {
+type LoginFormProps = {
+  /** When set (from SUPPORT_EMAIL), shown under the get-access path */
+  supportEmail?: string;
+};
+
+export function LoginForm({ supportEmail }: LoginFormProps) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const callbackUrl = searchParams.get("callbackUrl") ?? "/";
@@ -174,6 +181,19 @@ export function LoginForm() {
       <p className="text-center text-[11px] leading-snug text-slate-500">
         Face ID, fingerprint, or device PIN — after you add a passkey in Account settings (password sign-in once).
       </p>
+      <div className="relative py-1 text-center text-xs text-slate-400 before:absolute before:inset-x-0 before:top-1/2 before:h-px before:bg-slate-200">
+        <span className="relative bg-white px-2">or</span>
+      </div>
+      <Link
+        href="/get-access"
+        className="flex w-full items-center justify-center rounded-xl border-2 border-slate-300 bg-white px-4 py-2.5 text-center text-sm font-semibold text-slate-800 shadow-sm hover:border-teal-500/60 hover:bg-teal-50/50 transition-all"
+      >
+        Pay or use a promo code
+      </Link>
+      <p className="text-center text-[11px] leading-snug text-slate-500">
+        New here? Subscribe or enter an invite code on the next page.
+      </p>
+      {supportEmail ? <SupportContactHint email={supportEmail} /> : null}
     </form>
   );
 }

@@ -1,5 +1,6 @@
 import { BrandBackdrop } from "@/app/components/BrandBackdrop";
 import { auth } from "@/auth";
+import { supportContactEmail } from "@/lib/supportContact";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { LoginForm } from "./LoginForm";
@@ -52,19 +53,12 @@ export default async function LoginPage({
             That purchase is already linked to an account. Sign in with the email you used at checkout.
           </p>
         ) : null}
-        <LoginForm />
+        <LoginForm supportEmail={supportContactEmail()} />
         <p className="mt-4 text-center text-sm text-slate-500">
-          Need access?{" "}
-          <Link href="/get-access" className="font-semibold text-teal-600 hover:text-teal-500 hover:underline">
-            Pay or use a promo code
-          </Link>
-          {" · "}
           <Link href="/reset-password" className="font-semibold text-teal-600 hover:text-teal-500 hover:underline">
             Reset password
           </Link>
-        </p>
-        <p className="mt-3 text-center text-xs text-slate-500">
-          Paid at checkout but never set a password?{" "}
+          {" · "}
           <Link href="/signup/recover" className="font-semibold text-teal-600 hover:text-teal-500 hover:underline">
             Finish paid signup
           </Link>

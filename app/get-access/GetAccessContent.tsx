@@ -1,5 +1,6 @@
 "use client";
 
+import { SupportContactHint } from "@/app/components/SupportContactHint";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -12,6 +13,8 @@ type Props = {
   priceDisplay: string;
   subscriptionsPaused: boolean;
   subscriptionsPausedMessage: string;
+  /** From SUPPORT_EMAIL — signup / payment help */
+  supportEmail?: string;
 };
 
 export function GetAccessContent({
@@ -20,6 +23,7 @@ export function GetAccessContent({
   priceDisplay,
   subscriptionsPaused,
   subscriptionsPausedMessage,
+  supportEmail,
 }: Props) {
   const searchParams = useSearchParams();
   const checkout = searchParams.get("checkout");
@@ -270,6 +274,7 @@ export function GetAccessContent({
             Reset password
           </Link>
         </p>
+        {supportEmail ? <SupportContactHint email={supportEmail} /> : null}
       </div>
     </div>
 

@@ -1,12 +1,19 @@
 "use client";
 
+import { SupportContactHint } from "@/app/components/SupportContactHint";
 import type { BillingOverview } from "@/lib/billing/access";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { useCallback, useEffect, useState } from "react";
 
-export function SubscribeContent({ initial }: { initial: BillingOverview }) {
+export function SubscribeContent({
+  initial,
+  supportEmail,
+}: {
+  initial: BillingOverview;
+  supportEmail?: string;
+}) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const checkout = searchParams.get("checkout");
@@ -331,6 +338,7 @@ export function SubscribeContent({ initial }: { initial: BillingOverview }) {
           </Link>{" "}
           for a new purchase.
         </p>
+        {supportEmail ? <SupportContactHint email={supportEmail} tone="dark" /> : null}
       </div>
     </div>
   );
