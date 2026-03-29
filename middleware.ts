@@ -7,6 +7,7 @@ export default auth((req) => {
   const isPublicPage =
     path.startsWith("/login") ||
     path.startsWith("/signup") ||
+    path.startsWith("/get-access") ||
     path.startsWith("/reset-password");
 
   /**
@@ -23,10 +24,9 @@ export default auth((req) => {
     return NextResponse.redirect(signIn);
   }
 
-  // Allow unauthenticated GET to catalog categories + search only (not restrictions)
+  // Static category tree only (no SP-API). Catalog search requires a session to protect SP-API usage.
   const isCatalogGet =
-    (path === "/api/catalog/categories" ||
-      path.startsWith("/api/catalog/search")) &&
+    path === "/api/catalog/categories" &&
     (typeof req.method === "undefined" || req.method === "GET");
   const isDebugGet =
     process.env.NODE_ENV === "development" &&
@@ -47,15 +47,26 @@ export default auth((req) => {
   const isAmazonOAuthStartGet =
     path === "/api/amazon/oauth/start" &&
     (typeof req.method === "undefined" || req.method === "GET");
+  const isPasskeyLoginPost =
+    (path === "/api/passkeys/login/options" || path === "/api/passkeys/login/verify") &&
+    req.method === "POST";
+  const isStripeWebhook =
+    path === "/api/billing/webhook" && (req.method === "POST" || typeof req.method === "undefined");
   if (
     path.startsWith("/api/") &&
     !path.startsWith("/api/auth") &&
     !path.startsWith("/api/register") &&
+    !(
+      path.startsWith("/api/billing/checkout-guest") ||
+      path.startsWith("/api/billing/resume-signup")
+    ) &&
     !isCatalogGet &&
     !isDebugGet &&
     !isResetPassword &&
     !isAmazonOAuthPublicGet &&
     !isAmazonOAuthStartGet &&
+    !isPasskeyLoginPost &&
+    !isStripeWebhook &&
     !req.auth?.user
   ) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

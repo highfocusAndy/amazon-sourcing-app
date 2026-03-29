@@ -16,7 +16,7 @@ const MENU_ITEMS: { id: AccountSection; label: string; icon: string }[] = [
   { id: "change-password", label: "Change password", icon: "🔑" },
   { id: "reset-password", label: "Reset password", icon: "✉️" },
   { id: "add-passkey", label: "Add passkey", icon: "🔐" },
-  { id: "change-passkey", label: "Change passkey", icon: "🔄" },
+  { id: "change-passkey", label: "Manage passkeys", icon: "🔄" },
 ];
 
 export function AccountSettingsPanels() {
@@ -88,9 +88,9 @@ export function AccountSettingsPanels() {
 
           {section === "change-passkey" && (
             <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-lg shadow-slate-200/50">
-              <h2 className="text-lg font-semibold text-slate-900">Change passkey</h2>
+              <h2 className="text-lg font-semibold text-slate-900">Manage passkeys</h2>
               <p className="mt-1 text-sm text-slate-600">
-                Manage or remove your passkey. Shown when you have already added a passkey.
+                Remove a passkey from this account (for example if you lost a device). Your password still works.
               </p>
               <ManagePasskeySection className="mt-4" />
             </div>

@@ -9,7 +9,8 @@
     "build": "next build",
     "start": "next start",
     "start:deploy": "prisma migrate deploy && next start",
-    "lint": "eslint --max-warnings=0"
+    "lint": "eslint --max-warnings=0",
+    "stripe:webhook": "stripe listen --forward-to localhost:3000/api/billing/webhook --print-secret"
   },
   "repository": {
     "type": "git",
@@ -27,12 +28,17 @@
     "url": "https://github.com/highfocusAndy/amazon-sourcing-app/issues"
   },
   "homepage": "https://github.com/highfocusAndy/amazon-sourcing-app#readme",
+  "prisma": {
+    "seed": "npx tsx prisma/seed.ts"
+  },
   "engines": {
     "node": ">=20.9.0"
   },
   "dependencies": {
     "@aws-sdk/client-sts": "^3.995.0",
     "@prisma/client": "^5.22.0",
+    "@simplewebauthn/browser": "^9.0.1",
+    "@simplewebauthn/server": "^9.0.3",
     "@zxing/library": "^0.21.3",
     "aws4": "^1.13.2",
     "bcryptjs": "^3.0.3",
@@ -41,6 +47,7 @@
     "prisma": "^5.22.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
+    "stripe": "^17.7.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
@@ -53,6 +60,7 @@
     "eslint": "^9.39.3",
     "eslint-config-next": "^16.1.6",
     "tailwindcss": "^4.2.0",
+    "tsx": "^4.19.4",
     "typescript": "^5.9.3"
   }
 }

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { userUploadLimit } from "@/lib/apiRateLimit";
+import { requireAppAccess } from "@/lib/billing/requireAppAccess";
 import { analyzeBatch } from "@/lib/analysis";
 import { parseSourcingFile } from "@/lib/upload-parser";
 import type { ProductInput } from "@/lib/types";
@@ -10,6 +12,16 @@ const MAX_BATCH_SIZE = 2000;
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
+    const gate = await requireAppAccess();
+    if (!gate.ok) return gate.response;
+
+    if (!userUploadLimit(gate.userId)) {
+      return NextResponse.json(
+        { error: "Too many uploads. Wait a minute before running another batch." },
+        { status: 429 },
+      );
+    }
+
     const formData = await request.formData();
     const file = formData.get("file");
     const projectedMonthlyUnits = Number(formData.get("projectedMonthlyUnits") ?? 0);

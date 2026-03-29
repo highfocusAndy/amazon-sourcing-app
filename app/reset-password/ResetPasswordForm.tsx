@@ -6,6 +6,7 @@ import Link from "next/link";
 export function ResetPasswordForm() {
   const [email, setEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -13,6 +14,10 @@ export function ResetPasswordForm() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    if (newPassword !== confirmNewPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch("/api/reset-password", {
@@ -69,8 +74,22 @@ export function ResetPasswordForm() {
         New password <span className="text-slate-400">(min 8 characters)</span>
         <input
           type="password"
+          name="new-password"
           value={newPassword}
           onChange={(e) => setNewPassword(e.target.value)}
+          required
+          minLength={8}
+          autoComplete="new-password"
+          className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-teal-500/50 focus:border-teal-500"
+        />
+      </label>
+      <label className="text-sm font-medium text-slate-700">
+        Confirm new password
+        <input
+          type="password"
+          name="confirm-new-password"
+          value={confirmNewPassword}
+          onChange={(e) => setConfirmNewPassword(e.target.value)}
           required
           minLength={8}
           autoComplete="new-password"

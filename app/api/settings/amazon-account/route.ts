@@ -1,5 +1,5 @@
-import { auth } from "@/auth";
 import { refreshAmazonStoreNameForUser } from "@/lib/amazonAccount";
+import { requireAppAccess } from "@/lib/billing/requireAppAccess";
 import { hash } from "bcryptjs";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
@@ -14,13 +14,11 @@ function maskSellerId(sellerId: string): string {
 
 /** Returns linked Amazon seller (OAuth) and/or legacy saved email (masked). */
 export async function GET(): Promise<NextResponse> {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const gate = await requireAppAccess();
+  if (!gate.ok) return gate.response;
 
   const account = await prisma.amazonAccount.findUnique({
-    where: { userId: session.user.id },
+    where: { userId: gate.userId },
     select: {
       amazonEmail: true,
       amazonStoreName: true,
@@ -57,7 +55,7 @@ export async function GET(): Promise<NextResponse> {
 
   let storeName = account.amazonStoreName?.trim() || null;
   if (oauthConnected && !storeName) {
-    const refreshed = await refreshAmazonStoreNameForUser(session.user.id);
+    const refreshed = await refreshAmazonStoreNameForUser(gate.userId);
     if (refreshed) storeName = refreshed;
   }
 
@@ -81,10 +79,8 @@ export async function GET(): Promise<NextResponse> {
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const gate = await requireAppAccess();
+  if (!gate.ok) return gate.response;
 
   try {
     const body = (await request.json()) as { email?: string; password?: string };
@@ -105,12 +101,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     const existing = await prisma.amazonAccount.findUnique({
-      where: { userId: session.user.id },
+      where: { userId: gate.userId },
     });
     const isUpdate = !!existing;
     if (isUpdate && !password) {
       await prisma.amazonAccount.update({
-        where: { userId: session.user.id },
+        where: { userId: gate.userId },
         data: { amazonEmail: email },
       });
       return NextResponse.json({ ok: true });
@@ -124,9 +120,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     const amazonPasswordHash = await hash(password, 12);
     await prisma.amazonAccount.upsert({
-      where: { userId: session.user.id },
+      where: { userId: gate.userId },
       create: {
-        userId: session.user.id,
+        userId: gate.userId,
         amazonEmail: email,
         amazonPasswordHash,
       },
@@ -148,21 +144,19 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
 /** Disconnect OAuth tokens (and remove row if nothing else remains). */
 export async function DELETE(): Promise<NextResponse> {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const gate = await requireAppAccess();
+  if (!gate.ok) return gate.response;
 
   try {
     const row = await prisma.amazonAccount.findUnique({
-      where: { userId: session.user.id },
+      where: { userId: gate.userId },
     });
     if (!row) {
       return NextResponse.json({ ok: true });
     }
 
     await prisma.amazonAccount.update({
-      where: { userId: session.user.id },
+      where: { userId: gate.userId },
       data: {
         spRefreshTokenEnc: null,
         sellerId: null,
@@ -175,10 +169,10 @@ export async function DELETE(): Promise<NextResponse> {
     });
 
     const after = await prisma.amazonAccount.findUnique({
-      where: { userId: session.user.id },
+      where: { userId: gate.userId },
     });
     if (after && !after.amazonEmail?.trim() && !after.amazonPasswordHash) {
-      await prisma.amazonAccount.delete({ where: { userId: session.user.id } });
+      await prisma.amazonAccount.delete({ where: { userId: gate.userId } });
     }
 
     return NextResponse.json({ ok: true });

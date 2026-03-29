@@ -1,23 +1,74 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
-/** Shown in the "Change passkey" panel when user has (or may have) a passkey. */
+type PasskeyRow = { id: string; label: string | null; createdAt: string };
+
 export function ManagePasskeySection({ className = "" }: { className?: string }) {
-  const [message, setMessage] = useState<string | null>(null);
-  // TODO: fetch from API whether user has a passkey; for now we show placeholder
-  const hasPasskey = false;
+  const [passkeys, setPasskeys] = useState<PasskeyRow[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [removingId, setRemovingId] = useState<string | null>(null);
 
-  async function handleRemovePasskey() {
-    setMessage(null);
-    setMessage("Passkey removal will be available when WebAuthn is enabled. For now, use your password to sign in.");
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/passkeys", { credentials: "same-origin" });
+      const data = (await res.json()) as { passkeys?: PasskeyRow[]; error?: string };
+      if (!res.ok) {
+        setError(data.error ?? "Could not load passkeys.");
+        setPasskeys([]);
+        return;
+      }
+      setPasskeys(data.passkeys ?? []);
+    } catch {
+      setError("Could not load passkeys.");
+      setPasskeys([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function removePasskey(id: string) {
+    setRemovingId(id);
+    setError(null);
+    try {
+      const res = await fetch(`/api/passkeys/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+        credentials: "same-origin",
+      });
+      if (!res.ok) {
+        const data = (await res.json()) as { error?: string };
+        setError(data.error ?? "Could not remove passkey.");
+        return;
+      }
+      await load();
+    } catch {
+      setError("Could not remove passkey.");
+    } finally {
+      setRemovingId(null);
+    }
   }
 
-  if (!hasPasskey) {
+  if (loading) {
+    return (
+      <div className={className}>
+        <p className="text-sm text-slate-500">Loading passkeys…</p>
+      </div>
+    );
+  }
+
+  if (!passkeys?.length) {
     return (
       <div className={className}>
         <p className="text-sm text-slate-600">
-          You don’t have a passkey yet. Add one from <strong>Add passkey</strong> in the menu; then you can change or remove it here.
+          You don&apos;t have a passkey yet. Add one from <strong>Add passkey</strong> in the menu; then you can
+          remove it here if needed.
         </p>
       </div>
     );
@@ -26,20 +77,36 @@ export function ManagePasskeySection({ className = "" }: { className?: string })
   return (
     <div className={className}>
       <p className="text-sm text-slate-600">
-        You have a passkey registered. You can remove it and add a new one later.
+        Passkeys linked to your account. Removing one does not change your password.
       </p>
-      <button
-        type="button"
-        onClick={handleRemovePasskey}
-        className="mt-3 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
-      >
-        Remove passkey
-      </button>
-      {message && (
-        <p className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700">
-          {message}
+      <ul className="mt-3 space-y-2">
+        {passkeys.map((p) => (
+          <li
+            key={p.id}
+            className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+          >
+            <span className="text-slate-800">
+              {p.label?.trim() || "Passkey"}{" "}
+              <span className="text-slate-400">
+                · added {new Date(p.createdAt).toLocaleDateString()}
+              </span>
+            </span>
+            <button
+              type="button"
+              onClick={() => void removePasskey(p.id)}
+              disabled={removingId === p.id}
+              className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-medium text-rose-800 hover:bg-rose-100 disabled:opacity-50"
+            >
+              {removingId === p.id ? "Removing…" : "Remove"}
+            </button>
+          </li>
+        ))}
+      </ul>
+      {error ? (
+        <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
+          {error}
         </p>
-      )}
+      ) : null}
     </div>
   );
 }

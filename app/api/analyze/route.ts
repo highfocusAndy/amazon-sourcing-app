@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { auth } from "@/auth";
+import { userAnalyzeLimit } from "@/lib/apiRateLimit";
+import { requireAppAccess } from "@/lib/billing/requireAppAccess";
 import { getSpApiClientForUserOrGlobal } from "@/lib/amazonAccount";
 import { analyzeProduct } from "@/lib/analysis";
 import type { ProductAnalysis } from "@/lib/types";
@@ -61,8 +62,20 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const session = await auth();
-    const client = await getSpApiClientForUserOrGlobal(session?.user?.id);
+    const gate = await requireAppAccess();
+    if (!gate.ok) return gate.response;
+
+    if (!userAnalyzeLimit(gate.userId)) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "Too many analyses. Wait a minute and try again.",
+          errorDetail: { code: "RATE_LIMIT", message: "Too many analyses. Wait a minute and try again." },
+        },
+        { status: 429 },
+      );
+    }
+    const client = await getSpApiClientForUserOrGlobal(gate.userId);
     const result = await analyzeProduct(
       {
         identifier: body.identifier,

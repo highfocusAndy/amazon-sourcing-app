@@ -1,4 +1,5 @@
 import { auth } from "@/auth";
+import { userHasAppAccess } from "@/lib/billing/access";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
@@ -13,8 +14,11 @@ export default async function SettingsPage({
   searchParams?: SearchParams;
 }) {
   const session = await auth();
-  if (!session?.user) {
+  if (!session?.user?.id) {
     redirect("/login");
+  }
+  if (!(await userHasAppAccess(session.user.id))) {
+    redirect("/subscribe");
   }
 
   // If Amazon OAuth redirected here, immediately return to the dashboard.

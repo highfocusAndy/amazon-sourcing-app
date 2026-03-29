@@ -1,4 +1,5 @@
 import { auth } from "@/auth";
+import { userHasAppAccess } from "@/lib/billing/access";
 import { getAppBaseUrl } from "@/lib/appBaseUrl";
 import { prisma } from "@/lib/db";
 import {
@@ -20,6 +21,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const loginUrl = new URL("/login", base);
     loginUrl.searchParams.set("callbackUrl", "/api/amazon/oauth/start");
     return NextResponse.redirect(loginUrl);
+  }
+
+  if (!(await userHasAppAccess(session.user.id))) {
+    return NextResponse.redirect(new URL("/subscribe", base));
   }
 
   const appId = process.env.SP_API_APPLICATION_ID?.trim();

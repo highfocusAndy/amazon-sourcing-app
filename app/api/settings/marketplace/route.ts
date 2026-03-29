@@ -1,12 +1,10 @@
-import { auth } from "@/auth";
+import { requireAppAccess } from "@/lib/billing/requireAppAccess";
 import { NextResponse } from "next/server";
 
 /** GET: return current marketplace ID (from server env) for display in Settings. */
 export async function GET(): Promise<NextResponse> {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const gate = await requireAppAccess();
+  if (!gate.ok) return gate.response;
 
   const marketplaceId =
     process.env.MARKETPLACE_ID?.trim() ||

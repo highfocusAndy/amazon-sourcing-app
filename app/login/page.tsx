@@ -14,6 +14,9 @@ export default async function LoginPage({
   const session = await auth();
   const sp = searchParams != null ? await Promise.resolve(searchParams) : {};
   const rawCb = sp.callbackUrl;
+  const rawMsg = sp.message;
+  const registerMessage =
+    typeof rawMsg === "string" ? rawMsg : Array.isArray(rawMsg) ? rawMsg[0] : undefined;
   const callbackUrl =
     typeof rawCb === "string" ? rawCb : Array.isArray(rawCb) ? rawCb[0] : undefined;
   const safeCallback =
@@ -44,15 +47,26 @@ export default async function LoginPage({
         <p className="mt-2 text-center text-sm text-slate-600">
           Sign in to your account
         </p>
+        {registerMessage === "already-registered" ? (
+          <p className="mt-4 rounded-lg bg-teal-50 px-3 py-2 text-center text-sm text-teal-900">
+            That purchase is already linked to an account. Sign in with the email you used at checkout.
+          </p>
+        ) : null}
         <LoginForm />
         <p className="mt-4 text-center text-sm text-slate-500">
-          Don&apos;t have an account?{" "}
-          <Link href="/signup" className="font-semibold text-teal-600 hover:text-teal-500 hover:underline">
-            Sign up
+          Need access?{" "}
+          <Link href="/get-access" className="font-semibold text-teal-600 hover:text-teal-500 hover:underline">
+            Pay or use a promo code
           </Link>
           {" · "}
           <Link href="/reset-password" className="font-semibold text-teal-600 hover:text-teal-500 hover:underline">
             Reset password
+          </Link>
+        </p>
+        <p className="mt-3 text-center text-xs text-slate-500">
+          Paid at checkout but never set a password?{" "}
+          <Link href="/signup/recover" className="font-semibold text-teal-600 hover:text-teal-500 hover:underline">
+            Finish paid signup
           </Link>
         </p>
       </div>

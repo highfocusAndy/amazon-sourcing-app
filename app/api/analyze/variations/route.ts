@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { auth } from "@/auth";
+import { userAnalyzeLimit } from "@/lib/apiRateLimit";
+import { requireAppAccess } from "@/lib/billing/requireAppAccess";
 import {
   getSpApiClientForUserOrGlobal,
   SP_API_UNAVAILABLE_USER_MESSAGE,
@@ -34,8 +35,20 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     const identifier = body.identifier.trim();
-    const session = await auth();
-    const client = await getSpApiClientForUserOrGlobal(session?.user?.id);
+    const gate = await requireAppAccess();
+    if (!gate.ok) return gate.response;
+
+    if (!userAnalyzeLimit(gate.userId)) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "Too many requests. Wait a minute.",
+          errorDetail: { code: "RATE_LIMIT", message: "Too many requests. Wait a minute." },
+        },
+        { status: 429 },
+      );
+    }
+    const client = await getSpApiClientForUserOrGlobal(gate.userId);
     if (!client) {
       return NextResponse.json(
         {

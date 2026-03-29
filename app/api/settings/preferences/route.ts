@@ -1,5 +1,5 @@
-import { auth } from "@/auth";
 import { NextRequest, NextResponse } from "next/server";
+import { requireAppAccess } from "@/lib/billing/requireAppAccess";
 import { prisma } from "@/lib/db";
 
 import { isAllowedMarketplaceId } from "@/lib/marketplaces";
@@ -7,7 +7,7 @@ import { isAllowedMarketplaceId } from "@/lib/marketplaces";
 const DEFAULTS = {
   defaultSellerType: "FBA" as const,
   defaultShippingCostFbm: 0,
-  catalogPageSize: 30,
+  catalogPageSize: 20,
   marketplaceId: null as string | null,
 } as const;
 
@@ -31,10 +31,8 @@ export type PreferencesPayload = {
 
 /** GET: return current user's preferences (or defaults). */
 export async function GET(): Promise<NextResponse> {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const gate = await requireAppAccess();
+  if (!gate.ok) return gate.response;
 
   const defaults = {
     default_seller_type: DEFAULTS.defaultSellerType,
@@ -50,7 +48,7 @@ export async function GET(): Promise<NextResponse> {
 
   try {
     const row = await prisma.userPreferences.findUnique({
-      where: { userId: session.user.id },
+      where: { userId: gate.userId },
     });
 
     if (!row) {
@@ -73,10 +71,8 @@ export async function GET(): Promise<NextResponse> {
 
 /** POST: update preferences. */
 export async function POST(request: NextRequest): Promise<NextResponse> {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const gate = await requireAppAccess();
+  if (!gate.ok) return gate.response;
 
   const repo = (prisma as { userPreferences?: { upsert: unknown } }).userPreferences;
   if (typeof repo?.upsert !== "function") {
@@ -90,7 +86,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const body = (await request.json()) as PreferencesPayload;
 
     const existing = await prisma.userPreferences.findUnique({
-      where: { userId: session.user.id },
+      where: { userId: gate.userId },
     });
 
     const defaultSellerType =
@@ -111,9 +107,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         : (existing?.marketplaceId ?? null);
 
     await prisma.userPreferences.upsert({
-      where: { userId: session.user.id },
+      where: { userId: gate.userId },
       create: {
-        userId: session.user.id,
+        userId: gate.userId,
         defaultSellerType,
         defaultShippingCostFbm,
         catalogPageSize,

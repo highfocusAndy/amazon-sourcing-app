@@ -1,4 +1,4 @@
-import { auth } from "@/auth";
+import { requireAppAccess } from "@/lib/billing/requireAppAccess";
 import { hash, compare } from "bcryptjs";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
@@ -6,10 +6,8 @@ import { prisma } from "@/lib/db";
 const MIN_PASSWORD_LENGTH = 8;
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
-  const session = await auth();
-  if (!session?.user?.id || !session?.user?.email) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const gate = await requireAppAccess();
+  if (!gate.ok) return gate.response;
 
   try {
     const body = (await request.json()) as {
@@ -33,7 +31,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
+      where: { id: gate.userId },
     });
     if (!user) {
       return NextResponse.json({ error: "User not found." }, { status: 404 });
@@ -49,7 +47,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     const passwordHash = await hash(newPassword, 12);
     await prisma.user.update({
-      where: { id: session.user.id },
+      where: { id: gate.userId },
       data: { passwordHash },
     });
 

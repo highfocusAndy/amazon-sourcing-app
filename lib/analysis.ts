@@ -2,6 +2,11 @@ import { extractAmazonSalesVolume } from "@/lib/amazonSalesVolume";
 import { getServerEnv } from "@/lib/env";
 import { getListingTypeFromTitle } from "@/lib/listingLabel";
 import { fetchMainBsr } from "@/lib/paApiClient";
+import {
+  analysisCacheKey,
+  getAnalysisResultCache,
+  setAnalysisResultCache,
+} from "@/lib/spApiResponseCache";
 import { SpApiClient, tryReadSpApiConfig } from "@/lib/spApiClient";
 import type { CatalogItem } from "@/lib/spApiClient";
 import { estimateMonthlySalesFromBsr } from "@/lib/salesEstimate";
@@ -336,17 +341,35 @@ export async function analyzeProduct(
     result.reasons = [result.error];
     return result;
   }
-  const requestedProductName = String(input.productName ?? "").trim();
   const projectedMonthlyUnits =
     normalizeNumber(input.projectedMonthlyUnits) > 0
       ? normalizeNumber(input.projectedMonthlyUnits)
       : getServerEnv().defaultProjectedMonthlyUnits;
+
+  const sellerTypeNorm = normalizeSellerType(input.sellerType);
+  const analysisCacheKeyStr = analysisCacheKey(spApiClient.marketplaceId, spApiClient.sellerId, {
+    identifier: input.identifier.trim(),
+    wholesalePrice: normalizeNumber(input.wholesalePrice),
+    brand: normalizeBrand(input.brand ?? ""),
+    projectedMonthlyUnits,
+    sellerType: sellerTypeNorm,
+    shippingCost: sellerTypeNorm === "FBM" ? Math.max(0, normalizeNumber(input.shippingCost)) : 0,
+  });
 
   try {
     if (!result.inputIdentifier?.trim()) {
       result.error = "ASIN, UPC, or EAN required.";
       result.reasons = ["Provide an ASIN (10 chars), UPC, or EAN. Product name lookup is not used."];
       return result;
+    }
+
+    const cachedAnalysis = await getAnalysisResultCache(analysisCacheKeyStr);
+    if (cachedAnalysis && !cachedAnalysis.error && cachedAnalysis.asin) {
+      return {
+        ...cachedAnalysis,
+        id: crypto.randomUUID(),
+        createdAt: new Date().toISOString(),
+      };
     }
 
     let catalog = null;
@@ -509,7 +532,11 @@ export async function analyzeProduct(
       result.reasons.push("No Buy Box / landed price returned from SP-API offers endpoint.");
     }
 
-    return evaluateDecision(result, projectedMonthlyUnits);
+    const decided = evaluateDecision(result, projectedMonthlyUnits);
+    if (!decided.error && decided.asin) {
+      void setAnalysisResultCache(analysisCacheKeyStr, JSON.parse(JSON.stringify(decided)) as ProductAnalysis);
+    }
+    return decided;
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unexpected analysis error.";
     result.error = message;

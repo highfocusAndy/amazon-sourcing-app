@@ -1,4 +1,4 @@
-import { auth } from "@/auth";
+import { requireAppAccess } from "@/lib/billing/requireAppAccess";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
@@ -26,10 +26,8 @@ type ExplorerFiltersPayload = {
 
 /** GET: return current user's explorer filter settings (or defaults). */
 export async function GET(): Promise<NextResponse> {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const gate = await requireAppAccess();
+  if (!gate.ok) return gate.response;
 
   const defaults = {
     show_keyword: DEFAULTS.showKeyword,
@@ -48,7 +46,7 @@ export async function GET(): Promise<NextResponse> {
 
   try {
     const row = await prisma.userExplorerFilters.findUnique({
-      where: { userId: session.user.id },
+      where: { userId: gate.userId },
     });
 
     if (!row) {
@@ -72,10 +70,8 @@ export async function GET(): Promise<NextResponse> {
 
 /** POST: update explorer filter settings. Body: same shape as GET response. */
 export async function POST(request: NextRequest): Promise<NextResponse> {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const gate = await requireAppAccess();
+  if (!gate.ok) return gate.response;
 
   const repo = (prisma as { userExplorerFilters?: { upsert: unknown } }).userExplorerFilters;
   if (typeof repo?.upsert !== "function") {
@@ -99,9 +95,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     };
 
     await prisma.userExplorerFilters.upsert({
-      where: { userId: session.user.id },
+      where: { userId: gate.userId },
       create: {
-        userId: session.user.id,
+        userId: gate.userId,
         ...data,
       },
       update: data,

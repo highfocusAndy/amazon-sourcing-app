@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import type { FormEvent } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
+import { startAuthentication } from "@simplewebauthn/browser";
+import type { PublicKeyCredentialRequestOptionsJSON } from "@simplewebauthn/types";
 
 export function LoginForm() {
   const searchParams = useSearchParams();
@@ -17,6 +19,7 @@ export function LoginForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [passkeyLoading, setPasskeyLoading] = useState(false);
 
   useEffect(() => {
     if (errorParam === "CredentialsSignin" || errorParam === "Credentials") {
@@ -31,11 +34,16 @@ export function LoginForm() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
+    const pw = password.trim();
+    if (!pw) {
+      setError("Enter your password.");
+      return;
+    }
     setLoading(true);
     try {
       const result = await signIn("credentials", {
         email: email.trim().toLowerCase(),
-        password,
+        password: pw,
         redirect: false,
       });
       if (!result || result.error) {
@@ -48,6 +56,63 @@ export function LoginForm() {
       setError("Sign in failed. Try again.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handlePasskeySignIn() {
+    setError(null);
+    const em = email.trim().toLowerCase();
+    if (!em) {
+      setError("Enter your email first so we can find your passkey.");
+      return;
+    }
+    if (typeof window === "undefined" || !window.PublicKeyCredential) {
+      setError("Passkeys are not supported in this browser.");
+      return;
+    }
+    setPasskeyLoading(true);
+    try {
+      const optRes = await fetch("/api/passkeys/login/options", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ email: em }),
+      });
+      const optData = (await optRes.json()) as PublicKeyCredentialRequestOptionsJSON & { error?: string };
+      if (!optRes.ok) {
+        setError(optData.error ?? "Passkey sign-in failed.");
+        return;
+      }
+
+      const assertion = await startAuthentication(optData);
+
+      const verifyRes = await fetch("/api/passkeys/login/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ response: assertion }),
+      });
+      const verifyJson = (await verifyRes.json()) as { token?: string; error?: string };
+      if (!verifyRes.ok || !verifyJson.token) {
+        setError(verifyJson.error ?? "Passkey verification failed.");
+        return;
+      }
+
+      const result = await signIn("credentials", {
+        passkeyToken: verifyJson.token,
+        redirect: false,
+      });
+      if (!result || result.error) {
+        setError("Could not start your session. Try again.");
+        return;
+      }
+      router.replace(callbackUrl);
+      router.refresh();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Passkey failed.";
+      setError(/abort|cancel/i.test(msg) ? "Passkey sign-in was cancelled." : msg);
+    } finally {
+      setPasskeyLoading(false);
     }
   }
 
@@ -84,18 +149,31 @@ export function LoginForm() {
           name="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          required
           autoComplete="current-password"
           className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-teal-500/50 focus:border-teal-500"
         />
       </label>
       <button
         type="submit"
-        disabled={loading}
+        disabled={loading || passkeyLoading}
         className="w-full rounded-xl bg-gradient-to-r from-teal-500 to-cyan-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-teal-500/25 hover:from-teal-400 hover:to-cyan-500 transition-all disabled:opacity-50"
       >
         {loading ? "Signing in..." : "Sign in"}
       </button>
+      <div className="relative py-1 text-center text-xs text-slate-400 before:absolute before:inset-x-0 before:top-1/2 before:h-px before:bg-slate-200">
+        <span className="relative bg-white px-2">or</span>
+      </div>
+      <button
+        type="button"
+        onClick={() => void handlePasskeySignIn()}
+        disabled={loading || passkeyLoading}
+        className="w-full rounded-xl border-2 border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm hover:border-teal-500/60 hover:bg-teal-50/50 transition-all disabled:opacity-50"
+      >
+        {passkeyLoading ? "Waiting for device…" : "Sign in with passkey"}
+      </button>
+      <p className="text-center text-[11px] leading-snug text-slate-500">
+        Face ID, fingerprint, or device PIN — after you add a passkey in Account settings (password sign-in once).
+      </p>
     </form>
   );
 }

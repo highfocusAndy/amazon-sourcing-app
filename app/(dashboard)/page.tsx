@@ -122,7 +122,7 @@ export default function ExplorerPage() {
   const [sellerType, setSellerType] = useState<SellerType>("FBA");
   const [shippingCost, setShippingCost] = useState("0");
   const [projectedMonthlyUnits, setProjectedMonthlyUnits] = useState("1");
-  const [catalogPageSize, setCatalogPageSize] = useState(30);
+  const [catalogPageSize, setCatalogPageSize] = useState(20);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
   const [ungatedOnly, setUngatedOnly] = useState(false);
   const [eligibilityByAsin, setEligibilityByAsin] = useState<Record<string, boolean | null>>({});
@@ -133,6 +133,9 @@ export default function ExplorerPage() {
   const catalogAbortRef = useRef<AbortController | null>(null);
   const eligibilityAbortRef = useRef<AbortController | null>(null);
   const { data: session } = useSession();
+
+  /** Caps explorer catalog requests (server also enforces a max page size). */
+  const catalogFetchSize = useMemo(() => Math.min(Math.max(catalogPageSize, 10), 60), [catalogPageSize]);
 
   useEffect(() => {
     fetch("/api/config", { credentials: "same-origin" })
@@ -167,7 +170,6 @@ export default function ExplorerPage() {
     catalogAbortRef.current?.abort();
     const controller = new AbortController();
     catalogAbortRef.current = controller;
-    const pageSize = ungatedOnly ? 500 : 30;
     setCatalogLoading(true);
     setError(null);
     setCatalogNextPageToken(null);
@@ -176,8 +178,8 @@ export default function ExplorerPage() {
     setDetailPanelCost("");
     try {
       const res = await fetch(
-        `/api/catalog/search?q=${encodeURIComponent("best seller")}&pageSize=${pageSize}`,
-        { signal: controller.signal },
+        `/api/catalog/search?q=${encodeURIComponent("best seller")}&pageSize=${catalogFetchSize}`,
+        { credentials: "include", signal: controller.signal },
       );
       const json = (await res.json()) as {
         items?: CatalogItem[];
@@ -196,7 +198,7 @@ export default function ExplorerPage() {
         setCatalogLoading(false);
       }
     }
-  }, [ungatedOnly]);
+  }, [catalogFetchSize]);
 
   const searchProducts = useCallback(async () => {
     setLoadingPaused(false);
@@ -208,7 +210,6 @@ export default function ExplorerPage() {
     if (selectedSubcategory) parts.push(selectedSubcategory);
     if (keyword.trim()) parts.push(keyword.trim());
     const q = parts.length > 0 ? parts.join(" ") : "best seller";
-    const pageSize = ungatedOnly ? 500 : 30;
     setCatalogLoading(true);
     setError(null);
     setAnalyzeRequiresAuth(false);
@@ -219,8 +220,8 @@ export default function ExplorerPage() {
     autoLoadMoreCountRef.current = 0;
     try {
       const res = await fetch(
-        `/api/catalog/search?q=${encodeURIComponent(q)}&pageSize=${pageSize}`,
-        { signal: controller.signal },
+        `/api/catalog/search?q=${encodeURIComponent(q)}&pageSize=${catalogFetchSize}`,
+        { credentials: "include", signal: controller.signal },
       );
       const json = (await res.json()) as {
         items?: CatalogItem[];
@@ -246,7 +247,7 @@ export default function ExplorerPage() {
         setCatalogLoading(false);
       }
     }
-  }, [selectedCategory, selectedSubcategory, keyword, ungatedOnly]);
+  }, [selectedCategory, selectedSubcategory, keyword, catalogFetchSize]);
 
   const loadMoreProducts = useCallback(async () => {
     setLoadingPaused(false);
@@ -258,15 +259,14 @@ export default function ExplorerPage() {
     if (selectedSubcategory) parts.push(selectedSubcategory);
     if (keyword.trim()) parts.push(keyword.trim());
     const q = parts.length > 0 ? parts.join(" ") : "best seller";
-    const pageSize = ungatedOnly ? 500 : 30;
     const token = catalogNextPageToken;
     if (!token) return;
     setLoadMoreLoading(true);
     setError(null);
     try {
       const res = await fetch(
-        `/api/catalog/search?q=${encodeURIComponent(q)}&pageSize=${pageSize}&pageToken=${encodeURIComponent(token)}`,
-        { signal: controller.signal },
+        `/api/catalog/search?q=${encodeURIComponent(q)}&pageSize=${catalogFetchSize}&pageToken=${encodeURIComponent(token)}`,
+        { credentials: "include", signal: controller.signal },
       );
       const json = (await res.json()) as {
         items?: CatalogItem[];
@@ -290,7 +290,7 @@ export default function ExplorerPage() {
         setLoadMoreLoading(false);
       }
     }
-  }, [selectedCategory, selectedSubcategory, keyword, catalogNextPageToken, ungatedOnly]);
+  }, [selectedCategory, selectedSubcategory, keyword, catalogNextPageToken, catalogFetchSize]);
 
   const eligibilityByAsinRef = useRef(eligibilityByAsin);
   eligibilityByAsinRef.current = eligibilityByAsin;
@@ -370,7 +370,7 @@ export default function ExplorerPage() {
     };
   }, [ungatedOnly, catalogResults, loadingPaused]);
 
-  /** When "Ungated only" is on and no category is selected, auto-load catalog pages until we have at least 500 products (so we check more than 60). */
+  /** When "Ungated only" is on and no category is selected, auto-load a few more catalog pages (capped to limit SP-API GETs). */
   const ungatedAutoLoadCountRef = useRef(0);
   useEffect(() => {
     if (!ungatedOnly || selectedCategory || selectedSubcategory) {
@@ -379,12 +379,12 @@ export default function ExplorerPage() {
     }
     if (
       catalogResults.length === 0 ||
-      catalogResults.length >= 500 ||
+      catalogResults.length >= 120 ||
       !catalogNextPageToken ||
       loadMoreLoading ||
       catalogLoading ||
       loadingPaused ||
-      ungatedAutoLoadCountRef.current >= 20
+      ungatedAutoLoadCountRef.current >= 8
     ) {
       return;
     }
@@ -402,8 +402,8 @@ export default function ExplorerPage() {
     loadMoreProducts,
   ]);
 
-  /** When "Ungated only" is on AND a category (or subcategory) is selected, auto-load catalog until we have up to 1,000 products for that category, then eligibility runs on all. */
-  const CATEGORY_SCAN_CAP = 1000;
+  /** When "Ungated only" is on AND a category (or subcategory) is selected, auto-load catalog up to a modest cap to limit restriction API volume. */
+  const CATEGORY_SCAN_CAP = 240;
   useEffect(() => {
     if (
       !ungatedOnly ||
@@ -440,8 +440,8 @@ export default function ExplorerPage() {
       catalogLoading ||
       loadingPaused ||
       catalogResults.length === 0 ||
-      catalogResults.length >= 500 ||
-      autoLoadMoreCountRef.current >= 3
+      catalogResults.length >= 120 ||
+      autoLoadMoreCountRef.current >= 2
     ) {
       return;
     }
@@ -535,6 +535,7 @@ export default function ExplorerPage() {
       try {
         const res = await fetch("/api/analyze", {
           method: "POST",
+          credentials: "include",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
             identifier: item.asin,

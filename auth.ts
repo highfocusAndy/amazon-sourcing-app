@@ -2,6 +2,7 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { compare } from "bcryptjs";
 import { prisma } from "@/lib/db";
+import { hashPasskeyLoginSecret } from "@/lib/passkeyLoginToken";
 
 const authSecret =
   process.env.AUTH_SECRET ??
@@ -15,10 +16,26 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       credentials: {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
+        passkeyToken: { label: "Passkey session", type: "text" },
       },
       async authorize(credentials) {
         console.error("[Auth] authorize() called, keys:", credentials ? Object.keys(credentials) : "null");
         const raw = (credentials ?? {}) as Record<string, unknown>;
+        const passkeyTokenRaw = typeof raw.passkeyToken === "string" ? raw.passkeyToken.trim() : "";
+        if (passkeyTokenRaw) {
+          try {
+            const hash = hashPasskeyLoginSecret(passkeyTokenRaw);
+            const row = await prisma.passkeyLoginToken.findUnique({ where: { tokenHash: hash } });
+            if (!row || row.expiresAt < new Date()) return null;
+            await prisma.passkeyLoginToken.delete({ where: { id: row.id } });
+            const user = await prisma.user.findUnique({ where: { id: row.userId } });
+            if (!user) return null;
+            return { id: user.id, email: user.email, name: user.name ?? undefined };
+          } catch {
+            return null;
+          }
+        }
+
         let email = typeof raw.email === "string" ? raw.email : (Array.isArray(raw.email) ? raw.email[0] : undefined);
         let password = typeof raw.password === "string" ? raw.password : (Array.isArray(raw.password) ? raw.password[0] : undefined);
         email = (email != null ? String(email) : "").trim();
@@ -71,6 +88,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       const path = nextUrl.pathname;
       if (path.startsWith("/login")) return true;
       if (path.startsWith("/signup")) return true;
+      if (path.startsWith("/get-access")) return true;
       if (path.startsWith("/reset-password")) return true;
       if (path.startsWith("/api/auth")) return true;
       // API routes: let middleware return 401 when unauthenticated

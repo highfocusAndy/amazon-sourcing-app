@@ -1,6 +1,7 @@
 import { AssumeRoleCommand, STSClient } from "@aws-sdk/client-sts";
 import aws4 from "aws4";
 
+import { getCatalogItemCache, setCatalogItemCache } from "@/lib/spApiResponseCache";
 import type { SellerType } from "@/lib/types";
 
 type HttpMethod = "GET" | "POST";
@@ -316,6 +317,10 @@ export class SpApiClient {
 
   get marketplaceId(): string {
     return this.config.marketplaceId;
+  }
+
+  get sellerId(): string {
+    return this.config.sellerId;
   }
 
   private async getLwaAccessToken(): Promise<string> {
@@ -904,14 +909,28 @@ export class SpApiClient {
   }
 
   async fetchCatalogItem(asin: string): Promise<CatalogItem | null> {
-    const response = await this.request<unknown>("GET", `/catalog/2022-04-01/items/${asin}`, {
+    const normalized = asin.trim().toUpperCase();
+    if (!ASIN_REGEX.test(normalized)) {
+      return null;
+    }
+
+    const cached = await getCatalogItemCache(this.config.marketplaceId, normalized);
+    if (cached) {
+      return cached;
+    }
+
+    const response = await this.request<unknown>("GET", `/catalog/2022-04-01/items/${normalized}`, {
       query: {
         marketplaceIds: this.config.marketplaceId,
         includedData: "summaries,salesRanks,identifiers,images",
       },
     });
 
-    return this.extractCatalogItem(response);
+    const item = this.extractCatalogItem(response);
+    if (item) {
+      void setCatalogItemCache(this.config.marketplaceId, normalized, item);
+    }
+    return item;
   }
 
   private async searchCatalogByIdentifier(identifierType: "UPC" | "EAN" | "GTIN", identifier: string): Promise<CatalogItem | null> {

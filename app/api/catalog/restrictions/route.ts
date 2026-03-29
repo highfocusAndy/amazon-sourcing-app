@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { userRestrictionsLimit } from "@/lib/apiRateLimit";
+import { requireAppAccess } from "@/lib/billing/requireAppAccess";
 import {
   getSpApiClientForUserOrGlobal,
   SP_API_UNAVAILABLE_USER_MESSAGE,
 } from "@/lib/amazonAccount";
+import {
+  getListingRestrictionsCachePayload,
+  listingRestrictionsCacheKey,
+  setListingRestrictionsCachePayload,
+} from "@/lib/spApiResponseCache";
 
 /**
  * Returns gating/restriction status for one ASIN. Used when the user selects a product
@@ -21,23 +27,38 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   try {
-    const session = await auth();
-    const client = await getSpApiClientForUserOrGlobal(session?.user?.id);
+    const gate = await requireAppAccess();
+    if (!gate.ok) return gate.response;
+
+    if (!userRestrictionsLimit(gate.userId)) {
+      return NextResponse.json(
+        { error: "Too many restriction checks. Wait a moment.", asin, gated: null },
+        { status: 429 },
+      );
+    }
+    const client = await getSpApiClientForUserOrGlobal(gate.userId);
     if (!client) {
       return NextResponse.json(
         { error: SP_API_UNAVAILABLE_USER_MESSAGE, asin, gated: null },
         { status: 503 },
       );
     }
+    const cacheKey = listingRestrictionsCacheKey(client.marketplaceId, client.sellerId, asin);
+    const cached = await getListingRestrictionsCachePayload(cacheKey);
+    if (cached) {
+      return NextResponse.json(cached);
+    }
     const restrictions = await client.fetchListingRestrictions(asin);
     const gated =
       restrictions.restricted === true || restrictions.approvalRequired === true;
-    return NextResponse.json({
+    const body = {
       asin,
       gated,
       approvalRequired: restrictions.approvalRequired,
       listingRestricted: restrictions.restricted,
-    });
+    };
+    void setListingRestrictionsCachePayload(cacheKey, body);
+    return NextResponse.json(body);
   } catch (e) {
     console.error("Restrictions check error:", e);
     return NextResponse.json(
