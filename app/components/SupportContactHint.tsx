@@ -6,7 +6,9 @@ type Props = {
 
 export function SupportContactHint({ email, tone = "light" }: Props) {
   const wrap =
-    tone === "dark" ? "mt-6 text-center text-sm text-slate-400" : "mt-4 text-center text-xs text-slate-500";
+    tone === "dark"
+      ? "mt-6 text-center text-sm text-slate-400"
+      : "mt-3 text-center text-sm text-slate-500 sm:mt-3.5";
   const linkClass =
     tone === "dark"
       ? "font-medium text-teal-400 underline decoration-teal-500/50 underline-offset-2 hover:text-teal-300"
