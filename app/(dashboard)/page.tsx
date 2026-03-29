@@ -198,7 +198,7 @@ export default function ExplorerPage() {
         setCatalogLoading(false);
       }
     }
-  }, [catalogFetchSize]);
+  }, [catalogFetchSize, ungatedOnly]);
 
   const searchProducts = useCallback(async () => {
     setLoadingPaused(false);
@@ -247,7 +247,7 @@ export default function ExplorerPage() {
         setCatalogLoading(false);
       }
     }
-  }, [selectedCategory, selectedSubcategory, keyword, catalogFetchSize]);
+  }, [selectedCategory, selectedSubcategory, keyword, catalogFetchSize, ungatedOnly]);
 
   const loadMoreProducts = useCallback(async () => {
     setLoadingPaused(false);
@@ -290,7 +290,7 @@ export default function ExplorerPage() {
         setLoadMoreLoading(false);
       }
     }
-  }, [selectedCategory, selectedSubcategory, keyword, catalogNextPageToken, catalogFetchSize]);
+  }, [selectedCategory, selectedSubcategory, keyword, catalogNextPageToken, catalogFetchSize, ungatedOnly]);
 
   const eligibilityByAsinRef = useRef(eligibilityByAsin);
   eligibilityByAsinRef.current = eligibilityByAsin;
