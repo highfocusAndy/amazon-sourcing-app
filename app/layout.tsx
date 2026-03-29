@@ -2,8 +2,11 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { AuthSessionProvider } from "./components/AuthSessionProvider";
 
+const defaultTitle = "Amazon FBA Wholesale Sourcing Dashboard";
+const siteTitle = process.env.NEXT_PUBLIC_APP_TITLE?.trim() || defaultTitle;
+
 export const metadata: Metadata = {
-  title: "Amazon FBA Wholesale Sourcing Dashboard",
+  title: siteTitle,
   description: "Upload wholesale sheets, pull SP-API data, and evaluate Amazon FBA opportunities.",
 };
 
