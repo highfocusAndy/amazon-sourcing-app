@@ -92,7 +92,9 @@ export function GetAccessContent({
   const onPromoSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setPromoError(null);
-    if (password !== confirmPassword) {
+    const pw = password.trim();
+    const pw2 = confirmPassword.trim();
+    if (pw !== pw2) {
       setPromoError("Passwords do not match.");
       return;
     }
@@ -104,7 +106,7 @@ export function GetAccessContent({
         body: JSON.stringify({
           code: promoCode.trim(),
           email: email.trim().toLowerCase(),
-          password,
+          password: pw,
           name: name.trim() || undefined,
         }),
       });
@@ -116,7 +118,7 @@ export function GetAccessContent({
       const signEmail = data.email ?? email.trim().toLowerCase();
       const result = await signIn("credentials", {
         email: signEmail,
-        password,
+        password: pw,
         redirect: false,
       });
       if (!result || result.error) {
@@ -317,6 +319,11 @@ export function GetAccessContent({
               Type the <strong className="font-medium text-slate-800">promo code you were given</strong>, then add your
               email and a password. That <strong className="font-medium text-slate-800">creates your account</strong> and
               signs you in — no credit card. Access lasts for whatever period that code is good for.
+            </p>
+            <p className="mt-3 text-base leading-relaxed text-slate-600">
+              After this, you only need your <strong className="font-medium text-slate-800">email and password</strong> on
+              the sign-in page — not the promo code again. When your access period ends, you subscribe to renew (unless
+              you get a new extension code from the team).
             </p>
             <form onSubmit={onPromoSignup} className="mt-4 space-y-3">
               {promoError ? (

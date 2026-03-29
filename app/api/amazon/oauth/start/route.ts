@@ -23,7 +23,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return NextResponse.redirect(loginUrl);
   }
 
-  if (!(await userHasAppAccess(session.user.id))) {
+  if (!(await userHasAppAccess(session.user.id, session.user.email))) {
     return NextResponse.redirect(new URL("/subscribe", base));
   }
 

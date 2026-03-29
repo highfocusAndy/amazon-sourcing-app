@@ -1,4 +1,5 @@
 import { auth } from "@/auth";
+import { loadBillingUser } from "@/lib/billing/access";
 import { encryptAmazonRefreshToken } from "@/lib/amazonTokenCrypto";
 import {
   AMAZON_OAUTH_MARKETPLACE_COOKIE,
@@ -40,13 +41,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return fail("Session expired. Sign in and connect Amazon again.");
   }
 
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { id: true },
-  });
+  const user = await loadBillingUser(session.user.id, session.user.email);
   if (!user) {
     return fail("User account not found. Sign out and sign in again, then reconnect Amazon.");
   }
+  const userId = user.id;
 
   const authSecret = getOAuthAuthSecret();
   if (!authSecret) {
@@ -68,9 +67,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   try {
     await prisma.amazonAccount.upsert({
-      where: { userId: session.user.id },
+      where: { userId },
       create: {
-        userId: session.user.id,
+        userId,
         amazonEmail: null,
         amazonPasswordHash: null,
         spRefreshTokenEnc: enc,
@@ -93,7 +92,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   try {
-    await refreshAmazonStoreNameForUser(session.user.id);
+    await refreshAmazonStoreNameForUser(userId);
   } catch {
     // Non-fatal: Explorer header can lazy-load store name via GET /api/settings/amazon-account
   }

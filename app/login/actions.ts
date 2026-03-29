@@ -7,7 +7,7 @@ export type LoginResult = { error?: string };
 
 export async function loginAction(prevState: LoginResult, formData: FormData): Promise<LoginResult> {
   const email = formData.get("email")?.toString()?.trim()?.toLowerCase() ?? "";
-  const password = formData.get("password")?.toString() ?? "";
+  const password = formData.get("password")?.toString()?.trim() ?? "";
   const callbackUrl = formData.get("callbackUrl")?.toString() || "/";
 
   console.error("[Login] loginAction called", { email: email ? `${email.slice(0, 3)}...` : "(empty)", hasPassword: !!password });

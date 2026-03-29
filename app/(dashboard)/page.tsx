@@ -619,6 +619,17 @@ export default function ExplorerPage() {
     refreshAmazonHeaderStatus();
   }, [refreshAmazonHeaderStatus]);
 
+  useEffect(() => {
+    if (!mobileDetailsOpen) return;
+    const mq = window.matchMedia("(max-width: 1023px)");
+    if (!mq.matches) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [mobileDetailsOpen]);
+
   return (
     <>
       {showAmazonAccountModal && (
@@ -629,10 +640,10 @@ export default function ExplorerPage() {
       <Suspense fallback={null}>
         <AmazonOAuthAlerts />
       </Suspense>
-      <main className="flex-1 min-w-0 flex flex-col gap-4 p-4 mr-0 sm:gap-6 sm:p-6 lg:mr-80 xl:mr-96">
-        <header className="sticky top-14 z-20 rounded-xl border border-slate-600/80 bg-slate-800/95 px-3 py-3 shadow-lg shadow-black/10 border-t-4 border-t-teal-500 backdrop-blur sm:px-4 sm:py-4 md:top-0">
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 p-4 max-md:min-h-[calc(100dvh-3.5rem)] mr-0 sm:gap-6 sm:p-6 lg:mr-80 xl:mr-96">
+        <header className="sticky top-14 z-20 shrink-0 rounded-xl border border-slate-600/80 bg-slate-800/95 px-3 py-3 shadow-lg shadow-black/10 border-t-4 border-t-teal-500 backdrop-blur sm:px-4 sm:py-4 md:top-0">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-            <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+            <div className="hidden min-w-0 items-center gap-2 sm:gap-3 md:flex">
               <div className="flex min-w-0 items-center gap-2 sm:gap-3">
                 <img
                   src="/HF_LOGO.png"
@@ -655,7 +666,7 @@ export default function ExplorerPage() {
         </header>
 
         {/* Filters: Keyword, Sort, BSR max, Ungated */}
-        <section className="rounded-xl border border-slate-600/80 bg-slate-800/90 px-4 py-3 shadow-lg shadow-black/10">
+        <section className="shrink-0 rounded-xl border border-slate-600/80 bg-slate-800/90 px-4 py-3 shadow-lg shadow-black/10">
           <div className="flex flex-wrap items-center gap-3">
             <label className="flex items-center gap-2 text-sm text-slate-400">
               Sort
@@ -753,12 +764,17 @@ export default function ExplorerPage() {
           </div>
         ) : null}
         {infoMessage ? (
-          <div className="rounded-lg border border-emerald-800 bg-emerald-900/30 px-4 py-3 text-sm text-emerald-300">{infoMessage}</div>
+          <div className="shrink-0 rounded-lg border border-emerald-800 bg-emerald-900/30 px-4 py-3 text-sm text-emerald-300">
+            {infoMessage}
+          </div>
         ) : null}
 
         {/* Product table - Product, Brand, BSR only; fit middle without horizontal scroll */}
         {showProductTable && (
-          <section ref={productTableContainerRef} className="min-w-0 rounded-xl border border-slate-600/80 bg-slate-800/90 shadow-lg shadow-black/10 overflow-hidden">
+          <section
+            ref={productTableContainerRef}
+            className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-600/80 bg-slate-800/90 shadow-lg shadow-black/10"
+          >
             <div className="border-b border-slate-600/80 px-3 py-2.5 flex flex-col gap-0.5 bg-slate-800/50">
               <div className="flex items-center justify-between gap-2">
                 <p className="text-xs font-medium text-slate-500 uppercase tracking-wide truncate">
@@ -930,11 +946,20 @@ export default function ExplorerPage() {
         )}
       </main>
 
-      {/* Right panel: Product details (mobile opens only when selected) */}
+      {mobileDetailsOpen ? (
+        <button
+          type="button"
+          aria-label="Close product details"
+          className="fixed inset-0 z-40 bg-slate-950/60 backdrop-blur-[1px] lg:hidden"
+          onClick={() => setMobileDetailsOpen(false)}
+        />
+      ) : null}
+
+      {/* Right panel: full-screen sheet on mobile when open; fixed column on lg+ */}
       <aside
-        className={`fixed inset-0 z-50 overflow-y-auto bg-slate-800 border-l border-slate-700 shadow-xl lg:inset-auto lg:right-0 lg:top-0 lg:h-screen lg:w-80 xl:w-96 ${
-          mobileDetailsOpen ? "block" : "hidden"
-        } lg:block`}
+        className={`fixed z-50 overflow-y-auto border-l border-slate-700 bg-slate-800 shadow-xl transition-transform duration-300 ease-out max-lg:right-0 max-lg:top-0 max-lg:h-full max-lg:w-full max-lg:max-w-xl ${
+          mobileDetailsOpen ? "max-lg:translate-x-0" : "max-lg:pointer-events-none max-lg:translate-x-full"
+        } lg:pointer-events-auto lg:inset-auto lg:right-0 lg:top-0 lg:block lg:h-screen lg:w-80 lg:translate-x-0 xl:w-96`}
       >
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-700 bg-slate-800 px-4 py-3">
           <h3 className="text-base font-semibold text-slate-100">Product details</h3>

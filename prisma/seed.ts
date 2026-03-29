@@ -1,5 +1,14 @@
+import "./loadEnv";
+
 import { createHash } from "node:crypto";
 
+import { hash } from "bcryptjs";
+import {
+  appOwnerEmailNormalized,
+  appOwnerPromoCodeNormalized,
+  appOwnerPromoGrantDays,
+} from "@/lib/billing/appOwner";
+import { noSignupTrialEndsAt } from "@/lib/billing/access";
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
@@ -7,6 +16,13 @@ const prisma = new PrismaClient();
 /** Set FULL_ENV_RESET=true when seeding to wipe ALL users and ALL promo codes, then mint fresh tester codes. Never use on production unless you intend to delete every account. */
 const fullReset =
   process.env.FULL_ENV_RESET === "true" || process.env.FULL_ENV_RESET === "1";
+
+/**
+ * Set RESET_PROMOS_ONLY=true to delete every PromoCode (and redemptions via cascade) and mint a fresh batch.
+ * Users and accounts are kept; existing users keep promoAccessUntil / Stripe as-is.
+ */
+const resetPromosOnly =
+  process.env.RESET_PROMOS_ONLY === "true" || process.env.RESET_PROMOS_ONLY === "1";
 
 /** How many single-use tester promos to create (opaque codes — not 001, 002, …). */
 const TESTER_CODE_COUNT = 40;
@@ -17,7 +33,8 @@ const ALNUM = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
  * Stable, non-sequential codes. Bump the label when you ship a fresh batch after a full reset
  * so new codes differ from the previous set.
  */
-const OPAQUE_SEED_LABEL = "hf-promo-seed-v3";
+/** Bump this string whenever you run RESET_PROMOS_ONLY / want a different HF- batch (deterministic list). */
+const OPAQUE_SEED_LABEL = "hf-promo-seed-v4";
 
 function opaqueCodes(count: number): string[] {
   const out: string[] = [];
@@ -52,8 +69,17 @@ async function runFullReset(): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  if (fullReset && resetPromosOnly) {
+    console.error("Use either FULL_ENV_RESET or RESET_PROMOS_ONLY, not both.");
+    process.exit(1);
+  }
   if (fullReset) {
     await runFullReset();
+  } else if (resetPromosOnly) {
+    console.warn(
+      "\nRESET_PROMOS_ONLY: deleting all promo codes (redemptions cascade). User accounts are unchanged.\n",
+    );
+    await prisma.promoCode.deleteMany();
   }
 
   await prisma.promoCode.updateMany({
@@ -101,6 +127,61 @@ async function main(): Promise<void> {
   console.log(codes.slice(0, 8).join(", "));
   console.log("… full list: Prisma Studio → PromoCode, or scroll your terminal");
   console.log(codes.join(", "));
+
+  const ownerPromoCode = appOwnerPromoCodeNormalized();
+  if (ownerPromoCode) {
+    const grantDays = appOwnerPromoGrantDays();
+    await prisma.promoCode.upsert({
+      where: { code: ownerPromoCode },
+      create: {
+        code: ownerPromoCode,
+        label: "Owner invite — code never expires; long access (APP_OWNER_PROMO_CODE)",
+        grantsDays: grantDays,
+        maxRedemptions: null,
+        expiresAt: null,
+        active: true,
+        allowRepeatRedemption: false,
+      },
+      update: {
+        active: true,
+        expiresAt: null,
+        grantsDays: grantDays,
+        maxRedemptions: null,
+        allowRepeatRedemption: false,
+      },
+    });
+    console.log(
+      `\nAPP_OWNER_PROMO: upserted ${ownerPromoCode} — PromoCode.expiresAt=null (code stays valid), grantsDays=${grantDays}. Keep the code secret.\n`,
+    );
+  }
+
+  const ownerEmail = appOwnerEmailNormalized();
+  const ownerPassword = process.env.APP_OWNER_PASSWORD?.trim();
+  const ownerName = process.env.APP_OWNER_NAME?.trim() || "App owner";
+  if (ownerEmail && ownerPassword && ownerPassword.length >= 8) {
+    const passwordHash = await hash(ownerPassword, 12);
+    await prisma.user.upsert({
+      where: { email: ownerEmail },
+      create: {
+        email: ownerEmail,
+        passwordHash,
+        name: ownerName,
+        trialEndsAt: noSignupTrialEndsAt(),
+        promoAccessUntil: null,
+      },
+      update: {
+        passwordHash,
+        name: ownerName,
+      },
+    });
+    console.log(
+      `\nAPP_OWNER: upserted ${ownerEmail} — billing bypass via APP_OWNER_EMAIL; password from APP_OWNER_PASSWORD (re-applied on each seed).\n`,
+    );
+  } else if (ownerEmail && (!ownerPassword || ownerPassword.length < 8)) {
+    console.log(
+      `\nAPP_OWNER_EMAIL is set (${ownerEmail}) but APP_OWNER_PASSWORD is missing or shorter than 8 chars — add a strong password and run seed to create/update that login.\n`,
+    );
+  }
 }
 
 main()

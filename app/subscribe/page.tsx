@@ -12,7 +12,7 @@ export default async function SubscribePage() {
     redirect("/login");
   }
 
-  const initial = await getBillingOverview(session.user.id);
+  const initial = await getBillingOverview(session.user.id, session.user.email);
 
   return (
     <div className="relative min-h-screen min-h-[100dvh] w-full bg-slate-900">

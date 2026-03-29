@@ -15,8 +15,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     const body = (await request.json()) as { email?: string; newPassword?: string };
     const email = body.email?.trim().toLowerCase();
-    const newPassword =
-      typeof body.newPassword === "string" ? body.newPassword : String(body.newPassword ?? "");
+    const newPassword = (
+      typeof body.newPassword === "string" ? body.newPassword : String(body.newPassword ?? "")
+    ).trim();
 
     if (!email || !newPassword) {
       return NextResponse.json({ error: "Email and new password are required." }, { status: 400 });

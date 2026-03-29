@@ -27,6 +27,7 @@ export function DashboardHeaderAccount({
       <button
         type="button"
         onClick={onConnectAmazon}
+        title="Links your Amazon seller account (Seller Central). Your app login email can be different."
         className="w-full rounded-lg border border-teal-500/60 bg-teal-500/10 px-3 py-2 text-sm font-semibold text-teal-300 hover:bg-teal-500/20 hover:text-teal-200 transition-colors sm:w-auto sm:py-1.5 sm:text-xs"
       >
         Connect Amazon account

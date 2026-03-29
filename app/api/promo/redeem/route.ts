@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { auth } from "@/auth";
+import { ensureEnvOwnerPromoRow } from "@/lib/billing/ensureOwnerPromoCode";
 import { prisma } from "@/lib/db";
+import { normalizePromoCodeInput } from "@/lib/promoCodeNormalize";
 
 export const runtime = "nodejs";
 
@@ -18,16 +20,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
 
-  const raw = body.code?.trim();
-  if (!raw) {
+  const code = normalizePromoCodeInput(typeof body.code === "string" ? body.code : "");
+  if (!code) {
     return NextResponse.json({ error: "Promo code is required." }, { status: 400 });
   }
-
-  const code = raw.toUpperCase();
   const userId = session.user.id;
 
   try {
     const result = await prisma.$transaction(async (tx) => {
+      await ensureEnvOwnerPromoRow(tx, code);
       const promo = await tx.promoCode.findUnique({
         where: { code },
       });

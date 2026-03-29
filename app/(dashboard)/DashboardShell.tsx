@@ -227,6 +227,15 @@ function LeftNavWithCategories({
   );
 }
 
+function mobilePageTitle(pathname: string): string {
+  const p = pathname.split("?")[0] ?? pathname;
+  if (p === "/" || p === "") return "Explorer";
+  if (p.startsWith("/analyzer")) return "Analyzer";
+  if (p.startsWith("/saved")) return "Saved";
+  if (p.startsWith("/subscribe")) return "Plan & billing";
+  return "HIGH FOCUS";
+}
+
 function MobileMenuOpenButton({ onClick, menuOpen }: { onClick: () => void; menuOpen: boolean }) {
   return (
     <button
@@ -271,7 +280,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           <div className="relative z-[1] flex min-h-screen min-h-[100dvh] w-full flex-col md:flex-row">
             <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center gap-3 border-b border-slate-700/80 bg-slate-900/95 px-3 backdrop-blur-md md:hidden">
               <MobileMenuOpenButton onClick={() => setMobileDrawerOpen(true)} menuOpen={mobileDrawerOpen} />
-              <span className="truncate text-sm font-semibold text-slate-100">HIGH FOCUS</span>
+              <span className="min-w-0 truncate text-sm font-semibold text-slate-100">
+                {mobilePageTitle(pathname)}
+              </span>
             </header>
             {mobileDrawerOpen ? (
               <button

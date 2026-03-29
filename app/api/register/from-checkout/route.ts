@@ -25,7 +25,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const sessionId = body.sessionId?.trim();
   const rawPassword = body.password;
-  const password = typeof rawPassword === "string" ? rawPassword : String(rawPassword ?? "");
+  const password = (typeof rawPassword === "string" ? rawPassword : String(rawPassword ?? "")).trim();
   const name = body.name?.trim() ?? null;
 
   if (!sessionId) {

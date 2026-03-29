@@ -8,7 +8,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   if (!session?.user?.id) {
     redirect("/login");
   }
-  if (!(await userHasAppAccess(session.user.id))) {
+  if (!(await userHasAppAccess(session.user.id, session.user.email))) {
     redirect("/subscribe");
   }
   return <DashboardShell>{children}</DashboardShell>;

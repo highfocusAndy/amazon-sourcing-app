@@ -65,7 +65,9 @@ export function AmazonAccountModal({ onClose }: { onClose: () => void }) {
         </header>
         <div className="px-6 pb-6 pt-4">
           <p className="mb-3 text-sm text-slate-600">
-            Connect your Amazon seller account. This is required for Explorer and Analyzer to call Amazon&apos;s APIs.
+            Connect your <strong className="font-semibold text-slate-800">Amazon seller</strong> account (the email you
+            use for Seller Central can be different from your HIGH FOCUS app login). Explorer and Analyzer need this to
+            call Amazon&apos;s APIs on your behalf.
           </p>
           <AmazonAccountForm onStatusChange={setStatus} />
         </div>

@@ -17,7 +17,7 @@ export default async function SettingsPage({
   if (!session?.user?.id) {
     redirect("/login");
   }
-  if (!(await userHasAppAccess(session.user.id))) {
+  if (!(await userHasAppAccess(session.user.id, session.user.email))) {
     redirect("/subscribe");
   }
 

@@ -21,7 +21,9 @@ export function CompleteRecoveryForm({ token, email }: Props) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (password !== confirmPassword) {
+    const pw = password.trim();
+    const pw2 = confirmPassword.trim();
+    if (pw !== pw2) {
       setError("Passwords do not match.");
       return;
     }
@@ -30,7 +32,7 @@ export function CompleteRecoveryForm({ token, email }: Props) {
       const res = await fetch("/api/register/from-checkout-recovery", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, password, name: name.trim() || undefined }),
+        body: JSON.stringify({ token, password: pw, name: name.trim() || undefined }),
       });
       const data = (await res.json()) as { error?: string; email?: string };
       if (!res.ok) {
@@ -40,7 +42,7 @@ export function CompleteRecoveryForm({ token, email }: Props) {
       const signEmail = data.email ?? email;
       const result = await signIn("credentials", {
         email: signEmail,
-        password,
+        password: pw,
         redirect: false,
       });
       if (!result || result.error) {

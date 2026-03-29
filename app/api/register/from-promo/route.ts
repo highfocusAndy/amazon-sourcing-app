@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { hash } from "bcryptjs";
 
 import { noSignupTrialEndsAt } from "@/lib/billing/access";
+import { ensureEnvOwnerPromoRow } from "@/lib/billing/ensureOwnerPromoCode";
 import { prisma } from "@/lib/db";
+import { normalizePromoCodeInput } from "@/lib/promoCodeNormalize";
 
 export const runtime = "nodejs";
 
@@ -18,10 +20,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const email = body.email?.trim().toLowerCase();
   const rawPassword = body.password;
-  const password = typeof rawPassword === "string" ? rawPassword : String(rawPassword ?? "");
+  const password = (typeof rawPassword === "string" ? rawPassword : String(rawPassword ?? "")).trim();
   const name = body.name?.trim() ?? null;
-  const raw = body.code?.trim();
-  const code = raw ? raw.toUpperCase() : "";
+  const code = normalizePromoCodeInput(typeof body.code === "string" ? body.code : "");
 
   if (!email || !password || !code) {
     return NextResponse.json({ error: "Promo code, email, and password are required." }, { status: 400 });
@@ -45,6 +46,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   try {
     const result = await prisma.$transaction(async (tx) => {
+      await ensureEnvOwnerPromoRow(tx, code);
       const promo = await tx.promoCode.findUnique({ where: { code } });
       if (!promo || !promo.active) {
         return { ok: false as const, message: "Invalid or inactive promo code." };

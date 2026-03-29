@@ -11,8 +11,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     const body = (await request.json()) as { token?: string; newPassword?: string };
     token = typeof body.token === "string" ? body.token.trim() : "";
-    newPassword =
-      typeof body.newPassword === "string" ? body.newPassword : String(body.newPassword ?? "");
+    newPassword = (
+      typeof body.newPassword === "string" ? body.newPassword : String(body.newPassword ?? "")
+    ).trim();
   } catch {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });
   }

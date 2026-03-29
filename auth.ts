@@ -19,7 +19,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         passkeyToken: { label: "Passkey session", type: "text" },
       },
       async authorize(credentials) {
-        console.error("[Auth] authorize() called, keys:", credentials ? Object.keys(credentials) : "null");
         const raw = (credentials ?? {}) as Record<string, unknown>;
         const passkeyTokenRaw = typeof raw.passkeyToken === "string" ? raw.passkeyToken.trim() : "";
         if (passkeyTokenRaw) {
@@ -49,9 +48,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         } else {
           email = email.trim().toLowerCase();
         }
-        if (!email || !password) {
+        const passwordForCompare = password.trim();
+        if (!email || !passwordForCompare) {
           if (process.env.NODE_ENV === "development") {
-            console.error("[Auth] Login failed: missing email or password", { hasEmail: !!email, hasPassword: !!password });
+            console.error("[Auth] Login failed: missing email or password", { hasEmail: !!email, hasPassword: !!passwordForCompare });
           }
           return null;
         }
@@ -63,7 +63,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             }
             return null;
           }
-          const ok = await compare(password, user.passwordHash);
+          // Match trimmed password (same as LoginForm). Also try raw input for accounts created before trim-on-register.
+          let ok = await compare(passwordForCompare, user.passwordHash);
+          if (!ok && password !== passwordForCompare) {
+            ok = await compare(password, user.passwordHash);
+          }
           if (!ok) {
             if (process.env.NODE_ENV === "development") {
               console.error("[Auth] Login failed: wrong password for email", email);
@@ -95,11 +99,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (path.startsWith("/api/")) return true;
       return !!auth?.user;
     },
-    jwt({ token, user }) {
+    async jwt({ token, user }) {
       if (user) {
         token.id = user.id;
         token.email = user.email;
         token.name = user.name;
+      }
+      // Keep token.id aligned with the DB row for this email (fixes stale JWT after DB restore / user id change).
+      const em = typeof token.email === "string" ? token.email.trim().toLowerCase() : "";
+      // Avoid Prisma on the Edge runtime (middleware); Node RSC / API routes will resync the id.
+      if (em && process.env.NEXT_RUNTIME !== "edge") {
+        try {
+          const row = await prisma.user.findUnique({ where: { email: em }, select: { id: true } });
+          if (row) token.id = row.id;
+        } catch {
+          /* leave token as-is */
+        }
       }
       return token;
     },

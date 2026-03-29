@@ -1,6 +1,6 @@
 import { auth } from "@/auth";
 import { NextResponse } from "next/server";
-import { userHasAppAccess } from "@/lib/billing/access";
+import { billingUserHasAppAccess, loadBillingUser } from "@/lib/billing/access";
 
 export type AppAccessResult =
   | { ok: true; userId: string }
@@ -14,7 +14,11 @@ export async function requireAppAccess(): Promise<AppAccessResult> {
   if (!session?.user?.id) {
     return { ok: false, response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
   }
-  if (!(await userHasAppAccess(session.user.id))) {
+  const billingUser = await loadBillingUser(session.user.id, session.user.email);
+  if (!billingUser) {
+    return { ok: false, response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
+  }
+  if (!(await billingUserHasAppAccess(billingUser))) {
     return {
       ok: false,
       response: NextResponse.json(
@@ -26,5 +30,5 @@ export async function requireAppAccess(): Promise<AppAccessResult> {
       ),
     };
   }
-  return { ok: true, userId: session.user.id };
+  return { ok: true, userId: billingUser.id };
 }

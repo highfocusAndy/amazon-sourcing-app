@@ -510,6 +510,17 @@ function AnalyzerPageContent() {
     refreshAmazonHeaderStatus();
   }, [refreshAmazonHeaderStatus]);
 
+  useEffect(() => {
+    if (!mobileDetailsOpen) return;
+    const mq = window.matchMedia("(max-width: 1023px)");
+    if (!mq.matches) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [mobileDetailsOpen]);
+
   const searchParams = useSearchParams();
   useEffect(() => {
     const asin = searchParams.get("asin");
@@ -955,6 +966,7 @@ function AnalyzerPageContent() {
     setSelectedProduct(item);
     setPopupQuantity("");
     setDetailPanelCost("");
+    setMobileDetailsOpen(true);
     if (item.asin && item.buyBoxPrice == null) {
       setPanelAnalysisLoading(true);
       try {
@@ -1708,10 +1720,10 @@ function AnalyzerPageContent() {
       {showAmazonAccountModal && (
         <AmazonAccountModal onClose={() => setShowAmazonAccountModal(false)} />
       )}
-      <main className="flex-1 min-w-0 flex flex-col gap-4 p-4 mr-0 sm:gap-6 sm:p-6 lg:mr-80 xl:mr-96">
-        <header className="sticky top-14 z-20 rounded-xl border border-slate-600/80 bg-slate-800/95 px-3 py-3 shadow-lg shadow-black/10 border-t-4 border-t-teal-500 backdrop-blur sm:px-4 sm:py-4 md:top-0">
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 p-4 max-md:min-h-[calc(100dvh-3.5rem)] mr-0 sm:gap-6 sm:p-6 lg:mr-80 xl:mr-96">
+        <header className="sticky top-14 z-20 shrink-0 rounded-xl border border-slate-600/80 bg-slate-800/95 px-3 py-3 shadow-lg shadow-black/10 border-t-4 border-t-teal-500 backdrop-blur sm:px-4 sm:py-4 md:top-0">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-            <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+            <div className="hidden min-w-0 items-center gap-2 sm:gap-3 md:flex">
               <div className="flex min-w-0 items-center gap-2 sm:gap-3">
                 <img
                   src="/HF_LOGO.png"
@@ -1733,7 +1745,10 @@ function AnalyzerPageContent() {
           </div>
         </header>
 
-      <form onSubmit={handleLookupSubmit} className="rounded-xl border border-slate-600/80 bg-slate-800/90 p-6 shadow-lg shadow-black/10">
+      <form
+        onSubmit={handleLookupSubmit}
+        className="shrink-0 rounded-xl border border-slate-600/80 bg-slate-800/90 p-6 shadow-lg shadow-black/10"
+      >
         <div className="space-y-4">
           <label className="block">
             <span className="text-sm font-medium text-slate-300">Keyword</span>
@@ -1784,17 +1799,19 @@ function AnalyzerPageContent() {
       </form>
 
       {errorMessage ? (
-        <div className="rounded-lg border border-rose-800 bg-rose-900/30 px-4 py-3 text-sm text-rose-300">{errorMessage}</div>
+        <div className="shrink-0 rounded-lg border border-rose-800 bg-rose-900/30 px-4 py-3 text-sm text-rose-300">
+          {errorMessage}
+        </div>
       ) : null}
       {infoMessage ? (
-        <div className="rounded-lg border border-emerald-800 bg-emerald-900/30 px-4 py-3 text-sm text-emerald-300">
+        <div className="shrink-0 rounded-lg border border-emerald-800 bg-emerald-900/30 px-4 py-3 text-sm text-emerald-300">
           {infoMessage}
         </div>
       ) : null}
 
       {results.length > 0 ? (
-        <>
-      <section className="rounded-xl border border-slate-700 bg-slate-800/90 px-4 py-3 shadow-sm">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
+      <section className="shrink-0 rounded-xl border border-slate-700 bg-slate-800/90 px-4 py-3 shadow-sm">
         <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
           <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
             {lastRunMode === "upload" ? "Batch summary" : "Lookup results"}
@@ -1819,8 +1836,8 @@ function AnalyzerPageContent() {
         </div>
       </section>
 
-      <section className="overflow-hidden rounded-xl border border-slate-700 bg-slate-800/90 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-700 px-4 py-3">
+      <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-700 bg-slate-800/90 shadow-sm">
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-slate-700 px-4 py-3">
           <div className="flex flex-wrap items-center gap-3">
             <label className="text-sm font-medium text-slate-300">
               View
@@ -1866,7 +1883,9 @@ function AnalyzerPageContent() {
             {filteredSortedResults.length > RESULTS_PAGE_SIZE
               ? ` · Page ${resultsPage} of ${totalPages} (${RESULTS_PAGE_SIZE} per page)`
               : ""}
-            {" · "}Click a row for details in the right panel
+            {" · "}
+            <span className="max-lg:hidden">Click a row for details in the right panel</span>
+            <span className="lg:hidden">Tap a row for product details</span>
           </p>
           {isKeywordMode && lastKeyword && (
             <div className="flex items-center gap-2">
@@ -1889,7 +1908,7 @@ function AnalyzerPageContent() {
             </div>
           )}
         </div>
-        <div className="max-h-[60vh] overflow-auto">
+        <div className="min-h-0 min-w-0 flex-1 overflow-auto md:max-h-[60vh]">
           <table className="min-w-full border-collapse text-left text-sm">
             <thead className="bg-slate-700/50 text-xs uppercase tracking-wide text-slate-400">
               <tr>
@@ -1957,7 +1976,7 @@ function AnalyzerPageContent() {
           </table>
         </div>
         {totalPages > 1 && (
-          <div className="flex items-center justify-between gap-4 border-t border-slate-700 px-4 py-3">
+          <div className="flex shrink-0 items-center justify-between gap-4 border-t border-slate-700 px-4 py-3">
             <button
               type="button"
               onClick={() => setResultsPage((p) => Math.max(1, p - 1))}
@@ -1980,10 +1999,10 @@ function AnalyzerPageContent() {
           </div>
         )}
       </section>
-        </>
+        </div>
       ) : null}
 
-      <details className="group rounded-xl border border-slate-700 bg-slate-800/90 shadow-sm">
+      <details className="group shrink-0 rounded-xl border border-slate-700 bg-slate-800/90 shadow-sm">
         <summary className="cursor-pointer list-none px-6 py-4 text-sm font-semibold text-slate-300 hover:bg-slate-700/50 [&::-webkit-details-marker]:hidden">
           Bulk upload
         </summary>
@@ -2067,20 +2086,35 @@ function AnalyzerPageContent() {
       ) : null}
     </main>
 
+      {mobileDetailsOpen ? (
+        <button
+          type="button"
+          aria-label="Dismiss product details"
+          className="fixed inset-0 z-40 bg-slate-950/60 backdrop-blur-[1px] lg:hidden"
+          onClick={() => setMobileDetailsOpen(false)}
+        />
+      ) : null}
+
       <aside
-        className={`fixed inset-0 z-50 overflow-y-auto bg-slate-800 border-l border-slate-700 shadow-xl lg:inset-auto lg:right-0 lg:top-0 lg:h-screen lg:w-80 lg:rounded-l-xl xl:w-96 ${
-          mobileDetailsOpen ? "block" : "hidden"
-        } lg:block`}
+        className={`fixed z-50 overflow-y-auto border-l border-slate-700 bg-slate-800 shadow-xl transition-transform duration-300 ease-out max-lg:right-0 max-lg:top-0 max-lg:h-full max-lg:w-full max-lg:max-w-xl ${
+          mobileDetailsOpen ? "max-lg:translate-x-0" : "max-lg:pointer-events-none max-lg:translate-x-full"
+        } lg:pointer-events-auto lg:inset-auto lg:right-0 lg:top-0 lg:block lg:h-screen lg:w-80 lg:translate-x-0 lg:rounded-l-xl xl:w-96`}
       >
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-700 bg-slate-800 px-4 py-3">
-          <h3 className="text-base font-semibold text-slate-100">Product details</h3>
-          <div className="flex items-center gap-2">
+        <div className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-slate-700 bg-slate-800 px-3 py-3 sm:px-4">
+          <h3 className="min-w-0 truncate text-base font-semibold text-slate-100">Product details</h3>
+          <div className="flex shrink-0 items-center gap-2">
             <button
               type="button"
-              onClick={() => setMobileDetailsOpen(false)}
-              className="rounded-lg border border-slate-600 bg-slate-700 px-3 py-1.5 text-sm font-semibold text-slate-200 hover:bg-slate-600 lg:hidden"
+              onClick={() => {
+                setMobileDetailsOpen(false);
+                setSelectedProduct(null);
+                setPopupQuantity("");
+                setDetailPanelCost("");
+              }}
+              className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-600 bg-slate-700 text-xl leading-none text-slate-100 hover:bg-slate-600 lg:hidden"
+              aria-label="Close and return to Analyzer"
             >
-              Back
+              <span aria-hidden>×</span>
             </button>
             {selectedProduct ? (
               <button
@@ -2091,7 +2125,7 @@ function AnalyzerPageContent() {
                   setDetailPanelCost("");
                   setMobileDetailsOpen(false);
                 }}
-                className="rounded-lg border border-slate-600 bg-slate-700 px-3 py-1.5 text-sm font-semibold text-slate-200 hover:bg-slate-600"
+                className="hidden rounded-lg border border-slate-600 bg-slate-700 px-3 py-1.5 text-sm font-semibold text-slate-200 hover:bg-slate-600 lg:inline-flex"
               >
                 Clear
               </button>

@@ -171,13 +171,15 @@ export function SubscribeContent({
           </p>
         ) : null}
         <p className="mt-2 text-sm text-slate-400">
-          {overview.testingBillingPass
-            ? "No payment required while this flag is enabled."
-            : overview.trialDaysLeft > 0
-              ? `Trial: about ${overview.trialDaysLeft} day(s) left.`
-              : overview.promoDaysLeft > 0
-                ? `Promo access: about ${overview.promoDaysLeft} day(s) left.`
-                : "Your account is active."}
+          {overview.appOwnerAccess
+            ? "Owner access — this account always has full use of the app."
+            : overview.testingBillingPass
+              ? "No payment required while this flag is enabled."
+              : overview.trialDaysLeft > 0
+                ? `Trial: about ${overview.trialDaysLeft} day(s) left.`
+                : overview.promoDaysLeft > 0
+                  ? `Promo access: about ${overview.promoDaysLeft} day(s) left.`
+                  : "Your account is active."}
         </p>
         {overview.stripeConfigured ? (
           <div className="mt-6 space-y-2">
@@ -254,74 +256,106 @@ export function SubscribeContent({
         ) : null}
         <h1 className="text-xl font-bold text-white">Continue using the app</h1>
         <p className="mt-2 text-sm text-slate-400">
+          You sign in with your <strong className="font-medium text-slate-300">email and password</strong> — you only
+          needed your invite code once to create this account.
+        </p>
+        <p className="mt-2 text-sm text-slate-400">
           {overview.subscriptionsPaused
-            ? "Your access has ended. If you were given a promo code, enter it below. Card checkout is off while we are in testing."
-            : "Your trial has ended (or access expired). If you were given a promo code, enter it below, or subscribe with a card."}
+            ? "Your access period has ended. Card checkout is off while we are in testing — use a new invite code below if you have one."
+            : "Your trial or invite access has ended. Subscribe below to renew. If the team gave you another extension code, you can apply it after this section."}
         </p>
 
-        <form onSubmit={onRedeemPromo} className="mt-6 space-y-3">
-          <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Promo code</label>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={promoCode}
-              onChange={(e) => setPromoCode(e.target.value)}
-              placeholder="Enter code"
-              className="min-w-0 flex-1 rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white placeholder:text-slate-500"
-              autoComplete="off"
-            />
+        {overview.stripeConfigured && !overview.subscriptionsPaused ? (
+          <div className="mt-6 space-y-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Subscribe</p>
+            {overview.subscriptionTrialDays > 0 ? (
+              <p className="text-xs text-slate-500">
+                {overview.subscriptionTrialDays}-day trial on the subscription: enter a card at checkout (kept on file).
+                You are not charged until the trial ends; after that, Stripe bills automatically each period unless you
+                cancel in the customer portal.
+              </p>
+            ) : (
+              <p className="text-xs text-slate-500">
+                You will be charged at checkout; subscription renews automatically until you cancel in the customer
+                portal.
+              </p>
+            )}
             <button
-              type="submit"
-              disabled={promoLoading || !promoCode.trim()}
-              className="shrink-0 rounded-lg bg-slate-700 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-600 disabled:opacity-50"
+              type="button"
+              onClick={() => void onCheckout()}
+              disabled={checkoutLoading}
+              className="w-full rounded-xl bg-gradient-to-r from-teal-500 to-cyan-600 py-3 text-sm font-semibold text-white shadow-lg shadow-teal-500/20 disabled:pointer-events-none disabled:opacity-40"
             >
-              {promoLoading ? "…" : "Apply"}
+              {checkoutLoading
+                ? "Redirecting to secure checkout…"
+                : overview.subscriptionTrialDays > 0
+                  ? `Start subscription (${overview.subscriptionTrialDays}-day trial)`
+                  : "Pay with card (Stripe)"}
             </button>
           </div>
-          {promoError ? <p className="text-sm text-rose-400">{promoError}</p> : null}
-        </form>
+        ) : null}
 
-        <div className="my-8 border-t border-slate-700 pt-8">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Subscribe</p>
-          {overview.stripeConfigured ? (
-            <>
-              {overview.subscriptionsPaused ? (
-                <p className="mt-2 text-xs text-amber-200/90">
-                  Checkout is disabled during testing. Use a promo code above, or come back after we open paid signup.
-                </p>
-              ) : overview.subscriptionTrialDays > 0 ? (
-                <p className="mt-2 text-xs text-slate-500">
-                  {overview.subscriptionTrialDays}-day trial on the subscription: enter a card at checkout (kept on
-                  file). You are not charged until the trial ends; after that, Stripe bills automatically each period
-                  unless you cancel in the customer portal.
-                </p>
-              ) : (
-                <p className="mt-2 text-xs text-slate-500">
-                  You will be charged at checkout; subscription renews automatically until you cancel in the customer
-                  portal.
-                </p>
-              )}
-              <button
-                type="button"
-                onClick={() => void onCheckout()}
-                disabled={checkoutLoading || overview.subscriptionsPaused}
-                className="mt-3 w-full rounded-xl bg-gradient-to-r from-teal-500 to-cyan-600 py-3 text-sm font-semibold text-white shadow-lg shadow-teal-500/20 disabled:pointer-events-none disabled:opacity-40"
-              >
-                {overview.subscriptionsPaused
-                  ? "Paid signup not available yet"
-                  : checkoutLoading
-                    ? "Redirecting to secure checkout…"
-                    : overview.subscriptionTrialDays > 0
-                      ? `Start subscription (${overview.subscriptionTrialDays}-day trial)`
-                      : "Pay with card (Stripe)"}
-              </button>
-            </>
-          ) : (
-            <p className="mt-3 text-sm text-amber-200/90">
-              Stripe is not configured yet. Add STRIPE_SECRET_KEY and STRIPE_PRICE_ID to the server environment.
+        <div
+          className={
+            overview.stripeConfigured && !overview.subscriptionsPaused
+              ? "mt-8 space-y-3 border-t border-slate-700 pt-8"
+              : "mt-6 space-y-3"
+          }
+        >
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            {overview.stripeConfigured && !overview.subscriptionsPaused
+              ? "Optional: invite code (extra time)"
+              : "Promo code"}
+          </p>
+          {overview.stripeConfigured && !overview.subscriptionsPaused ? (
+            <p className="text-xs text-slate-500">
+              Only if you received a new code — not required to sign in day to day.
             </p>
-          )}
+          ) : null}
+          <form onSubmit={onRedeemPromo} className="space-y-3">
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={promoCode}
+                onChange={(e) => setPromoCode(e.target.value)}
+                placeholder="Enter code"
+                className="min-w-0 flex-1 rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white placeholder:text-slate-500"
+                autoComplete="off"
+              />
+              <button
+                type="submit"
+                disabled={promoLoading || !promoCode.trim()}
+                className="shrink-0 rounded-lg bg-slate-700 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-600 disabled:opacity-50"
+              >
+                {promoLoading ? "…" : "Apply"}
+              </button>
+            </div>
+            {promoError ? <p className="text-sm text-rose-400">{promoError}</p> : null}
+          </form>
         </div>
+
+        {overview.stripeConfigured && overview.subscriptionsPaused ? (
+          <div className="mt-8 space-y-3 border-t border-slate-700 pt-8">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Subscribe</p>
+            <p className="text-xs text-amber-200/90">
+              Checkout is disabled during testing. Use a promo code above, or come back after we open paid signup.
+            </p>
+            <button
+              type="button"
+              onClick={() => void onCheckout()}
+              disabled
+              className="w-full rounded-xl bg-gradient-to-r from-teal-500 to-cyan-600 py-3 text-sm font-semibold text-white shadow-lg shadow-teal-500/20 pointer-events-none opacity-40"
+            >
+              Paid signup not available yet
+            </button>
+          </div>
+        ) : null}
+
+        {!overview.stripeConfigured ? (
+          <p className="mt-6 text-sm text-amber-200/90">
+            Stripe is not configured yet. Add STRIPE_SECRET_KEY and STRIPE_PRICE_ID to the server environment.
+          </p>
+        ) : null}
 
         <p className="mt-6 text-sm text-slate-500">
           Signed in as the wrong person?{" "}
