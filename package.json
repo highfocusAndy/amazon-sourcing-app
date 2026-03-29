@@ -10,6 +10,8 @@
     "start": "next start",
     "start:deploy": "prisma migrate deploy && next start",
     "lint": "eslint --max-warnings=0",
+    "db:seed": "prisma db seed",
+    "db:reset-all": "cross-env FULL_ENV_RESET=true prisma db seed",
     "stripe:webhook": "stripe listen --forward-to localhost:3000/api/billing/webhook --print-secret"
   },
   "repository": {
@@ -60,6 +62,7 @@
     "eslint": "^9.39.3",
     "eslint-config-next": "^16.1.6",
     "tailwindcss": "^4.2.0",
+    "cross-env": "^7.0.3",
     "tsx": "^4.19.4",
     "typescript": "^5.9.3"
   }

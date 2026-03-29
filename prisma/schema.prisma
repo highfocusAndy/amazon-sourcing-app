@@ -26,6 +26,7 @@ model User {
   preferences          UserPreferences?
   passkeys             PasskeyCredential[]
   promoRedemptions     PromoRedemption[]
+  passwordResetTokens  PasswordResetToken[]
 }
 
 /// WebAuthn / passkey credentials (Face ID, Touch ID, device PIN, security keys).
@@ -61,6 +62,19 @@ model PasskeyLoginToken {
   userId    String
   expiresAt DateTime
 
+  @@index([expiresAt])
+}
+
+/// One-time link for forgot-password flow (hashed at rest; raw token only in email).
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
   @@index([expiresAt])
 }
 

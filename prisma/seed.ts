@@ -4,20 +4,28 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
+/** Set FULL_ENV_RESET=true when seeding to wipe ALL users and ALL promo codes, then mint fresh tester codes. Never use on production unless you intend to delete every account. */
+const fullReset =
+  process.env.FULL_ENV_RESET === "true" || process.env.FULL_ENV_RESET === "1";
+
 /** How many single-use tester promos to create (opaque codes — not 001, 002, …). */
 const TESTER_CODE_COUNT = 40;
 
 const ALNUM = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
-/** Stable, non-sequential codes so re-running seed does not reshuffle invites. */
+/**
+ * Stable, non-sequential codes. Bump the label when you ship a fresh batch after a full reset
+ * so new codes differ from the previous set.
+ */
+const OPAQUE_SEED_LABEL = "hf-promo-seed-v3";
+
 function opaqueCodes(count: number): string[] {
   const out: string[] = [];
   const seen = new Set<string>();
-  let state = createHash("sha256").update("hf-promo-seed-v2").digest();
+  let state = createHash("sha256").update(OPAQUE_SEED_LABEL).digest();
   let counter = 0;
   while (out.length < count) {
     state = createHash("sha256").update(state).update(String(counter++)).digest();
-    // 7–11 random-looking chars after HF- (length varies — harder to guess neighbors)
     const len = 7 + (state[0] % 5);
     let s = "HF-";
     for (let i = 0; i < len; i++) {
@@ -31,7 +39,23 @@ function opaqueCodes(count: number): string[] {
   return out;
 }
 
+async function runFullReset(): Promise<void> {
+  console.warn(
+    "\n⚠️  FULL_ENV_RESET: removing all users (accounts, passkeys, Amazon links), passkey login tokens, all promo codes & redemptions, challenges, and API cache.\n",
+  );
+  await prisma.passkeyLoginToken.deleteMany();
+  await prisma.user.deleteMany();
+  await prisma.promoCode.deleteMany();
+  await prisma.passkeyChallenge.deleteMany();
+  await prisma.apiResponseCache.deleteMany();
+  console.warn("FULL_ENV_RESET: wipe complete.\n");
+}
+
 async function main(): Promise<void> {
+  if (fullReset) {
+    await runFullReset();
+  }
+
   await prisma.promoCode.updateMany({
     where: { code: { in: ["BETA2026", "KEEPACCESS"] } },
     data: { active: false },
@@ -58,14 +82,21 @@ async function main(): Promise<void> {
         active: true,
         grantsDays: 30,
         maxRedemptions: 1,
+        redemptionCount: 0,
         allowRepeatRedemption: false,
       },
     });
   }
 
-  console.log(
-    `Promos: deactivated BETA2026, KEEPACCESS, and old HF-TST-* codes (if any). Created/updated ${codes.length} opaque single-use codes.`,
-  );
+  if (fullReset) {
+    console.log(
+      `Full reset + promos: created/refreshed ${codes.length} opaque single-use codes (redemption counts zeroed on upsert).`,
+    );
+  } else {
+    console.log(
+      `Promos: deactivated BETA2026, KEEPACCESS, and old HF-TST-* codes (if any). Created/updated ${codes.length} opaque single-use codes (existing rows get redemptionCount reset on upsert).`,
+    );
+  }
   console.log("Give each tester exactly ONE code (first 8 shown):");
   console.log(codes.slice(0, 8).join(", "));
   console.log("… full list: Prisma Studio → PromoCode, or scroll your terminal");

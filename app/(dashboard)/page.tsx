@@ -629,17 +629,19 @@ export default function ExplorerPage() {
       <Suspense fallback={null}>
         <AmazonOAuthAlerts />
       </Suspense>
-      <main className="flex-1 min-w-0 flex flex-col gap-6 p-6 mr-0 lg:mr-80 xl:mr-96">
-        <header className="sticky top-0 z-20 rounded-xl border border-slate-600/80 bg-slate-800/95 px-4 py-4 shadow-lg shadow-black/10 border-t-4 border-t-teal-500 backdrop-blur">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-3">
+      <main className="flex-1 min-w-0 flex flex-col gap-4 p-4 mr-0 sm:gap-6 sm:p-6 lg:mr-80 xl:mr-96">
+        <header className="sticky top-14 z-20 rounded-xl border border-slate-600/80 bg-slate-800/95 px-3 py-3 shadow-lg shadow-black/10 border-t-4 border-t-teal-500 backdrop-blur sm:px-4 sm:py-4 md:top-0">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+            <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+              <div className="flex min-w-0 items-center gap-2 sm:gap-3">
                 <img
                   src="/HF_LOGO.png"
                   alt="HIGH FOCUS Professional"
-                  className="h-12 w-auto brightness-0 invert"
+                  className="h-9 w-auto shrink-0 brightness-0 invert sm:h-12"
                 />
-                <h1 className="text-lg font-bold text-slate-100 tracking-tight">HIGH FOCUS Sourcing App</h1>
+                <h1 className="min-w-0 truncate text-base font-bold text-slate-100 tracking-tight sm:text-lg sm:whitespace-normal">
+                  HIGH FOCUS Sourcing App
+                </h1>
               </div>
             </div>
             <DashboardHeaderAccount

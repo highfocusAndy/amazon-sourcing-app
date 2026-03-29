@@ -9,9 +9,7 @@ export default function ResetPasswordPage() {
         <h1 className="text-center text-xl font-bold tracking-tight text-slate-900">
           Reset password
         </h1>
-        <p className="mt-2 text-center text-sm text-slate-600">
-          Set a new password for your account
-        </p>
+        <p className="mt-2 text-center text-sm text-slate-600">Enter your email</p>
         <ResetPasswordForm />
       </div>
     </div>

@@ -2,19 +2,13 @@
 
 import { useState } from "react";
 import { ChangePasswordForm } from "./ChangePasswordForm";
-import { ResetPasswordForm } from "@/app/reset-password/ResetPasswordForm";
 import { PasskeysSection } from "./PasskeysSection";
 import { ManagePasskeySection } from "./ManagePasskeySection";
 
-export type AccountSection =
-  | "change-password"
-  | "reset-password"
-  | "add-passkey"
-  | "change-passkey";
+export type AccountSection = "change-password" | "add-passkey" | "change-passkey";
 
 const MENU_ITEMS: { id: AccountSection; label: string; icon: string }[] = [
   { id: "change-password", label: "Change password", icon: "🔑" },
-  { id: "reset-password", label: "Reset password", icon: "✉️" },
   { id: "add-passkey", label: "Add passkey", icon: "🔐" },
   { id: "change-passkey", label: "Manage passkeys", icon: "🔄" },
 ];
@@ -63,16 +57,6 @@ export function AccountSettingsPanels() {
                 Update your password. You will stay signed in.
               </p>
               <ChangePasswordForm className="mt-4" />
-            </div>
-          )}
-
-          {section === "reset-password" && (
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-lg shadow-slate-200/50">
-              <h2 className="text-lg font-semibold text-slate-900">Reset password</h2>
-              <p className="mt-1 text-sm text-slate-600">
-                Set a new password. In development you can set it directly; in production you’ll receive a reset link by email.
-              </p>
-              <ResetPasswordForm />
             </div>
           )}
 

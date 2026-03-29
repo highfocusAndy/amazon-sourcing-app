@@ -32,10 +32,13 @@ export default auth((req) => {
     process.env.NODE_ENV === "development" &&
     path.startsWith("/api/debug/") &&
     (typeof req.method === "undefined" || req.method === "GET");
-  const isResetPassword =
+  const isResetPasswordDev =
     process.env.NODE_ENV === "development" &&
-    path === "/api/reset-password" &&
-    (typeof req.method === "undefined" || req.method === "POST");
+    path === "/api/reset-password/dev" &&
+    req.method === "POST";
+  const isPasswordResetPublic =
+    (path === "/api/reset-password/request" || path === "/api/reset-password/confirm") &&
+    req.method === "POST";
   /** SP-API website OAuth: Amazon redirects the browser here before the app session may exist. */
   const isAmazonOAuthPublicGet =
     (path === "/api/amazon/oauth/login" || path === "/api/amazon/oauth/callback") &&
@@ -62,7 +65,8 @@ export default auth((req) => {
     ) &&
     !isCatalogGet &&
     !isDebugGet &&
-    !isResetPassword &&
+    !isResetPasswordDev &&
+    !isPasswordResetPublic &&
     !isAmazonOAuthPublicGet &&
     !isAmazonOAuthStartGet &&
     !isPasskeyLoginPost &&

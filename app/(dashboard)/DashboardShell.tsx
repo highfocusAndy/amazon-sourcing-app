@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { signOut } from "next-auth/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { SavedProductsProvider } from "@/app/context/SavedProductsContext";
 import { ExplorerCategoryProvider, useExplorerCategoryOptional } from "@/app/context/ExplorerCategoryContext";
 import { TOP_LEVEL_CATEGORIES, getSubcategoriesForCategory } from "@/lib/catalogCategories";
@@ -17,15 +17,18 @@ function NavLink({
   active,
   icon,
   children,
+  onNavigate,
 }: {
   href: string;
   active: boolean;
   icon: string;
   children: React.ReactNode;
+  onNavigate?: () => void;
 }) {
   return (
     <Link
       href={href}
+      onClick={() => onNavigate?.()}
       className={`flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${
         active
           ? "font-semibold text-teal-300 bg-teal-500/15 border-l-2 border-teal-400 shadow-[inset_0_0_20px_-10px_rgba(20,184,166,0.3)]"
@@ -40,7 +43,13 @@ function NavLink({
   );
 }
 
-function LeftNavWithCategories() {
+function LeftNavWithCategories({
+  mobileDrawerOpen,
+  onCloseMobileMenu,
+}: {
+  mobileDrawerOpen: boolean;
+  onCloseMobileMenu: () => void;
+}) {
   const pathname = usePathname();
   const ctx = useExplorerCategoryOptional();
   const { data: session, status } = useSession();
@@ -48,7 +57,24 @@ function LeftNavWithCategories() {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
 
   return (
-    <nav className="sticky top-0 h-screen w-56 shrink-0 flex flex-col border-r border-slate-700/80 bg-gradient-to-b from-slate-900 via-slate-800/95 to-slate-900 overflow-hidden shadow-xl shadow-black/20">
+    <nav
+      id="dashboard-sidebar-nav"
+      className={`flex h-[100dvh] w-[min(18rem,100vw)] shrink-0 flex-col overflow-hidden border-r border-slate-700/80 bg-gradient-to-b from-slate-900 via-slate-800/95 to-slate-900 shadow-xl shadow-black/20 transition-transform duration-200 ease-out md:sticky md:top-0 md:z-auto md:w-56 md:translate-x-0 ${
+        mobileDrawerOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+      } fixed left-0 top-0 z-50 max-md:shadow-2xl`}
+    >
+      <div className="flex items-center justify-end border-b border-slate-700/80 px-2 py-2 md:hidden">
+        <button
+          type="button"
+          onClick={onCloseMobileMenu}
+          className="rounded-lg p-2.5 text-slate-400 transition-colors hover:bg-slate-700/80 hover:text-slate-100"
+          aria-label="Close menu"
+        >
+          <span className="block text-2xl leading-none" aria-hidden>
+            ×
+          </span>
+        </button>
+      </div>
       <div className="border-b border-slate-700/80 px-3 py-4 bg-slate-800/40">
         {status === "loading" ? (
           <div className="flex items-center gap-2">
@@ -59,7 +85,10 @@ function LeftNavWithCategories() {
           <>
             <button
               type="button"
-              onClick={() => setShowAccountModal(true)}
+              onClick={() => {
+                setShowAccountModal(true);
+                onCloseMobileMenu();
+              }}
               className="flex w-full items-center gap-3 min-w-0 rounded-lg px-1 py-1.5 -mx-1 transition-colors hover:bg-slate-700/60 focus:outline-none focus:ring-2 focus:ring-teal-500/50 focus:ring-offset-2 focus:ring-offset-slate-800"
               title="Account settings"
             >
@@ -81,7 +110,10 @@ function LeftNavWithCategories() {
             </button>
             <button
               type="button"
-              onClick={() => signOut({ callbackUrl: "/login" })}
+              onClick={() => {
+                onCloseMobileMenu();
+                void signOut({ callbackUrl: "/login" });
+              }}
               className="mt-1 text-[11px] text-slate-400 underline underline-offset-2 decoration-slate-500 hover:text-slate-100"
             >
               Sign out
@@ -107,7 +139,7 @@ function LeftNavWithCategories() {
         <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Menu</p>
       </div>
       <div>
-        <NavLink href="/" active={pathname === "/"} icon="◆">
+        <NavLink href="/" active={pathname === "/"} icon="◆" onNavigate={onCloseMobileMenu}>
           Explorer
         </NavLink>
         {pathname === "/" && ctx && (
@@ -147,6 +179,7 @@ function LeftNavWithCategories() {
                                   const same = ctx.selectedCategory === cat && ctx.selectedSubcategory === sub;
                                   ctx.setSelectedCategory(same ? null : cat);
                                   ctx.setSelectedSubcategory(same ? null : sub);
+                                  onCloseMobileMenu();
                                 }}
                                 className={`block w-full py-1 pl-12 pr-2 text-left text-xs truncate transition-colors ${
                                   ctx.selectedCategory === cat && ctx.selectedSubcategory === sub
@@ -168,13 +201,13 @@ function LeftNavWithCategories() {
           </>
         )}
       </div>
-      <NavLink href="/analyzer" active={pathname === "/analyzer"} icon="▷">
+      <NavLink href="/analyzer" active={pathname === "/analyzer"} icon="▷" onNavigate={onCloseMobileMenu}>
         Analyzer
       </NavLink>
-      <NavLink href="/saved" active={pathname === "/saved"} icon="★">
+      <NavLink href="/saved" active={pathname === "/saved"} icon="★" onNavigate={onCloseMobileMenu}>
         Saved Products
       </NavLink>
-      <NavLink href="/subscribe" active={pathname === "/subscribe"} icon="◈">
+      <NavLink href="/subscribe" active={pathname === "/subscribe"} icon="◈" onNavigate={onCloseMobileMenu}>
         Plan & billing
       </NavLink>
       <div className="mt-auto border-t border-slate-700/80 pt-2 bg-slate-800/30">
@@ -194,15 +227,65 @@ function LeftNavWithCategories() {
   );
 }
 
+function MobileMenuOpenButton({ onClick, menuOpen }: { onClick: () => void; menuOpen: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-slate-600 bg-slate-800 text-slate-200 shadow-sm hover:bg-slate-700"
+      aria-label="Open menu"
+      aria-expanded={menuOpen}
+      aria-controls="dashboard-sidebar-nav"
+    >
+      <span className="flex flex-col gap-1.5" aria-hidden>
+        <span className="block h-0.5 w-5 rounded-full bg-current" />
+        <span className="block h-0.5 w-5 rounded-full bg-current" />
+        <span className="block h-0.5 w-5 rounded-full bg-current" />
+      </span>
+    </button>
+  );
+}
+
 export function DashboardShell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+
+  useEffect(() => {
+    setMobileDrawerOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!mobileDrawerOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [mobileDrawerOpen]);
+
   return (
     <SavedProductsProvider>
       <ExplorerCategoryProvider>
         <div className="relative min-h-screen min-h-[100dvh] w-full bg-slate-900/50">
           <BrandBackdrop variant="onDark" />
-          <div className="relative z-[1] flex min-h-screen min-h-[100dvh] w-full">
-            <LeftNavWithCategories />
-            {children}
+          <div className="relative z-[1] flex min-h-screen min-h-[100dvh] w-full flex-col md:flex-row">
+            <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center gap-3 border-b border-slate-700/80 bg-slate-900/95 px-3 backdrop-blur-md md:hidden">
+              <MobileMenuOpenButton onClick={() => setMobileDrawerOpen(true)} menuOpen={mobileDrawerOpen} />
+              <span className="truncate text-sm font-semibold text-slate-100">HIGH FOCUS</span>
+            </header>
+            {mobileDrawerOpen ? (
+              <button
+                type="button"
+                className="fixed inset-0 z-[45] bg-slate-950/50 backdrop-blur-[1px] md:hidden"
+                aria-label="Close menu"
+                onClick={() => setMobileDrawerOpen(false)}
+              />
+            ) : null}
+            <LeftNavWithCategories
+              mobileDrawerOpen={mobileDrawerOpen}
+              onCloseMobileMenu={() => setMobileDrawerOpen(false)}
+            />
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">{children}</div>
           </div>
         </div>
       </ExplorerCategoryProvider>

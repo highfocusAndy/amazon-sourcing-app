@@ -27,7 +27,7 @@ export function DashboardHeaderAccount({
       <button
         type="button"
         onClick={onConnectAmazon}
-        className="rounded-lg border border-teal-500/60 bg-teal-500/10 px-3 py-1.5 text-xs font-semibold text-teal-300 hover:bg-teal-500/20 hover:text-teal-200 transition-colors"
+        className="w-full rounded-lg border border-teal-500/60 bg-teal-500/10 px-3 py-2 text-sm font-semibold text-teal-300 hover:bg-teal-500/20 hover:text-teal-200 transition-colors sm:w-auto sm:py-1.5 sm:text-xs"
       >
         Connect Amazon account
       </button>
@@ -52,7 +52,7 @@ export function DashboardHeaderAccount({
   }
 
   return (
-    <div className="flex flex-col items-end gap-0.5 text-right min-w-0 max-w-[min(100%,18rem)]">
+    <div className="flex w-full min-w-0 max-w-none flex-col items-stretch gap-0.5 text-right sm:w-auto sm:max-w-[min(100%,18rem)] sm:items-end">
       <span
         className="text-sm font-semibold text-slate-100 leading-snug truncate w-full"
         title={title}
