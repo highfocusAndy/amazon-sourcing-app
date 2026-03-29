@@ -144,29 +144,29 @@ export function GetAccessContent({
 
   return (
     <>
-    <div className="relative z-[1] mx-auto w-full max-w-md space-y-8">
+    <div className="relative z-[1] mx-auto w-full max-w-lg space-y-4 sm:max-w-xl sm:space-y-5">
       {checkout === "cancel" ? (
-        <div className="rounded-xl border border-amber-500/40 bg-amber-950/40 px-4 py-3 text-sm text-amber-200">
+        <div className="rounded-xl border border-amber-500/40 bg-amber-950/40 px-4 py-3 text-base text-amber-200">
           Checkout was canceled. You can start again below.
         </div>
       ) : null}
       {errorMessage ? (
-        <div className="rounded-xl border border-rose-500/40 bg-rose-950/40 px-4 py-3 text-sm text-rose-200">
+        <div className="rounded-xl border border-rose-500/40 bg-rose-950/40 px-4 py-3 text-base text-rose-200">
           {errorMessage}
         </div>
       ) : null}
 
-      <div className="rounded-2xl border border-slate-200/80 bg-white p-8 shadow-xl shadow-slate-200/50">
+      <div className="rounded-2xl border border-slate-200/80 bg-white px-8 py-7 shadow-xl shadow-slate-200/50 sm:px-10 sm:py-8">
         {subscriptionsPaused ? (
-          <div className="mb-6 rounded-xl border border-amber-300/80 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          <div className="mb-4 rounded-xl border border-amber-300/80 bg-amber-50 px-4 py-3 text-base text-amber-950 sm:mb-5">
             <p className="font-semibold text-amber-900">Paid signup is paused (testing phase)</p>
             <p className="mt-2 leading-relaxed text-amber-900/90">{subscriptionsPausedMessage}</p>
           </div>
         ) : null}
 
-        <h1 className="text-center text-xl font-bold tracking-tight text-slate-900">Get access</h1>
+        <h1 className="text-center text-2xl font-bold tracking-tight text-slate-900 sm:text-[1.75rem]">Get access</h1>
         <p
-          className={`mt-3 text-center text-base font-medium ${subscriptionsPaused ? "text-slate-500" : "text-slate-800"}`}
+          className={`mt-2 text-center text-lg font-medium sm:mt-3 ${subscriptionsPaused ? "text-slate-500" : "text-slate-800"}`}
         >
           {subscriptionsPaused ? (
             <span className="text-slate-600">
@@ -189,7 +189,7 @@ export function GetAccessContent({
             <span className="text-slate-900">{priceDisplay}</span>
           )}
         </p>
-        <p className="mt-2 text-center text-sm text-slate-600">
+        <p className="mt-2 text-center text-base leading-snug text-slate-600">
           {subscriptionsPaused ? (
             <>
               Card checkout is turned off for now. Have an invite code? Open{" "}
@@ -209,21 +209,21 @@ export function GetAccessContent({
           )}
         </p>
 
-        <div className="mt-8 border-t border-slate-200 pt-8">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Pay with card</p>
+        <div className="mt-6 border-t border-slate-200 pt-6 sm:mt-7 sm:pt-7">
+          <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">Pay with card</p>
           {stripeConfigured ? (
             <>
               {subscriptionsPaused ? (
-                <p className="mt-2 text-xs text-amber-800/90">
+                <p className="mt-2 text-sm leading-snug text-amber-800/90">
                   Checkout is disabled during testing. We will turn this on when we start accepting subscribers.
                 </p>
               ) : subscriptionTrialDays > 0 ? (
-                <p className="mt-2 text-xs text-slate-500">
+                <p className="mt-2 text-sm leading-snug text-slate-500">
                   You will finish account setup after checkout. Billing is {priceDisplay} after your{" "}
                   {subscriptionTrialDays}-day trial unless you cancel first.
                 </p>
               ) : (
-                <p className="mt-2 text-xs text-slate-500">
+                <p className="mt-2 text-sm leading-snug text-slate-500">
                   You will set your password on the next screen. Subscription: {priceDisplay}.
                 </p>
               )}
@@ -231,7 +231,7 @@ export function GetAccessContent({
                 type="button"
                 onClick={() => void startStripe()}
                 disabled={stripeLoading || subscriptionsPaused}
-                className="mt-4 w-full rounded-xl bg-gradient-to-r from-teal-500 to-cyan-600 py-3 text-sm font-semibold text-white shadow-lg shadow-teal-500/25 disabled:pointer-events-none disabled:opacity-40"
+                className="mt-4 w-full rounded-xl bg-gradient-to-r from-teal-500 to-cyan-600 py-3.5 text-base font-semibold text-white shadow-lg shadow-teal-500/25 disabled:pointer-events-none disabled:opacity-40"
               >
                 {subscriptionsPaused
                   ? "Paid signup not available yet"
@@ -241,31 +241,31 @@ export function GetAccessContent({
               </button>
             </>
           ) : (
-            <p className="mt-2 text-sm text-amber-800/90">
+            <p className="mt-2 text-base leading-snug text-amber-800/90">
               Card checkout is not available until STRIPE_SECRET_KEY and STRIPE_PRICE_ID are set on the server.
             </p>
           )}
         </div>
 
-        <div className="mt-10 border-t border-slate-200 pt-8">
+        <div className="mt-6 border-t border-slate-200 pt-6 sm:mt-7 sm:pt-7">
           <button
             type="button"
             onClick={() => setPromoOpen(true)}
             aria-haspopup="dialog"
             aria-expanded={promoOpen}
-            className="w-full rounded-xl border-2 border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm transition-colors hover:border-teal-500/60 hover:bg-teal-50/50"
+            className="w-full rounded-xl border-2 border-slate-300 bg-white px-4 py-3.5 text-base font-semibold text-slate-800 shadow-sm transition-colors hover:border-teal-500/60 hover:bg-teal-50/50"
           >
             Promo access
           </button>
         </div>
 
-        <p className="mt-6 text-center text-xs text-slate-600">
+        <p className="mt-5 text-center text-sm leading-snug text-slate-600 sm:mt-6">
           Already paid in Stripe but closed the tab before creating a password?{" "}
           <Link href="/signup/recover" className="font-semibold text-teal-600 hover:text-teal-500 hover:underline">
             Finish paid signup
           </Link>
         </p>
-        <p className="mt-4 text-center text-sm text-slate-500">
+        <p className="mt-3 text-center text-base text-slate-500 sm:mt-4">
           <Link href="/login" className="font-semibold text-teal-600 hover:text-teal-500 hover:underline">
             Sign in
           </Link>
@@ -293,11 +293,11 @@ export function GetAccessContent({
           role="dialog"
           aria-modal="true"
           aria-labelledby="promo-modal-title"
-          className="relative z-10 flex max-h-[min(90dvh,40rem)] w-full max-w-md flex-col rounded-2xl border border-slate-200 bg-white shadow-2xl shadow-slate-900/20"
+          className="relative z-10 flex max-h-[min(90dvh,42rem)] w-full max-w-lg flex-col rounded-2xl border border-slate-200 bg-white shadow-2xl shadow-slate-900/20 sm:max-w-xl"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
-            <h2 id="promo-modal-title" className="text-lg font-semibold text-slate-900">
+          <div className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-100 px-6 py-4 sm:px-8 sm:py-5">
+            <h2 id="promo-modal-title" className="text-xl font-semibold text-slate-900 sm:text-[1.35rem]">
               Sign up with your promo code
             </h2>
             <button
@@ -312,17 +312,17 @@ export function GetAccessContent({
               </span>
             </button>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-            <p className="text-sm leading-relaxed text-slate-600">
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4 sm:px-8 sm:py-5">
+            <p className="text-base leading-relaxed text-slate-600">
               Type the <strong className="font-medium text-slate-800">promo code you were given</strong>, then add your
               email and a password. That <strong className="font-medium text-slate-800">creates your account</strong> and
               signs you in — no credit card. Access lasts for whatever period that code is good for.
             </p>
             <form onSubmit={onPromoSignup} className="mt-4 space-y-3">
               {promoError ? (
-                <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{promoError}</p>
+                <p className="rounded-lg bg-red-50 px-3 py-2.5 text-base text-red-700">{promoError}</p>
               ) : null}
-              <label className="block text-sm font-medium text-slate-700">
+              <label className="block text-base font-medium text-slate-700">
                 Promo code
                 <input
                   ref={promoCodeInputRef}
@@ -331,11 +331,11 @@ export function GetAccessContent({
                   onChange={(e) => setPromoCode(e.target.value)}
                   required
                   autoComplete="off"
-                  className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/50"
+                  className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3.5 py-3 text-base outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/50"
                   placeholder="Enter code"
                 />
               </label>
-              <label className="block text-sm font-medium text-slate-700">
+              <label className="block text-base font-medium text-slate-700">
                 Email
                 <input
                   type="email"
@@ -343,20 +343,20 @@ export function GetAccessContent({
                   onChange={(e) => setEmail(e.target.value)}
                   required
                   autoComplete="email"
-                  className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/50"
+                  className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3.5 py-3 text-base outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/50"
                 />
               </label>
-              <label className="block text-sm font-medium text-slate-700">
+              <label className="block text-base font-medium text-slate-700">
                 Name <span className="text-slate-400">(optional)</span>
                 <input
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   autoComplete="name"
-                  className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/50"
+                  className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3.5 py-3 text-base outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/50"
                 />
               </label>
-              <label className="block text-sm font-medium text-slate-700">
+              <label className="block text-base font-medium text-slate-700">
                 Password <span className="text-slate-400">(min 8)</span>
                 <input
                   type="password"
@@ -365,10 +365,10 @@ export function GetAccessContent({
                   required
                   minLength={8}
                   autoComplete="new-password"
-                  className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/50"
+                  className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3.5 py-3 text-base outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/50"
                 />
               </label>
-              <label className="block text-sm font-medium text-slate-700">
+              <label className="block text-base font-medium text-slate-700">
                 Confirm password
                 <input
                   type="password"
@@ -377,13 +377,13 @@ export function GetAccessContent({
                   required
                   minLength={8}
                   autoComplete="new-password"
-                  className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/50"
+                  className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3.5 py-3 text-base outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/50"
                 />
               </label>
               <button
                 type="submit"
                 disabled={promoLoading}
-                className="w-full rounded-xl border-2 border-slate-300 bg-white py-2.5 text-sm font-semibold text-slate-800 hover:border-teal-500/60 hover:bg-teal-50/50 disabled:opacity-50"
+                className="w-full rounded-xl border-2 border-slate-300 bg-white py-3.5 text-base font-semibold text-slate-800 hover:border-teal-500/60 hover:bg-teal-50/50 disabled:opacity-50"
               >
                 {promoLoading ? "Creating account…" : "Create account with promo"}
               </button>
