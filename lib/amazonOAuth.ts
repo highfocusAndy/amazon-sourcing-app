@@ -41,6 +41,43 @@ export function generateOAuthState(): string {
   return crypto.randomBytes(32).toString("hex");
 }
 
+function signOAuthStatePayload(secret: string, userId: string, state: string): string {
+  return crypto.createHmac("sha256", secret).update(`${userId}.${state}`).digest("hex");
+}
+
+export function buildOAuthStateCookie(params: {
+  secret: string;
+  userId: string;
+}): { state: string; cookieValue: string } {
+  const state = generateOAuthState();
+  const sig = signOAuthStatePayload(params.secret, params.userId, state);
+  const raw = `${params.userId}.${state}.${sig}`;
+  const cookieValue = Buffer.from(raw, "utf8").toString("base64url");
+  return { state, cookieValue };
+}
+
+export function readOAuthStateCookie(
+  cookieValue: string | undefined,
+  secret: string,
+): { userId: string; state: string } | null {
+  if (!cookieValue) return null;
+  try {
+    const raw = Buffer.from(cookieValue, "base64url").toString("utf8");
+    const parts = raw.split(".");
+    if (parts.length !== 3) return null;
+    const [userId, state, sig] = parts;
+    if (!userId || !state || !sig) return null;
+    const expected = signOAuthStatePayload(secret, userId, state);
+    const a = Buffer.from(sig, "hex");
+    const b = Buffer.from(expected, "hex");
+    if (a.length !== b.length) return null;
+    if (!crypto.timingSafeEqual(a, b)) return null;
+    return { userId, state };
+  } catch {
+    return null;
+  }
+}
+
 export function consentBaseUrlForMarketplace(marketplaceId: string | null | undefined): string {
   const override = process.env.SP_API_OAUTH_CONSENT_BASE?.trim();
   if (override) return override.replace(/\/$/, "");

@@ -5,8 +5,9 @@ import { prisma } from "@/lib/db";
 import {
   AMAZON_OAUTH_MARKETPLACE_COOKIE,
   AMAZON_OAUTH_STATE_COOKIE,
+  buildOAuthStateCookie,
   buildSellerCentralConsentUrl,
-  generateOAuthState,
+  getOAuthAuthSecret,
   resolveMarketplaceForOAuth,
 } from "@/lib/amazonOAuth";
 import { NextRequest, NextResponse } from "next/server";
@@ -49,7 +50,16 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     marketplaceId = resolveMarketplaceForOAuth(undefined);
   }
 
-  const state = generateOAuthState();
+  const authSecret = getOAuthAuthSecret();
+  if (!authSecret) {
+    return NextResponse.redirect(
+      `${base}/?amazon_error=${encodeURIComponent("Server AUTH_SECRET is not configured.")}`,
+    );
+  }
+  const { state, cookieValue } = buildOAuthStateCookie({
+    secret: authSecret,
+    userId: session.user.id,
+  });
   const consentUrl = buildSellerCentralConsentUrl({
     applicationId: appId,
     state,
@@ -57,19 +67,20 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   });
 
   const res = NextResponse.redirect(consentUrl);
-  const secure = true;
-  res.cookies.set(AMAZON_OAUTH_STATE_COOKIE, state, {
+  const secure = base.startsWith("https://");
+  const sameSite = secure ? "none" : "lax";
+  res.cookies.set(AMAZON_OAUTH_STATE_COOKIE, cookieValue, {
     httpOnly: true,
     secure,
-    // OAuth is a cross-site redirect; ensure the state cookie is sent back on callback.
-    sameSite: "none",
+    // On localhost/http, SameSite=None would be rejected unless Secure=true.
+    sameSite,
     path: "/",
     maxAge: 60 * 15,
   });
   res.cookies.set(AMAZON_OAUTH_MARKETPLACE_COOKIE, marketplaceId, {
     httpOnly: true,
     secure,
-    sameSite: "none",
+    sameSite,
     path: "/",
     maxAge: 60 * 15,
   });

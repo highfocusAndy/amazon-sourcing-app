@@ -1,5 +1,8 @@
-import { auth } from "@/auth";
-import { AMAZON_OAUTH_STATE_COOKIE } from "@/lib/amazonOAuth";
+import {
+  AMAZON_OAUTH_STATE_COOKIE,
+  getOAuthAuthSecret,
+  readOAuthStateCookie,
+} from "@/lib/amazonOAuth";
 import { getAppBaseUrl } from "@/lib/appBaseUrl";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -29,26 +32,18 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return failRedirect("Invalid amazon_callback_uri from Amazon.");
   }
 
-  const stateCookie = request.cookies.get(AMAZON_OAUTH_STATE_COOKIE)?.value;
+  const authSecret = getOAuthAuthSecret();
+  const stateCookieRaw = request.cookies.get(AMAZON_OAUTH_STATE_COOKIE)?.value;
+  const stateCookie = authSecret ? readOAuthStateCookie(stateCookieRaw, authSecret) : null;
   if (!stateCookie) {
     return failRedirect("OAuth session expired. Please try Connect Amazon again.");
-  }
-
-  const session = await auth();
-  if (!session?.user?.id) {
-    const returnPath = `${request.nextUrl.pathname}${request.nextUrl.search}`;
-    const loginUrl = new URL("/login", base);
-    loginUrl.searchParams.set("callbackUrl", returnPath);
-    const res = NextResponse.redirect(loginUrl);
-    res.headers.set("Referrer-Policy", "no-referrer");
-    return res;
   }
 
   const redirectUri = `${base}/api/amazon/oauth/callback`;
   const confirm = new URL(amazonCallbackUri);
   confirm.searchParams.set("redirect_uri", redirectUri);
   confirm.searchParams.set("amazon_state", amazonState);
-  confirm.searchParams.set("state", stateCookie);
+  confirm.searchParams.set("state", stateCookie.state);
   // Keep the same "beta for Draft apps" behavior as buildSellerCentralConsentUrl
   const raw = process.env.SP_API_OAUTH_DRAFT?.trim();
   const isDraft =

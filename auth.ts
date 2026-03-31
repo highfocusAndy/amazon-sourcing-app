@@ -24,7 +24,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const passkeyTokenRaw = typeof raw.passkeyToken === "string" ? raw.passkeyToken.trim() : "";
         if (passkeyTokenRaw) {
           try {
-            const hash = hashPasskeyLoginSecret(passkeyTokenRaw);
+            const hash = await hashPasskeyLoginSecret(passkeyTokenRaw);
             const row = await prisma.passkeyLoginToken.findUnique({ where: { tokenHash: hash } });
             if (!row || row.expiresAt < new Date()) return null;
             await prisma.passkeyLoginToken.delete({ where: { id: row.id } });

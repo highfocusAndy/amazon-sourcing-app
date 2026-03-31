@@ -6,6 +6,7 @@ import {
   AMAZON_OAUTH_STATE_COOKIE,
   exchangeSpApiAuthorizationCode,
   getOAuthAuthSecret,
+  readOAuthStateCookie,
   resolveMarketplaceForOAuth,
 } from "@/lib/amazonOAuth";
 import { refreshAmazonStoreNameForUser } from "@/lib/amazonAccount";
@@ -23,13 +24,18 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const code = searchParams.get("spapi_oauth_code");
   const sellingPartnerId = searchParams.get("selling_partner_id");
 
-  const cookieState = request.cookies.get(AMAZON_OAUTH_STATE_COOKIE)?.value;
+  const cookieStateRaw = request.cookies.get(AMAZON_OAUTH_STATE_COOKIE)?.value;
   const mpCookie = request.cookies.get(AMAZON_OAUTH_MARKETPLACE_COOKIE)?.value;
 
   const fail = (msg: string) =>
     NextResponse.redirect(`${base}/?amazon_error=${encodeURIComponent(msg)}`);
 
-  if (!state || !cookieState || state !== cookieState) {
+  const authSecret = getOAuthAuthSecret();
+  if (!authSecret) {
+    return fail("Server AUTH_SECRET is not configured.");
+  }
+  const stateCookie = readOAuthStateCookie(cookieStateRaw, authSecret);
+  if (!state || !stateCookie || state !== stateCookie.state) {
     return fail("Invalid or missing OAuth state. Try connecting again.");
   }
   if (!code?.trim() || !sellingPartnerId?.trim()) {
@@ -37,20 +43,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   const session = await auth();
-  if (!session?.user?.id) {
-    return fail("Session expired. Sign in and connect Amazon again.");
-  }
-
-  const user = await loadBillingUser(session.user.id, session.user.email);
+  const fallbackUserId = stateCookie.userId;
+  const user = session?.user?.id
+    ? await loadBillingUser(session.user.id, session.user.email)
+    : await loadBillingUser(fallbackUserId, null);
   if (!user) {
     return fail("User account not found. Sign out and sign in again, then reconnect Amazon.");
   }
   const userId = user.id;
-
-  const authSecret = getOAuthAuthSecret();
-  if (!authSecret) {
-    return fail("Server AUTH_SECRET is not configured.");
-  }
 
   const redirectUri = `${base}/api/amazon/oauth/callback`;
   const exchanged = await exchangeSpApiAuthorizationCode({
@@ -97,21 +97,22 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     // Non-fatal: Explorer header can lazy-load store name via GET /api/settings/amazon-account
   }
 
-  const secure = true;
+  const secure = base.startsWith("https://");
+  const sameSite = secure ? "none" : "lax";
   const res = NextResponse.redirect(`${base}/?amazon_connected=1`);
   res.cookies.set(AMAZON_OAUTH_STATE_COOKIE, "", {
     maxAge: 0,
     path: "/",
     httpOnly: true,
     secure,
-    sameSite: "none",
+    sameSite,
   });
   res.cookies.set(AMAZON_OAUTH_MARKETPLACE_COOKIE, "", {
     maxAge: 0,
     path: "/",
     httpOnly: true,
     secure,
-    sameSite: "none",
+    sameSite,
   });
   res.headers.set("Referrer-Policy", "no-referrer");
   return res;

@@ -80,7 +80,7 @@ export async function POST(request: Request) {
   const secret = createPasskeyLoginSecret();
   await prisma.passkeyLoginToken.create({
     data: {
-      tokenHash: hashPasskeyLoginSecret(secret),
+      tokenHash: await hashPasskeyLoginSecret(secret),
       userId: user.id,
       expiresAt: loginTokenExpiry(),
     },
