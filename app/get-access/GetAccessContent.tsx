@@ -27,7 +27,6 @@ export function GetAccessContent({
 }: Props) {
   const searchParams = useSearchParams();
   const checkout = searchParams.get("checkout");
-  const err = searchParams.get("error");
 
   const [stripeLoading, setStripeLoading] = useState(false);
   const [promoCode, setPromoCode] = useState("");
@@ -35,14 +34,10 @@ export function GetAccessContent({
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [name, setName] = useState("");
-  const [promoError, setPromoError] = useState<string | null>(null);
   const [promoLoading, setPromoLoading] = useState(false);
   const [promoOpen, setPromoOpen] = useState(false);
   const promoCodeInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (promoError) setPromoOpen(true);
-  }, [promoError]);
+  const confirmPasswordInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!promoOpen) return;
@@ -72,6 +67,12 @@ export function GetAccessContent({
     setPromoOpen(false);
   }, [promoLoading]);
 
+  useEffect(() => {
+    if (promoOpen) return;
+    promoCodeInputRef.current?.setCustomValidity("");
+    confirmPasswordInputRef.current?.setCustomValidity("");
+  }, [promoOpen]);
+
   const startStripe = useCallback(async () => {
     setStripeLoading(true);
     try {
@@ -91,11 +92,16 @@ export function GetAccessContent({
 
   const onPromoSignup = async (e: React.FormEvent) => {
     e.preventDefault();
-    setPromoError(null);
+    promoCodeInputRef.current?.setCustomValidity("");
+    confirmPasswordInputRef.current?.setCustomValidity("");
     const pw = password.trim();
     const pw2 = confirmPassword.trim();
     if (pw !== pw2) {
-      setPromoError("Passwords do not match.");
+      const el = confirmPasswordInputRef.current;
+      if (el) {
+        el.setCustomValidity("Passwords do not match.");
+        el.reportValidity();
+      }
       return;
     }
     setPromoLoading(true);
@@ -112,33 +118,34 @@ export function GetAccessContent({
       });
       const data = (await res.json()) as { error?: string; email?: string };
       if (!res.ok) {
-        setPromoError(data.error ?? "Registration failed.");
+        const el = promoCodeInputRef.current;
+        if (el) {
+          el.setCustomValidity(data.error ?? "Registration failed.");
+          el.reportValidity();
+        }
         return;
       }
       const signEmail = data.email ?? email.trim().toLowerCase();
       const sessionResult = await signInAfterRegistration(signEmail, pw);
       if (!sessionResult.ok) {
-        setPromoError(sessionResult.error);
+        const el = promoCodeInputRef.current;
+        if (el) {
+          el.setCustomValidity(sessionResult.error);
+          el.reportValidity();
+        }
         return;
       }
       window.location.href = "/";
     } catch {
-      setPromoError("Something went wrong. Try again.");
+      const el = promoCodeInputRef.current;
+      if (el) {
+        el.setCustomValidity("Something went wrong. Try again.");
+        el.reportValidity();
+      }
     } finally {
       setPromoLoading(false);
     }
   };
-
-  const errorMessage =
-    err === "stripe"
-      ? "Stripe is not configured on the server."
-      : err === "session"
-        ? "Invalid checkout link."
-        : err === "incomplete"
-          ? "Checkout did not finish. Try again."
-          : err === "no-email"
-            ? "We could not read your email from checkout. Contact support."
-            : null;
 
   return (
     <>
@@ -148,12 +155,6 @@ export function GetAccessContent({
           Checkout was canceled. You can start again below.
         </div>
       ) : null}
-      {errorMessage ? (
-        <div className="rounded-xl border border-rose-500/40 bg-rose-950/40 px-4 py-3 text-base text-rose-200">
-          {errorMessage}
-        </div>
-      ) : null}
-
       <div className="rounded-2xl border border-slate-200/80 bg-white px-8 py-7 shadow-xl shadow-slate-200/50 sm:px-10 sm:py-8">
         {subscriptionsPaused ? (
           <div className="mb-4 rounded-xl border border-amber-300/80 bg-amber-50 px-4 py-3 text-base text-amber-950 sm:mb-5">
@@ -278,7 +279,7 @@ export function GetAccessContent({
 
     {promoOpen ? (
       <div
-        className="fixed inset-0 z-[200] flex items-center justify-center p-4 sm:p-6"
+        className="fixed inset-0 z-[200] flex items-stretch justify-center overflow-hidden sm:items-center sm:p-6"
         role="presentation"
       >
         <button
@@ -291,18 +292,21 @@ export function GetAccessContent({
           role="dialog"
           aria-modal="true"
           aria-labelledby="promo-modal-title"
-          className="relative z-10 flex max-h-[min(90dvh,42rem)] w-full max-w-lg flex-col rounded-2xl border border-slate-200 bg-white shadow-2xl shadow-slate-900/20 sm:max-w-xl"
+          className="relative z-10 flex h-[100dvh] w-full max-w-lg flex-col overflow-hidden rounded-none border-0 border-slate-200/80 bg-white shadow-none sm:h-[min(100dvh-3rem,52rem)] sm:max-h-[calc(100dvh-3rem)] sm:rounded-2xl sm:border sm:shadow-xl sm:shadow-slate-200/50 md:max-w-xl"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-100 px-6 py-4 sm:px-8 sm:py-5">
-            <h2 id="promo-modal-title" className="text-xl font-semibold text-slate-900 sm:text-[1.35rem]">
+          <div className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-100 px-8 py-6 sm:px-10 sm:py-7">
+            <h2
+              id="promo-modal-title"
+              className="min-w-0 flex-1 text-2xl font-bold leading-tight tracking-tight text-slate-900 sm:text-[1.75rem]"
+            >
               Sign up with your promo code
             </h2>
             <button
               type="button"
               onClick={closePromoModal}
               disabled={promoLoading}
-              className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 disabled:opacity-40"
+              className="-mr-1 -mt-1 shrink-0 rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 disabled:opacity-40"
               aria-label="Close"
             >
               <span className="block text-xl leading-none" aria-hidden>
@@ -310,83 +314,85 @@ export function GetAccessContent({
               </span>
             </button>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4 sm:px-8 sm:py-5">
-            <p className="text-base leading-relaxed text-slate-600">
-              Type the <strong className="font-medium text-slate-800">promo code you were given</strong>, then add your
-              email and a password. That <strong className="font-medium text-slate-800">creates your account</strong> and
-              signs you in — no credit card. Access lasts for whatever period that code is good for.
+          <div className="flex min-h-0 flex-1 flex-col px-8 py-5 sm:px-10 sm:py-6">
+            <p className="shrink-0 text-center text-base leading-snug text-slate-600 sm:leading-normal">
+              Enter your <strong className="font-medium text-slate-800">invite code</strong>, email, and password — we create your account and sign you in (no card).
+              Next time use <strong className="font-medium text-slate-800">email and password</strong> only; subscribe when access ends.
             </p>
-            <p className="mt-3 text-base leading-relaxed text-slate-600">
-              After this, you only need your <strong className="font-medium text-slate-800">email and password</strong> on
-              the sign-in page — not the promo code again. When your access period ends, you subscribe to renew (unless
-              you get a new extension code from the team).
-            </p>
-            <form onSubmit={onPromoSignup} className="mt-4 space-y-3">
-              {promoError ? (
-                <p className="rounded-lg bg-red-50 px-3 py-2.5 text-base text-red-700">{promoError}</p>
-              ) : null}
-              <label className="block text-base font-medium text-slate-700">
-                Promo code
-                <input
-                  ref={promoCodeInputRef}
-                  type="text"
-                  value={promoCode}
-                  onChange={(e) => setPromoCode(e.target.value)}
-                  required
-                  autoComplete="off"
-                  className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3.5 py-3 text-base outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/50"
-                  placeholder="Enter code"
-                />
-              </label>
-              <label className="block text-base font-medium text-slate-700">
-                Email
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  autoComplete="email"
-                  className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3.5 py-3 text-base outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/50"
-                />
-              </label>
-              <label className="block text-base font-medium text-slate-700">
-                Name <span className="text-slate-400">(optional)</span>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  autoComplete="name"
-                  className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3.5 py-3 text-base outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/50"
-                />
-              </label>
-              <label className="block text-base font-medium text-slate-700">
-                Password <span className="text-slate-400">(min 8)</span>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  minLength={8}
-                  autoComplete="new-password"
-                  className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3.5 py-3 text-base outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/50"
-                />
-              </label>
-              <label className="block text-base font-medium text-slate-700">
-                Confirm password
-                <input
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  required
-                  minLength={8}
-                  autoComplete="new-password"
-                  className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3.5 py-3 text-base outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/50"
-                />
-              </label>
+            <form onSubmit={onPromoSignup} className="mt-4 flex min-h-0 flex-1 flex-col sm:mt-5">
+              <div className="flex min-h-0 flex-1 flex-col justify-center sm:justify-start">
+                <div className="space-y-2 sm:space-y-3">
+                  <label className="block text-base font-medium text-slate-700">
+                    Promo code
+                    <input
+                      ref={promoCodeInputRef}
+                      type="text"
+                      value={promoCode}
+                      onChange={(e) => {
+                        e.target.setCustomValidity("");
+                        setPromoCode(e.target.value);
+                      }}
+                      required
+                      autoComplete="off"
+                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-base outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/50 sm:mt-1.5 sm:py-3"
+                      placeholder="Enter code"
+                    />
+                  </label>
+                  <label className="block text-base font-medium text-slate-700">
+                    Email
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                      autoComplete="email"
+                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-base outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/50 sm:mt-1.5 sm:py-3"
+                    />
+                  </label>
+                  <label className="block text-base font-medium text-slate-700">
+                    Name <span className="text-slate-400">(optional)</span>
+                    <input
+                      type="text"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      autoComplete="name"
+                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-base outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/50 sm:mt-1.5 sm:py-3"
+                    />
+                  </label>
+                  <label className="block text-base font-medium text-slate-700">
+                    Password <span className="text-slate-400">(min 8)</span>
+                    <input
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                      minLength={8}
+                      autoComplete="new-password"
+                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-base outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/50 sm:mt-1.5 sm:py-3"
+                    />
+                  </label>
+                  <label className="block text-base font-medium text-slate-700">
+                    Confirm password
+                    <input
+                      ref={confirmPasswordInputRef}
+                      type="password"
+                      value={confirmPassword}
+                      onChange={(e) => {
+                        e.target.setCustomValidity("");
+                        setConfirmPassword(e.target.value);
+                      }}
+                      required
+                      minLength={8}
+                      autoComplete="new-password"
+                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-base outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/50 sm:mt-1.5 sm:py-3"
+                    />
+                  </label>
+                </div>
+              </div>
               <button
                 type="submit"
                 disabled={promoLoading}
-                className="w-full rounded-xl border-2 border-slate-300 bg-white py-3.5 text-base font-semibold text-slate-800 hover:border-teal-500/60 hover:bg-teal-50/50 disabled:opacity-50"
+                className="mt-3 shrink-0 w-full rounded-xl border-2 border-slate-300 bg-white py-3.5 text-base font-semibold text-slate-800 hover:border-teal-500/60 hover:bg-teal-50/50 disabled:opacity-50 sm:mt-6"
               >
                 {promoLoading ? "Creating account…" : "Create account with promo"}
               </button>

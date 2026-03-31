@@ -116,8 +116,17 @@ export function LoginForm({ supportEmail }: LoginFormProps) {
       router.replace(callbackUrl);
       router.refresh();
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Passkey failed.";
-      setError(/abort|cancel/i.test(msg) ? "Passkey sign-in was cancelled." : msg);
+      const userDismissed =
+        (typeof DOMException !== "undefined" &&
+          e instanceof DOMException &&
+          (e.name === "NotAllowedError" || e.name === "AbortError")) ||
+        (e instanceof Error &&
+          (/abort|cancel/i.test(e.message) ||
+            e.name === "NotAllowedError" ||
+            e.name === "AbortError"));
+      if (!userDismissed) {
+        setError(e instanceof Error ? e.message : "Passkey failed.");
+      }
     } finally {
       setPasskeyLoading(false);
     }

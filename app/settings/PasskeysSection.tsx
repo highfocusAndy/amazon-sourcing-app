@@ -46,11 +46,16 @@ export function PasskeysSection({ className = "" }: { className?: string }) {
         "Passkey added. You can sign in with Face ID, fingerprint, or your device PIN on this device — use the button on the login page.",
       );
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Passkey registration failed.";
-      if (/abort|cancel/i.test(msg)) {
-        setError("Registration was cancelled.");
-      } else {
-        setError(msg);
+      const userDismissed =
+        (typeof DOMException !== "undefined" &&
+          e instanceof DOMException &&
+          (e.name === "NotAllowedError" || e.name === "AbortError")) ||
+        (e instanceof Error &&
+          (/abort|cancel/i.test(e.message) ||
+            e.name === "NotAllowedError" ||
+            e.name === "AbortError"));
+      if (!userDismissed) {
+        setError(e instanceof Error ? e.message : "Passkey registration failed.");
       }
     } finally {
       setLoading(false);
