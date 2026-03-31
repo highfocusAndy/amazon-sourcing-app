@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { hash } from "bcryptjs";
 import { prisma } from "@/lib/db";
+import { normalizePasswordInput } from "@/lib/passwordInput";
 import { hashPasswordResetSecret } from "@/lib/passwordResetToken";
 
 const MIN_PASSWORD_LENGTH = 8;
@@ -11,9 +12,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     const body = (await request.json()) as { token?: string; newPassword?: string };
     token = typeof body.token === "string" ? body.token.trim() : "";
-    newPassword = (
-      typeof body.newPassword === "string" ? body.newPassword : String(body.newPassword ?? "")
-    ).trim();
+    newPassword = normalizePasswordInput(body.newPassword);
   } catch {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });
   }

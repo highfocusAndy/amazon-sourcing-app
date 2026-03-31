@@ -34,7 +34,7 @@ const ALNUM = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
  * so new codes differ from the previous set.
  */
 /** Bump this string whenever you run RESET_PROMOS_ONLY / want a different HF- batch (deterministic list). */
-const OPAQUE_SEED_LABEL = "hf-promo-seed-v4";
+const OPAQUE_SEED_LABEL = "hf-promo-seed-v5";
 
 function opaqueCodes(count: number): string[] {
   const out: string[] = [];

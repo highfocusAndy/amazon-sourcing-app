@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { hash } from "bcryptjs";
 import { prisma } from "@/lib/db";
+import { normalizePasswordInput } from "@/lib/passwordInput";
 
 const MIN_PASSWORD_LENGTH = 8;
 
@@ -15,9 +16,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     const body = (await request.json()) as { email?: string; newPassword?: string };
     const email = body.email?.trim().toLowerCase();
-    const newPassword = (
-      typeof body.newPassword === "string" ? body.newPassword : String(body.newPassword ?? "")
-    ).trim();
+    const newPassword = normalizePasswordInput(body.newPassword);
 
     if (!email || !newPassword) {
       return NextResponse.json({ error: "Email and new password are required." }, { status: 400 });

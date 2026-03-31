@@ -5,6 +5,7 @@ import { verifyCheckoutResumeToken } from "@/lib/billing/checkoutResumeToken";
 import { noSignupTrialEndsAt } from "@/lib/billing/access";
 import { getStripe } from "@/lib/billing/stripeClient";
 import { prisma } from "@/lib/db";
+import { normalizePasswordInput } from "@/lib/passwordInput";
 
 export const runtime = "nodejs";
 
@@ -24,8 +25,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   const token = body.token?.trim();
-  const rawPassword = body.password;
-  const password = (typeof rawPassword === "string" ? rawPassword : String(rawPassword ?? "")).trim();
+  const password = normalizePasswordInput(body.password);
   const name = body.name?.trim() ?? null;
 
   if (!token) {

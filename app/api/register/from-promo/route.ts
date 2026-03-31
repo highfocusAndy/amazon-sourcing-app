@@ -4,6 +4,7 @@ import { hash } from "bcryptjs";
 import { noSignupTrialEndsAt } from "@/lib/billing/access";
 import { ensureEnvOwnerPromoRow } from "@/lib/billing/ensureOwnerPromoCode";
 import { prisma } from "@/lib/db";
+import { normalizePasswordInput } from "@/lib/passwordInput";
 import { normalizePromoCodeInput } from "@/lib/promoCodeNormalize";
 
 export const runtime = "nodejs";
@@ -19,8 +20,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   const email = body.email?.trim().toLowerCase();
-  const rawPassword = body.password;
-  const password = (typeof rawPassword === "string" ? rawPassword : String(rawPassword ?? "")).trim();
+  const password = normalizePasswordInput(body.password);
   const name = body.name?.trim() ?? null;
   const code = normalizePromoCodeInput(typeof body.code === "string" ? body.code : "");
 

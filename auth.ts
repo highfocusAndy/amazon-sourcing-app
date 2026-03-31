@@ -3,6 +3,7 @@ import Credentials from "next-auth/providers/credentials";
 import { compare } from "bcryptjs";
 import { prisma } from "@/lib/db";
 import { hashPasskeyLoginSecret } from "@/lib/passkeyLoginToken";
+import { passwordCompareCandidates } from "@/lib/passwordInput";
 
 const authSecret =
   process.env.AUTH_SECRET ??
@@ -48,7 +49,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         } else {
           email = email.trim().toLowerCase();
         }
-        const passwordForCompare = password.trim();
+        const compareCandidates = passwordCompareCandidates(password);
+        const passwordForCompare = compareCandidates[0] ?? "";
         if (!email || !passwordForCompare) {
           if (process.env.NODE_ENV === "development") {
             console.error("[Auth] Login failed: missing email or password", { hasEmail: !!email, hasPassword: !!passwordForCompare });
@@ -63,10 +65,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             }
             return null;
           }
-          // Match trimmed password (same as LoginForm). Also try raw input for accounts created before trim-on-register.
-          let ok = await compare(passwordForCompare, user.passwordHash);
-          if (!ok && password !== passwordForCompare) {
-            ok = await compare(password, user.passwordHash);
+          let ok = false;
+          for (const candidate of compareCandidates) {
+            // Backward-compat: accept legacy variants created before normalization rules.
+            if (await compare(candidate, user.passwordHash)) {
+              ok = true;
+              break;
+            }
           }
           if (!ok) {
             if (process.env.NODE_ENV === "development") {

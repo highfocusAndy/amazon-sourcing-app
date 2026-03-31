@@ -4,6 +4,7 @@ import { noSignupTrialEndsAt } from "@/lib/billing/access";
 import { checkoutSessionEmail } from "@/lib/billing/checkoutSessionEmail";
 import { getStripe } from "@/lib/billing/stripeClient";
 import { prisma } from "@/lib/db";
+import { normalizePasswordInput } from "@/lib/passwordInput";
 
 export const runtime = "nodejs";
 
@@ -24,8 +25,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   const sessionId = body.sessionId?.trim();
-  const rawPassword = body.password;
-  const password = (typeof rawPassword === "string" ? rawPassword : String(rawPassword ?? "")).trim();
+  const password = normalizePasswordInput(body.password);
   const name = body.name?.trim() ?? null;
 
   if (!sessionId) {
