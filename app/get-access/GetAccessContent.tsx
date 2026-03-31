@@ -4,7 +4,7 @@ import { SupportContactHint } from "@/app/components/SupportContactHint";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { signIn } from "next-auth/react";
+import { signInAfterRegistration } from "@/lib/auth/signInAfterRegistration";
 
 type Props = {
   subscriptionTrialDays: number;
@@ -116,13 +116,9 @@ export function GetAccessContent({
         return;
       }
       const signEmail = data.email ?? email.trim().toLowerCase();
-      const result = await signIn("credentials", {
-        email: signEmail,
-        password: pw,
-        redirect: false,
-      });
-      if (!result || result.error) {
-        setPromoError("Account created but sign-in failed. Try logging in manually.");
+      const sessionResult = await signInAfterRegistration(signEmail, pw);
+      if (!sessionResult.ok) {
+        setPromoError(sessionResult.error);
         return;
       }
       window.location.href = "/";

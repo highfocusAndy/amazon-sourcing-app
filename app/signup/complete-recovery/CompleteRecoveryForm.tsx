@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { signIn } from "next-auth/react";
+import { signInAfterRegistration } from "@/lib/auth/signInAfterRegistration";
 
 type Props = {
   token: string;
@@ -39,14 +39,10 @@ export function CompleteRecoveryForm({ token, email }: Props) {
         setError(data.error ?? "Could not create account.");
         return;
       }
-      const signEmail = data.email ?? email;
-      const result = await signIn("credentials", {
-        email: signEmail,
-        password: pw,
-        redirect: false,
-      });
-      if (!result || result.error) {
-        setError("Account created but sign-in failed. Try signing in manually.");
+      const signEmail = (data.email ?? email).trim().toLowerCase();
+      const sessionResult = await signInAfterRegistration(signEmail, pw);
+      if (!sessionResult.ok) {
+        setError(sessionResult.error);
         return;
       }
       router.replace("/");
