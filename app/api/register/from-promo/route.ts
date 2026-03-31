@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { hash } from "bcryptjs";
 
 import { noSignupTrialEndsAt } from "@/lib/billing/access";
-import { ensureEnvOwnerPromoRow } from "@/lib/billing/ensureOwnerPromoCode";
+import { ensurePromoRowsFromEnv } from "@/lib/billing/ensureOwnerPromoCode";
 import { prisma } from "@/lib/db";
 import { normalizePasswordInput } from "@/lib/passwordInput";
 import { normalizePromoCodeInput } from "@/lib/promoCodeNormalize";
@@ -46,7 +46,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   try {
     const result = await prisma.$transaction(async (tx) => {
-      await ensureEnvOwnerPromoRow(tx, code);
+      await ensurePromoRowsFromEnv(tx, code);
       const promo = await tx.promoCode.findUnique({ where: { code } });
       if (!promo || !promo.active) {
         return { ok: false as const, message: "Invalid or inactive promo code." };
