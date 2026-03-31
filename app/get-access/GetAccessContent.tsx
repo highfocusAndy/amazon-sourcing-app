@@ -9,8 +9,10 @@ import { signInAfterRegistration } from "@/lib/auth/signInAfterRegistration";
 type Props = {
   subscriptionTrialDays: number;
   stripeConfigured: boolean;
-  /** Marketing line only — must match your Stripe Price (see BILLING_PRICE_DISPLAY). */
-  priceDisplay: string;
+  proPlanEnabled: boolean;
+  /** Marketing line only — must match your Stripe Price. */
+  starterPriceDisplay: string;
+  proPriceDisplay: string;
   subscriptionsPaused: boolean;
   subscriptionsPausedMessage: string;
   /** From SUPPORT_EMAIL — signup / payment help */
@@ -20,7 +22,9 @@ type Props = {
 export function GetAccessContent({
   subscriptionTrialDays,
   stripeConfigured,
-  priceDisplay,
+  proPlanEnabled,
+  starterPriceDisplay,
+  proPriceDisplay,
   subscriptionsPaused,
   subscriptionsPausedMessage,
   supportEmail,
@@ -73,10 +77,14 @@ export function GetAccessContent({
     confirmPasswordInputRef.current?.setCustomValidity("");
   }, [promoOpen]);
 
-  const startStripe = useCallback(async () => {
+  const startStripe = useCallback(async (plan: "starter" | "pro") => {
     setStripeLoading(true);
     try {
-      const res = await fetch("/api/billing/checkout-guest", { method: "POST" });
+      const res = await fetch("/api/billing/checkout-guest", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ plan }),
+      });
       const data = (await res.json()) as { url?: string; error?: string };
       if (!res.ok || !data.url) {
         alert(data.error ?? "Could not start checkout.");
@@ -176,16 +184,25 @@ export function GetAccessContent({
                   <span>, then </span>
                 </>
               ) : null}
-              <span className="font-medium text-slate-700">{priceDisplay}</span>
+              <span className="font-medium text-slate-700">
+                Starter {starterPriceDisplay}
+                {proPlanEnabled ? ` or Pro ${proPriceDisplay}` : ""}
+              </span>
             </span>
           ) : subscriptionTrialDays > 0 ? (
             <>
               <span className="text-teal-700">{subscriptionTrialDays}-day free trial</span>
               <span className="text-slate-500">, then </span>
-              <span className="text-slate-900">{priceDisplay}</span>
+              <span className="text-slate-900">
+                Starter {starterPriceDisplay}
+                {proPlanEnabled ? ` or Pro ${proPriceDisplay}` : ""}
+              </span>
             </>
           ) : (
-            <span className="text-slate-900">{priceDisplay}</span>
+            <span className="text-slate-900">
+              Starter {starterPriceDisplay}
+              {proPlanEnabled ? ` or Pro ${proPriceDisplay}` : ""}
+            </span>
           )}
         </p>
         <p className="mt-2 text-center text-base leading-snug text-slate-600">
@@ -218,30 +235,41 @@ export function GetAccessContent({
                 </p>
               ) : subscriptionTrialDays > 0 ? (
                 <p className="mt-2 text-sm leading-snug text-slate-500">
-                  You will finish account setup after checkout. Billing is {priceDisplay} after your{" "}
+                  You will finish account setup after checkout. Billing follows your selected plan after your{" "}
                   {subscriptionTrialDays}-day trial unless you cancel first.
                 </p>
               ) : (
                 <p className="mt-2 text-sm leading-snug text-slate-500">
-                  You will set your password on the next screen. Subscription: {priceDisplay}.
+                  You will set your password on the next screen. Choose Starter or Pro.
                 </p>
               )}
-              <button
-                type="button"
-                onClick={() => void startStripe()}
-                disabled={stripeLoading || subscriptionsPaused}
-                className="mt-4 w-full rounded-xl bg-gradient-to-r from-teal-500 to-cyan-600 py-3.5 text-base font-semibold text-white shadow-lg shadow-teal-500/25 disabled:pointer-events-none disabled:opacity-40"
-              >
-                {subscriptionsPaused
-                  ? "Paid signup not available yet"
-                  : stripeLoading
-                    ? "Redirecting…"
-                    : "Continue to secure checkout"}
-              </button>
+              <div className="mt-4 grid gap-3">
+                <button
+                  type="button"
+                  onClick={() => void startStripe("starter")}
+                  disabled={stripeLoading || subscriptionsPaused}
+                  className="w-full rounded-xl bg-gradient-to-r from-teal-500 to-cyan-600 py-3.5 text-base font-semibold text-white shadow-lg shadow-teal-500/25 disabled:pointer-events-none disabled:opacity-40"
+                >
+                  {stripeLoading ? "Redirecting…" : `Starter checkout (${starterPriceDisplay})`}
+                </button>
+                {proPlanEnabled ? (
+                  <button
+                    type="button"
+                    onClick={() => void startStripe("pro")}
+                    disabled={stripeLoading || subscriptionsPaused}
+                    className="w-full rounded-xl border border-teal-500/60 bg-teal-50 py-3.5 text-base font-semibold text-teal-800 shadow-sm disabled:pointer-events-none disabled:opacity-40"
+                  >
+                    {stripeLoading ? "Redirecting…" : `Pro checkout (${proPriceDisplay})`}
+                  </button>
+                ) : null}
+              </div>
+              {proPlanEnabled ? (
+                <p className="mt-2 text-xs text-slate-500">Pro plan includes bulk upload tools.</p>
+              ) : null}
             </>
           ) : (
             <p className="mt-2 text-base leading-snug text-amber-800/90">
-              Card checkout is not available until STRIPE_SECRET_KEY and STRIPE_PRICE_ID are set on the server.
+              Card checkout is not available until STRIPE_SECRET_KEY and STRIPE_PRICE_ID_STARTER are set.
             </p>
           )}
         </div>

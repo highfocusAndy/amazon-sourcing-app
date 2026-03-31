@@ -327,6 +327,7 @@ export function buildAnalysisForOffer(
 export async function analyzeProduct(
   input: ProductInput,
   client?: SpApiClient | null,
+  options?: { skipRestrictions?: boolean },
 ): Promise<ProductAnalysis> {
   const result = buildBaseResult(input);
   const spApiClient =
@@ -440,13 +441,15 @@ export async function analyzeProduct(
     const marketplaceId = spApiClient.marketplaceId ?? env.marketplaceId;
     const [pricing, listingRestrictionsResult, amazonSalesVolumeLabel] = await Promise.all([
       spApiClient.fetchCompetitivePricing(resolvedAsin),
-      spApiClient
-        .fetchListingRestrictions(resolvedAsin)
-        .then((data) => ({ data, error: null as string | null }))
-        .catch((error) => ({
-          data: null,
-          error: error instanceof Error ? error.message : "Listing restrictions lookup failed.",
-        })),
+      options?.skipRestrictions
+        ? Promise.resolve({ data: null, error: null as string | null })
+        : spApiClient
+            .fetchListingRestrictions(resolvedAsin)
+            .then((data) => ({ data, error: null as string | null }))
+            .catch((error) => ({
+              data: null,
+              error: error instanceof Error ? error.message : "Listing restrictions lookup failed.",
+            })),
       extractAmazonSalesVolume(resolvedAsin, marketplaceId),
     ]);
     result.buyBoxPrice = pricing.buyBoxPrice;

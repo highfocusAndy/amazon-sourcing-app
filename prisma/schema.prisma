@@ -21,12 +21,15 @@ model User {
   stripeSubscriptionId String?  @unique
   /// Stripe subscription status: none | active | trialing | past_due | canceled | unpaid | incomplete
   subscriptionStatus   String   @default("none")
+  /// Selected paid plan: starter | pro (promo/trial users default to starter)
+  subscriptionPlan     String   @default("starter")
   amazonAccount        AmazonAccount?
   explorerFilterSettings UserExplorerFilters?
   preferences          UserPreferences?
   passkeys             PasskeyCredential[]
   promoRedemptions     PromoRedemption[]
   passwordResetTokens  PasswordResetToken[]
+  monthlyUsage         UserMonthlyUsage[]
 }
 
 /// WebAuthn / passkey credentials (Face ID, Touch ID, device PIN, security keys).
@@ -160,4 +163,23 @@ model PromoRedemption {
 
   @@unique([promoCodeId, userId])
   @@index([userId])
+}
+
+/// Monthly per-user endpoint usage counters for plan limits.
+model UserMonthlyUsage {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// UTC month key, e.g. "2026-03"
+  periodKey String
+  /// Metric id (analyze, analyze_offers, catalog_search, keyword_search, restrictions)
+  metric    String
+  used      Int      @default(0)
+  /// Snapshot of limit at write time (null = unlimited).
+  limit     Int?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, periodKey, metric])
+  @@index([userId, periodKey])
 }

@@ -76,12 +76,14 @@ export function SubscribeContent({
     }
   };
 
-  const onCheckout = async () => {
+  const onCheckout = async (plan: "starter" | "pro" = "starter") => {
     setCheckoutLoading(true);
     try {
       const res = await fetch("/api/billing/checkout", {
         method: "POST",
+        headers: { "content-type": "application/json" },
         credentials: "include",
+        body: JSON.stringify({ plan }),
       });
       const json = (await res.json()) as { url?: string; error?: string };
       if (!res.ok || !json.url) {
@@ -130,13 +132,14 @@ export function SubscribeContent({
 
   if (overview.hasAccess && overview.subscriptionStatus !== "none") {
     const trialing = overview.subscriptionStatus === "trialing";
+    const currentPlan = overview.subscriptionPlan === "pro" ? "Pro" : "Starter";
     return (
       <div className="rounded-2xl border border-slate-600/80 bg-slate-800/80 p-8 text-slate-200 shadow-xl backdrop-blur">
         <p className="text-lg font-semibold text-teal-300">
           {trialing ? "Subscription — trial" : "Subscription active"}
         </p>
         <p className="mt-2 text-sm text-slate-400">
-          Status: {overview.subscriptionStatus}
+          Status: {overview.subscriptionStatus} ({currentPlan} plan)
           {trialing && overview.subscriptionTrialDays > 0
             ? `. No charge until the ${overview.subscriptionTrialDays}-day trial ends; Stripe will bill automatically after that unless you cancel in the portal.`
             : null}
@@ -181,42 +184,45 @@ export function SubscribeContent({
                   ? `Promo access: about ${overview.promoDaysLeft} day(s) left.`
                   : "Your account is active."}
         </p>
-        {overview.stripeConfigured ? (
+        {!overview.appOwnerAccess && !overview.testingBillingPass ? (
+          <p className="mt-2 text-xs text-slate-500">
+            When your remaining days end, return to this page (`Plan & billing`) and use the Subscribe button to pay.
+          </p>
+        ) : null}
+        {overview.stripeConfigured && !overview.subscriptionsPaused ? (
           <div className="mt-6 space-y-2">
-            {overview.subscriptionsPaused ? (
-              <div className="space-y-2">
-                <p className="rounded-lg border border-amber-500/40 bg-amber-950/35 px-3 py-2 text-xs text-amber-100">
-                  {overview.subscriptionsPausedMessage}
-                </p>
-                <p className="text-xs text-slate-500">
-                  New visitors without an account should start at{" "}
-                  <Link href="/get-access" className="font-semibold text-teal-400 underline hover:text-teal-300">
-                    Get access
-                  </Link>{" "}
-                  (pay or promo).
-                </p>
-              </div>
-            ) : overview.subscriptionTrialDays > 0 ? (
+            {overview.subscriptionTrialDays > 0 ? (
               <p className="text-xs text-slate-500">
                 Subscribe with card: you get another {overview.subscriptionTrialDays}-day billing trial, then the plan
                 charges automatically. Cancel anytime before then in the billing portal.
               </p>
             ) : null}
-            <button
-              type="button"
-              onClick={() => void onCheckout()}
-              disabled={checkoutLoading || overview.subscriptionsPaused}
-              className="rounded-xl bg-gradient-to-r from-teal-500 to-cyan-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg disabled:pointer-events-none disabled:opacity-40"
-            >
-              {overview.subscriptionsPaused
-                ? "Paid signup not available yet"
-                : checkoutLoading
-                  ? "Redirecting…"
-                  : overview.subscriptionTrialDays > 0
-                    ? `Subscribe (${overview.subscriptionTrialDays}-day trial)`
-                    : "Subscribe with card"}
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => void onCheckout("starter")}
+                disabled={checkoutLoading}
+                className="rounded-xl bg-gradient-to-r from-teal-500 to-cyan-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg disabled:pointer-events-none disabled:opacity-40"
+              >
+                {checkoutLoading ? "Redirecting…" : "Subscribe Starter"}
+              </button>
+              {overview.proPlanEnabled ? (
+                <button
+                  type="button"
+                  onClick={() => void onCheckout("pro")}
+                  disabled={checkoutLoading}
+                  className="rounded-xl border border-teal-500/60 bg-teal-50 px-5 py-2.5 text-sm font-semibold text-teal-800 disabled:pointer-events-none disabled:opacity-40"
+                >
+                  {checkoutLoading ? "Redirecting…" : "Subscribe Pro (bulk upload)"}
+                </button>
+              ) : null}
+            </div>
           </div>
+        ) : null}
+        {overview.subscriptionsPaused ? (
+          <p className="mt-4 text-xs text-slate-500">
+            Billing signup is currently paused in testing mode. Payment will be available here once checkout is enabled.
+          </p>
         ) : null}
         <Link href="/" className="mt-4 block text-sm text-teal-400 underline">
           Back to dashboard
@@ -282,7 +288,7 @@ export function SubscribeContent({
             )}
             <button
               type="button"
-              onClick={() => void onCheckout()}
+              onClick={() => void onCheckout("starter")}
               disabled={checkoutLoading}
               className="w-full rounded-xl bg-gradient-to-r from-teal-500 to-cyan-600 py-3 text-sm font-semibold text-white shadow-lg shadow-teal-500/20 disabled:pointer-events-none disabled:opacity-40"
             >
@@ -292,6 +298,16 @@ export function SubscribeContent({
                   ? `Start subscription (${overview.subscriptionTrialDays}-day trial)`
                   : "Pay with card (Stripe)"}
             </button>
+            {overview.proPlanEnabled ? (
+              <button
+                type="button"
+                onClick={() => void onCheckout("pro")}
+                disabled={checkoutLoading}
+                className="w-full rounded-xl border border-teal-500/60 bg-teal-50 py-3 text-sm font-semibold text-teal-800 disabled:pointer-events-none disabled:opacity-40"
+              >
+                {checkoutLoading ? "Redirecting to secure checkout…" : "Start Pro plan (includes bulk upload)"}
+              </button>
+            ) : null}
           </div>
         ) : null}
 
@@ -353,7 +369,7 @@ export function SubscribeContent({
 
         {!overview.stripeConfigured ? (
           <p className="mt-6 text-sm text-amber-200/90">
-            Stripe is not configured yet. Add STRIPE_SECRET_KEY and STRIPE_PRICE_ID to the server environment.
+            Stripe is not configured yet. Add STRIPE_SECRET_KEY and STRIPE_PRICE_ID_STARTER (or STRIPE_PRICE_ID).
           </p>
         ) : null}
 

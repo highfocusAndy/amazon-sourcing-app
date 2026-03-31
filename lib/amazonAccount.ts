@@ -47,6 +47,19 @@ async function getUserMarketplaceId(userId: string): Promise<string | null> {
   }
 }
 
+/** True when the user completed Connect Amazon and has a usable refresh token + seller id saved. */
+export async function hasConnectedAmazonAccount(userId: string): Promise<boolean> {
+  try {
+    const row = await prisma.amazonAccount.findUnique({
+      where: { userId },
+      select: { spRefreshTokenEnc: true, sellerId: true },
+    });
+    return Boolean(row?.spRefreshTokenEnc && row?.sellerId?.trim());
+  } catch {
+    return false;
+  }
+}
+
 /**
  * SP-API client using this user's OAuth refresh token + seller id (app LWA client + AWS keys from env).
  */

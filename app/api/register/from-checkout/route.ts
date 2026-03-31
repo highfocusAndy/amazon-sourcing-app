@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { hash } from "bcryptjs";
 import { noSignupTrialEndsAt } from "@/lib/billing/access";
 import { checkoutSessionEmail } from "@/lib/billing/checkoutSessionEmail";
-import { getStripe } from "@/lib/billing/stripeClient";
+import { detectPlanFromPriceId, getStripe } from "@/lib/billing/stripeClient";
 import { prisma } from "@/lib/db";
 import { normalizePasswordInput } from "@/lib/passwordInput";
 
@@ -65,6 +65,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     typeof cs.subscription === "object" && cs.subscription && !("deleted" in cs.subscription)
       ? cs.subscription
       : await stripe.subscriptions.retrieve(subId);
+  const subscriptionPlan = detectPlanFromPriceId(subscription.items.data[0]?.price?.id ?? null);
 
   if (subscription.status !== "trialing" && subscription.status !== "active") {
     return NextResponse.json(
@@ -121,6 +122,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         stripeCustomerId: customerId,
         stripeSubscriptionId: subscription.id,
         subscriptionStatus: subscription.status,
+        subscriptionPlan,
       },
     });
   } catch (e) {

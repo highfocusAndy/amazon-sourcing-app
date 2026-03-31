@@ -12,6 +12,7 @@ import {
   setKeywordSearchCache,
 } from "@/lib/spApiResponseCache";
 import type { ProductAnalysis } from "@/lib/types";
+import { consumeMonthlyUsage } from "@/lib/usageQuota";
 
 export const runtime = "nodejs";
 
@@ -31,6 +32,24 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     if (!userKeywordSearchLimit(gate.userId)) {
       return NextResponse.json(
         { ok: false, error: "Too many keyword searches. Wait a minute.", results: [] },
+        { status: 429 },
+      );
+    }
+    const usage = await consumeMonthlyUsage(gate.userId, "keyword_search");
+    if (!usage.ok) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "Monthly keyword-search limit reached for your plan.",
+          errorDetail: {
+            code: "USAGE_LIMIT",
+            metric: usage.metric,
+            period: usage.periodKey,
+            used: usage.used,
+            limit: usage.limit,
+          },
+          results: [],
+        },
         { status: 429 },
       );
     }

@@ -1,23 +1,39 @@
 import { NextResponse } from "next/server";
 
 import { defaultTrialDays, isSubscriptionsPaused, subscriptionsPausedMessage } from "@/lib/billing/access";
-import { getAppBaseUrl, getStripe, getStripePriceId } from "@/lib/billing/stripeClient";
+import { getAppBaseUrl, getStripe, getStripePriceIdForPlan, type BillingPlan } from "@/lib/billing/stripeClient";
 
 export const runtime = "nodejs";
 
 /**
  * Starts Stripe Checkout without a logged-in user. After payment, the customer finishes signup at /signup/complete.
  */
-export async function POST(): Promise<NextResponse> {
+function parsePlan(input: unknown): BillingPlan {
+  return input === "pro" ? "pro" : "starter";
+}
+
+function allowPromotionCodes(): boolean {
+  const raw = process.env.ALLOW_PROMOTION_CODES?.trim().toLowerCase();
+  return raw === "1" || raw === "true" || raw === "yes";
+}
+
+export async function POST(request: Request): Promise<NextResponse> {
   if (isSubscriptionsPaused()) {
     return NextResponse.json({ error: subscriptionsPausedMessage() }, { status: 403 });
   }
 
   const stripe = getStripe();
-  const priceId = getStripePriceId();
+  let requestedPlan: BillingPlan = "starter";
+  try {
+    const body = (await request.json()) as { plan?: unknown };
+    requestedPlan = parsePlan(body?.plan);
+  } catch {
+    requestedPlan = "starter";
+  }
+  const priceId = getStripePriceIdForPlan(requestedPlan);
   if (!stripe || !priceId) {
     return NextResponse.json(
-      { error: "Payments are not configured. Set STRIPE_SECRET_KEY and STRIPE_PRICE_ID." },
+      { error: "Payments are not configured. Set STRIPE_SECRET_KEY and plan price IDs." },
       { status: 503 },
     );
   }
@@ -25,7 +41,7 @@ export async function POST(): Promise<NextResponse> {
   const base = getAppBaseUrl();
   const trialDays = defaultTrialDays();
   const subscriptionData: { metadata: Record<string, string>; trial_period_days?: number } = {
-    metadata: { signupFlow: "guest_checkout" },
+    metadata: { signupFlow: "guest_checkout", subscriptionPlan: requestedPlan },
   };
   if (trialDays > 0) {
     subscriptionData.trial_period_days = trialDays;
@@ -37,8 +53,9 @@ export async function POST(): Promise<NextResponse> {
     line_items: [{ price: priceId, quantity: 1 }],
     success_url: `${base}/signup/complete?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${base}/get-access?checkout=cancel`,
-    metadata: { signupFlow: "guest_checkout" },
+    metadata: { signupFlow: "guest_checkout", subscriptionPlan: requestedPlan },
     subscription_data: subscriptionData,
+    allow_promotion_codes: allowPromotionCodes(),
   });
 
   if (!checkout.url) {

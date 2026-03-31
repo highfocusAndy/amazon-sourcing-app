@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import type Stripe from "stripe";
 
-import { getStripe } from "@/lib/billing/stripeClient";
+import { detectPlanFromPriceId, getStripe } from "@/lib/billing/stripeClient";
 import { prisma } from "@/lib/db";
 
 export const runtime = "nodejs";
@@ -24,10 +24,15 @@ function buildSubscriptionSyncPayload(
   stripeCustomerId?: string;
   stripeSubscriptionId: string;
   subscriptionStatus: string;
+  subscriptionPlan: string;
 } {
+  const firstItem = subscription.items.data[0];
+  const priceId = firstItem?.price?.id ?? null;
+  const subscriptionPlan = detectPlanFromPriceId(priceId);
   const base = {
     stripeSubscriptionId: subscription.id,
     subscriptionStatus: subscription.status,
+    subscriptionPlan,
   };
   if (customerId) {
     return { ...base, stripeCustomerId: customerId };
@@ -113,6 +118,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           data: {
             stripeSubscriptionId: null,
             subscriptionStatus: "canceled",
+            subscriptionPlan: "starter",
           },
         });
         break;

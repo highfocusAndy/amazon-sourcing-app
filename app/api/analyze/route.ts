@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { userAnalyzeLimit } from "@/lib/apiRateLimit";
 import { requireAppAccess } from "@/lib/billing/requireAppAccess";
-import { getSpApiClientForUserOrGlobal } from "@/lib/amazonAccount";
+import { getSpApiClientForUserOrGlobal, hasConnectedAmazonAccount } from "@/lib/amazonAccount";
 import { analyzeProduct } from "@/lib/analysis";
 import type { ProductAnalysis } from "@/lib/types";
+import { consumeMonthlyUsage } from "@/lib/usageQuota";
 
 export const runtime = "nodejs";
 
@@ -75,6 +76,24 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         { status: 429 },
       );
     }
+    const usage = await consumeMonthlyUsage(gate.userId, "analyze");
+    if (!usage.ok) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "Monthly analyze limit reached for your plan.",
+          errorDetail: {
+            code: "USAGE_LIMIT",
+            metric: usage.metric,
+            period: usage.periodKey,
+            used: usage.used,
+            limit: usage.limit,
+          },
+        },
+        { status: 429 },
+      );
+    }
+    const hasAmazon = await hasConnectedAmazonAccount(gate.userId);
     const client = await getSpApiClientForUserOrGlobal(gate.userId);
     const result = await analyzeProduct(
       {
@@ -86,6 +105,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         shippingCost: Number(body.shippingCost ?? 0),
       },
       client,
+      { skipRestrictions: !hasAmazon },
     );
 
     return NextResponse.json({

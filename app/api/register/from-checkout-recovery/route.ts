@@ -3,7 +3,7 @@ import { hash } from "bcryptjs";
 
 import { verifyCheckoutResumeToken } from "@/lib/billing/checkoutResumeToken";
 import { noSignupTrialEndsAt } from "@/lib/billing/access";
-import { getStripe } from "@/lib/billing/stripeClient";
+import { detectPlanFromPriceId, getStripe } from "@/lib/billing/stripeClient";
 import { prisma } from "@/lib/db";
 import { normalizePasswordInput } from "@/lib/passwordInput";
 
@@ -47,6 +47,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   const subscription = await stripe.subscriptions.retrieve(payload.subscriptionId);
+  const subscriptionPlan = detectPlanFromPriceId(subscription.items.data[0]?.price?.id ?? null);
   if (subscription.status !== "trialing" && subscription.status !== "active") {
     return NextResponse.json(
       { error: "Subscription is no longer active. Contact support or subscribe again." },
@@ -99,6 +100,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         stripeCustomerId: customerId,
         stripeSubscriptionId: subscription.id,
         subscriptionStatus: subscription.status,
+        subscriptionPlan,
       },
     });
   } catch (e) {

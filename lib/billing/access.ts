@@ -80,6 +80,7 @@ const billingUserSelect = {
   trialEndsAt: true,
   promoAccessUntil: true,
   subscriptionStatus: true,
+  subscriptionPlan: true,
   createdAt: true,
   stripeCustomerId: true,
 } as const;
@@ -90,6 +91,7 @@ export type BillingUser = {
   trialEndsAt: Date | null;
   promoAccessUntil: Date | null;
   subscriptionStatus: string;
+  subscriptionPlan: string;
   createdAt: Date;
   stripeCustomerId: string | null;
 };
@@ -150,7 +152,9 @@ export type BillingOverview = {
   trialEndsAt: string | null;
   promoAccessUntil: string | null;
   subscriptionStatus: string;
+  subscriptionPlan: string;
   stripeConfigured: boolean;
+  proPlanEnabled: boolean;
   hasStripeCustomer: boolean;
   /** Days remaining in signup trial (0 if ended). */
   trialDaysLeft: number;
@@ -169,7 +173,10 @@ export type BillingOverview = {
 export async function getBillingOverview(userId: string, emailFallback?: string | null): Promise<BillingOverview> {
   const billingDisabled = isBillingDisabled();
   const testingBillingPass = isTestingBillingPass();
-  const stripeConfigured = Boolean(process.env.STRIPE_SECRET_KEY?.trim() && process.env.STRIPE_PRICE_ID?.trim());
+  const starterPriceId = process.env.STRIPE_PRICE_ID_STARTER?.trim() || process.env.STRIPE_PRICE_ID?.trim();
+  const proPriceId = process.env.STRIPE_PRICE_ID_PRO?.trim();
+  const stripeConfigured = Boolean(process.env.STRIPE_SECRET_KEY?.trim() && starterPriceId);
+  const proPlanEnabled = Boolean(process.env.STRIPE_SECRET_KEY?.trim() && proPriceId);
   const subscriptionTrialDays = defaultTrialDays();
   const subscriptionsPaused = isSubscriptionsPaused();
   const pausedMessage = subscriptionsPausedMessage();
@@ -183,7 +190,9 @@ export async function getBillingOverview(userId: string, emailFallback?: string 
       trialEndsAt: null,
       promoAccessUntil: null,
       subscriptionStatus: "none",
+      subscriptionPlan: "starter",
       stripeConfigured,
+      proPlanEnabled,
       hasStripeCustomer: false,
       trialDaysLeft: 999,
       promoDaysLeft: 0,
@@ -202,7 +211,9 @@ export async function getBillingOverview(userId: string, emailFallback?: string 
       trialEndsAt: null,
       promoAccessUntil: null,
       subscriptionStatus: "none",
+      subscriptionPlan: "starter",
       stripeConfigured,
+      proPlanEnabled,
       hasStripeCustomer: false,
       trialDaysLeft: 999,
       promoDaysLeft: 0,
@@ -223,7 +234,9 @@ export async function getBillingOverview(userId: string, emailFallback?: string 
       trialEndsAt: null,
       promoAccessUntil: null,
       subscriptionStatus: "none",
+      subscriptionPlan: "starter",
       stripeConfigured,
+      proPlanEnabled,
       hasStripeCustomer: false,
       trialDaysLeft: 0,
       promoDaysLeft: 0,
@@ -243,7 +256,9 @@ export async function getBillingOverview(userId: string, emailFallback?: string 
       trialEndsAt: null,
       promoAccessUntil: null,
       subscriptionStatus: user.subscriptionStatus,
+      subscriptionPlan: user.subscriptionPlan,
       stripeConfigured,
+      proPlanEnabled,
       hasStripeCustomer: Boolean(user.stripeCustomerId),
       trialDaysLeft: 0,
       promoDaysLeft: 0,
@@ -271,7 +286,9 @@ export async function getBillingOverview(userId: string, emailFallback?: string 
     trialEndsAt: trialEnd.toISOString(),
     promoAccessUntil: user.promoAccessUntil?.toISOString() ?? null,
     subscriptionStatus: user.subscriptionStatus,
+    subscriptionPlan: user.subscriptionPlan,
     stripeConfigured,
+    proPlanEnabled,
     hasStripeCustomer: Boolean(user.stripeCustomerId),
     trialDaysLeft,
     promoDaysLeft,

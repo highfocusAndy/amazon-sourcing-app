@@ -450,6 +450,8 @@ function AnalyzerPageContent() {
   const [showAmazonAccountModal, setShowAmazonAccountModal] = useState(false);
   const [amazonHeaderConnected, setAmazonHeaderConnected] = useState(false);
   const [amazonHeaderTitle, setAmazonHeaderTitle] = useState<string | null>(null);
+  const [bulkUploadEnabled, setBulkUploadEnabled] = useState(false);
+  const [pendingProductId, setPendingProductId] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const scannerStreamRef = useRef<MediaStream | null>(null);
   const scannerFrameRef = useRef<number | null>(null);
@@ -509,6 +511,22 @@ function AnalyzerPageContent() {
   useEffect(() => {
     refreshAmazonHeaderStatus();
   }, [refreshAmazonHeaderStatus]);
+
+  useEffect(() => {
+    fetch("/api/billing/status", { credentials: "same-origin" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((overview) => {
+        const proLike =
+          Boolean(overview?.appOwnerAccess) ||
+          Number(overview?.promoDaysLeft ?? 0) > 0 ||
+          ((overview?.subscriptionStatus === "active" || overview?.subscriptionStatus === "trialing") &&
+            overview?.subscriptionPlan === "pro");
+        setBulkUploadEnabled(proLike);
+      })
+      .catch(() => {
+        setBulkUploadEnabled(false);
+      });
+  }, []);
 
   useEffect(() => {
     if (!mobileDetailsOpen) return;
@@ -963,6 +981,7 @@ function AnalyzerPageContent() {
   }
 
   async function handleSelectProduct(item: ProductAnalysis): Promise<void> {
+    setPendingProductId(item.id);
     setSelectedProduct(item);
     setPopupQuantity("");
     setDetailPanelCost("");
@@ -991,9 +1010,12 @@ function AnalyzerPageContent() {
       } catch {
         // keep catalog-only selection
       } finally {
+        setPendingProductId(null);
         setPanelAnalysisLoading(false);
       }
+      return;
     }
+    setPendingProductId(null);
   }
 
   function applyFileSelection(nextFile: File | null): void {
@@ -1012,22 +1034,35 @@ function AnalyzerPageContent() {
   }
 
   function handleFileInput(event: ChangeEvent<HTMLInputElement>): void {
+    if (!bulkUploadEnabled) {
+      setInfoMessage("Bulk upload is available on Pro plan.");
+      return;
+    }
     applyFileSelection(event.target.files?.[0] ?? null);
   }
 
   function handleDragOver(event: DragEvent<HTMLDivElement>): void {
+    if (!bulkUploadEnabled) {
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
     setDragging(true);
   }
 
   function handleDragLeave(event: DragEvent<HTMLDivElement>): void {
+    if (!bulkUploadEnabled) {
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
     setDragging(false);
   }
 
   function handleDrop(event: DragEvent<HTMLDivElement>): void {
+    if (!bulkUploadEnabled) {
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
     setDragging(false);
@@ -1119,6 +1154,10 @@ function AnalyzerPageContent() {
 
   async function handleUploadSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
+    if (!bulkUploadEnabled) {
+      setInfoMessage("Bulk upload is available on Pro plan.");
+      return;
+    }
     await runUploadAnalysis(sellerType, false);
   }
 
@@ -1284,7 +1323,12 @@ function AnalyzerPageContent() {
     { key: "brand", label: "Brand" },
   ];
 
-  const rightPanelContent = !selectedProduct ? (
+  const rightPanelContent = panelAnalysisLoading ? (
+    <div className="flex flex-col items-center justify-center gap-3 py-8 text-slate-400">
+      <p className="font-medium">Loading…</p>
+      <p className="text-xs">Fetching product data and eligibility.</p>
+    </div>
+  ) : !selectedProduct ? (
     <div className="flex flex-col gap-4 text-sm text-slate-400">
       <div className="flex h-20 w-full items-center justify-center rounded-lg border border-slate-600 bg-slate-700/30 text-slate-500">
         <span className="text-3xl">—</span>
@@ -1301,11 +1345,6 @@ function AnalyzerPageContent() {
           </div>
         ))}
       </div>
-    </div>
-  ) : panelAnalysisLoading ? (
-    <div className="flex flex-col items-center justify-center gap-3 py-8 text-slate-400">
-      <p className="font-medium">Loading…</p>
-      <p className="text-xs">Fetching product data and eligibility.</p>
     </div>
   ) : null;
 
@@ -1940,7 +1979,7 @@ function AnalyzerPageContent() {
                   <tr
                     key={item.id}
                     onClick={() => void handleSelectProduct(item)}
-                    className={`cursor-pointer border-t border-slate-700 transition hover:bg-slate-700/30 ${selectedProduct?.id === item.id ? "ring-2 ring-inset ring-teal-400" : ""}`}
+                    className={`cursor-pointer border-t border-slate-700 transition hover:bg-slate-700/30 ${selectedProduct?.id === item.id || pendingProductId === item.id ? "ring-2 ring-inset ring-teal-400" : ""}`}
                   >
                     <td className="px-3 py-1.5">
                       {item.imageUrl ? (
@@ -2007,6 +2046,11 @@ function AnalyzerPageContent() {
           Bulk upload
         </summary>
         <div className="border-t border-slate-700 p-6 pt-4 space-y-6">
+          {!bulkUploadEnabled ? (
+            <p className="rounded-lg border border-slate-600 bg-slate-700/40 px-3 py-2 text-xs text-slate-300">
+              Bulk upload is available on Pro plan.
+            </p>
+          ) : null}
 
       <form onSubmit={handleUploadSubmit} className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         <h2 className="text-lg font-semibold text-slate-900">Upload Wholesale File</h2>
@@ -2020,19 +2064,19 @@ function AnalyzerPageContent() {
           onDrop={handleDrop}
           className={`mt-4 rounded-xl border-2 border-dashed p-6 text-center transition ${
             dragging ? "border-sky-400 bg-sky-50" : "border-slate-300 bg-slate-50"
-          }`}
+          } ${bulkUploadEnabled ? "" : "pointer-events-none opacity-60"}`}
         >
           <p className="text-sm text-slate-700">{file ? file.name : "Drag and drop .xlsx/.xls/.csv here"}</p>
           <p className="mt-1 text-xs text-slate-500">or</p>
-          <label className="mt-3 inline-flex cursor-pointer items-center rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100">
+          <label className={`mt-3 inline-flex items-center rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 ${bulkUploadEnabled ? "cursor-pointer hover:bg-slate-100" : "cursor-not-allowed opacity-70"}`}>
             Select File
-            <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFileInput} />
+            <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFileInput} disabled={!bulkUploadEnabled} />
           </label>
         </div>
 
         <button
           type="submit"
-          disabled={isUploadLoading}
+          disabled={isUploadLoading || !bulkUploadEnabled}
           className="mt-5 inline-flex items-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isUploadLoading ? "Analyzing File..." : "Run Batch Analysis"}

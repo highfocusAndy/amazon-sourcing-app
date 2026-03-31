@@ -4,11 +4,13 @@ import { userAnalyzeLimit } from "@/lib/apiRateLimit";
 import { requireAppAccess } from "@/lib/billing/requireAppAccess";
 import {
   getSpApiClientForUserOrGlobal,
+  hasConnectedAmazonAccount,
   SP_API_UNAVAILABLE_USER_MESSAGE,
 } from "@/lib/amazonAccount";
 import type { ItemOfferRow } from "@/lib/spApiClient";
 import { analyzeProduct, buildAnalysisForOffer } from "@/lib/analysis";
 import type { ProductAnalysis } from "@/lib/types";
+import { consumeMonthlyUsage } from "@/lib/usageQuota";
 
 export const runtime = "nodejs";
 
@@ -47,6 +49,25 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         { status: 429 },
       );
     }
+    const usage = await consumeMonthlyUsage(gate.userId, "analyze_offers");
+    if (!usage.ok) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "Monthly offers-analysis limit reached for your plan.",
+          errorDetail: {
+            code: "USAGE_LIMIT",
+            metric: usage.metric,
+            period: usage.periodKey,
+            used: usage.used,
+            limit: usage.limit,
+          },
+          results: [],
+        },
+        { status: 429 },
+      );
+    }
+    const hasAmazon = await hasConnectedAmazonAccount(gate.userId);
     const client = await getSpApiClientForUserOrGlobal(gate.userId);
     const wholesalePrice = Number(body.wholesalePrice ?? 0);
     const projectedMonthlyUnits = Number(body.projectedMonthlyUnits ?? 1) || 1;
@@ -63,6 +84,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         shippingCost,
       },
       client,
+      { skipRestrictions: !hasAmazon },
     );
 
     if (baseResult.error || !baseResult.asin) {

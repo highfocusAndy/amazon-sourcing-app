@@ -6,6 +6,7 @@ import {
   SP_API_UNAVAILABLE_USER_MESSAGE,
 } from "@/lib/amazonAccount";
 import { getCatalogSearchPageCache, setCatalogSearchPageCache } from "@/lib/spApiResponseCache";
+import { consumeMonthlyUsage } from "@/lib/usageQuota";
 
 /** True only if the query looks like a real ASIN (10 alphanumeric with both letter and digit). */
 function isAsinQuery(q: string): boolean {
@@ -31,6 +32,22 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   if (!userCatalogSearchLimit(gate.userId)) {
     return NextResponse.json(
       { error: "Too many catalog searches. Wait a minute and try again.", items: [], nextPageToken: null },
+      { status: 429 },
+    );
+  }
+  const usage = await consumeMonthlyUsage(gate.userId, "catalog_search");
+  if (!usage.ok) {
+    return NextResponse.json(
+      {
+        error: "Monthly catalog-search limit reached for your plan.",
+        code: "USAGE_LIMIT",
+        metric: usage.metric,
+        period: usage.periodKey,
+        used: usage.used,
+        limit: usage.limit,
+        items: [],
+        nextPageToken: null,
+      },
       { status: 429 },
     );
   }

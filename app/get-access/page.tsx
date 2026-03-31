@@ -13,10 +13,12 @@ export default async function GetAccessPage() {
   }
 
   const subscriptionTrialDays = defaultTrialDays();
-  const stripeConfigured = Boolean(
-    process.env.STRIPE_SECRET_KEY?.trim() && process.env.STRIPE_PRICE_ID?.trim(),
-  );
-  const priceDisplay = process.env.BILLING_PRICE_DISPLAY?.trim() || "$19.95/month";
+  const starterPriceId = process.env.STRIPE_PRICE_ID_STARTER?.trim() || process.env.STRIPE_PRICE_ID?.trim();
+  const proPriceId = process.env.STRIPE_PRICE_ID_PRO?.trim();
+  const stripeConfigured = Boolean(process.env.STRIPE_SECRET_KEY?.trim() && starterPriceId);
+  const proPlanEnabled = Boolean(process.env.STRIPE_SECRET_KEY?.trim() && proPriceId);
+  const starterPriceDisplay = process.env.BILLING_PRICE_DISPLAY_STARTER?.trim() || process.env.BILLING_PRICE_DISPLAY?.trim() || "$19.95/month";
+  const proPriceDisplay = process.env.BILLING_PRICE_DISPLAY_PRO?.trim() || "$29.95/month";
   const subscriptionsPaused = isSubscriptionsPaused();
   const pausedMessage = subscriptionsPausedMessage();
 
@@ -27,7 +29,9 @@ export default async function GetAccessPage() {
         <GetAccessContent
           subscriptionTrialDays={subscriptionTrialDays}
           stripeConfigured={stripeConfigured}
-          priceDisplay={priceDisplay}
+          proPlanEnabled={proPlanEnabled}
+          starterPriceDisplay={starterPriceDisplay}
+          proPriceDisplay={proPriceDisplay}
           subscriptionsPaused={subscriptionsPaused}
           subscriptionsPausedMessage={pausedMessage}
           supportEmail={supportContactEmail()}

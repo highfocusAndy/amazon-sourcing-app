@@ -3,6 +3,7 @@ import { userRestrictionsLimit } from "@/lib/apiRateLimit";
 import { requireAppAccess } from "@/lib/billing/requireAppAccess";
 import {
   getSpApiClientForUserOrGlobal,
+  hasConnectedAmazonAccount,
   SP_API_UNAVAILABLE_USER_MESSAGE,
 } from "@/lib/amazonAccount";
 import {
@@ -10,6 +11,7 @@ import {
   listingRestrictionsCacheKey,
   setListingRestrictionsCachePayload,
 } from "@/lib/spApiResponseCache";
+import { consumeMonthlyUsage } from "@/lib/usageQuota";
 
 /**
  * Returns gating/restriction status for one ASIN. Used when the user selects a product
@@ -33,6 +35,32 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     if (!userRestrictionsLimit(gate.userId)) {
       return NextResponse.json(
         { error: "Too many restriction checks. Wait a moment.", asin, gated: null },
+        { status: 429 },
+      );
+    }
+    // Restriction verdicts must reflect the signed-in seller account only.
+    // If Amazon is not connected, return unknown instead of using global env credentials.
+    const hasAmazon = await hasConnectedAmazonAccount(gate.userId);
+    if (!hasAmazon) {
+      return NextResponse.json({
+        asin,
+        gated: null,
+        requiresAmazonConnection: true,
+      });
+    }
+    const usage = await consumeMonthlyUsage(gate.userId, "restrictions");
+    if (!usage.ok) {
+      return NextResponse.json(
+        {
+          error: "Monthly restrictions-check limit reached for your plan.",
+          code: "USAGE_LIMIT",
+          metric: usage.metric,
+          period: usage.periodKey,
+          used: usage.used,
+          limit: usage.limit,
+          asin,
+          gated: null,
+        },
         { status: 429 },
       );
     }

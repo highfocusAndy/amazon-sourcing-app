@@ -127,6 +127,7 @@ export default function ExplorerPage() {
   const [ungatedOnly, setUngatedOnly] = useState(false);
   const [eligibilityByAsin, setEligibilityByAsin] = useState<Record<string, boolean | null>>({});
   const [analyzeRequiresAuth, setAnalyzeRequiresAuth] = useState(false);
+  const [pendingProductAsin, setPendingProductAsin] = useState<string | null>(null);
   const [sellerModalFilter, setSellerModalFilter] = useState<null | "all" | "FBA" | "FBM">(null);
   const [marketplaceDomain, setMarketplaceDomain] = useState("amazon.com");
   const [loadingPaused, setLoadingPaused] = useState(false);
@@ -521,17 +522,19 @@ export default function ExplorerPage() {
 
   const handleProductClick = useCallback(
     async (item: CatalogItem) => {
+      setPendingProductAsin(item.asin);
+      setPanelAnalysisLoading(true);
+      setMobileDetailsOpen(true);
+      setError(null);
+      setAnalyzeRequiresAuth(false);
       const cached = getByAsin(item.asin);
       if (cached) {
         setSelectedProduct(cached);
-        setMobileDetailsOpen(true);
         setInfoMessage(null);
-        setAnalyzeRequiresAuth(false);
+        setPendingProductAsin(null);
+        setPanelAnalysisLoading(false);
         return;
       }
-      setPanelAnalysisLoading(true);
-      setError(null);
-      setAnalyzeRequiresAuth(false);
       try {
         const res = await fetch("/api/analyze", {
           method: "POST",
@@ -554,19 +557,22 @@ export default function ExplorerPage() {
           } else {
             setError(json?.error ?? "Analysis failed.");
           }
+          setPendingProductAsin(null);
           return;
         }
         if (!json.result) {
           setError(json?.error ?? "Analysis failed.");
+          setPendingProductAsin(null);
           return;
         }
         const result = json.result as ProductAnalysis;
         addProduct(result);
         setSelectedProduct(result);
-        setMobileDetailsOpen(true);
         setDetailPanelCost("");
+        setPendingProductAsin(null);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Could not load product.");
+        setPendingProductAsin(null);
       } finally {
         setPanelAnalysisLoading(false);
       }
@@ -901,7 +907,9 @@ export default function ExplorerPage() {
                         key={item.asin}
                         onClick={() => handleProductClick(item)}
                         className={`cursor-pointer border-t border-slate-700 transition hover:bg-slate-700/30 ${
-                          selectedProduct?.asin === item.asin ? "bg-sky-500/20 ring-inset ring-1 ring-sky-400" : ""
+                          selectedProduct?.asin === item.asin || pendingProductAsin === item.asin
+                            ? "bg-sky-500/20 ring-inset ring-1 ring-sky-400"
+                            : ""
                         }`}
                       >
                         <td className="px-2 py-1 min-w-0">
@@ -987,7 +995,12 @@ export default function ExplorerPage() {
           </div>
         </div>
         <div className="p-4 text-[13px] text-slate-200">
-          {!selectedProduct ? (
+          {panelAnalysisLoading ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-8 text-slate-400">
+              <p className="font-medium">Loading…</p>
+              <p className="text-xs">Fetching product data and eligibility.</p>
+            </div>
+          ) : !selectedProduct ? (
             <div className="flex flex-col gap-4 text-sm text-slate-400">
               <div className="flex h-20 w-full items-center justify-center rounded-lg border border-slate-600 bg-slate-700/30 text-slate-500">
                 <span className="text-3xl">—</span>
@@ -1004,11 +1017,6 @@ export default function ExplorerPage() {
                   </div>
                 ))}
               </div>
-            </div>
-          ) : panelAnalysisLoading ? (
-            <div className="flex flex-col items-center justify-center gap-3 py-8 text-slate-400">
-              <p className="font-medium">Loading…</p>
-              <p className="text-xs">Fetching product data and eligibility.</p>
             </div>
           ) : (
             <div className="space-y-4">

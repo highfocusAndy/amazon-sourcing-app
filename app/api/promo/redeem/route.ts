@@ -28,6 +28,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   try {
     const result = await prisma.$transaction(async (tx) => {
+      const priorRedemption = await tx.promoRedemption.findFirst({
+        where: { userId },
+        select: { id: true },
+      });
+      if (priorRedemption) {
+        return { ok: false as const, message: "Promo access can only be redeemed once per account." };
+      }
       await ensurePromoRowsFromEnv(tx, code);
       const promo = await tx.promoCode.findUnique({
         where: { code },
@@ -40,15 +47,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }
       if (promo.maxRedemptions != null && promo.redemptionCount >= promo.maxRedemptions) {
         return { ok: false as const, message: "This promo code has reached its redemption limit." };
-      }
-
-      const existing = await tx.promoRedemption.findUnique({
-        where: {
-          promoCodeId_userId: { promoCodeId: promo.id, userId },
-        },
-      });
-      if (existing && !promo.allowRepeatRedemption) {
-        return { ok: false as const, message: "You have already redeemed this code." };
       }
 
       const user = await tx.user.findUnique({
@@ -66,19 +64,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           : now;
       const promoAccessUntil = new Date(base.getTime() + promo.grantsDays * 86_400_000);
 
-      if (existing && promo.allowRepeatRedemption) {
-        await tx.promoRedemption.update({
-          where: { promoCodeId_userId: { promoCodeId: promo.id, userId } },
-          data: { redeemedAt: now },
-        });
-      } else {
-        await tx.promoRedemption.create({
-          data: {
-            promoCodeId: promo.id,
-            userId,
-          },
-        });
-      }
+      await tx.promoRedemption.create({
+        data: {
+          promoCodeId: promo.id,
+          userId,
+        },
+      });
 
       await tx.promoCode.update({
         where: { id: promo.id },
@@ -93,7 +84,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         ok: true as const,
         promoAccessUntil: promoAccessUntil.toISOString(),
         grantsDays: promo.grantsDays,
-        extended: Boolean(existing && promo.allowRepeatRedemption),
+        extended: false,
       };
     });
 
