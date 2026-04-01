@@ -110,7 +110,14 @@ export function SubscribeContent({
         alert(json.error ?? "Could not open billing portal.");
         return;
       }
-      window.location.href = json.url;
+      // Avoid noopener so /subscribe/portal-return can refresh this tab via window.opener.
+      const features = "popup=yes,width=720,height=840,menubar=no,toolbar=no";
+      const child = window.open(json.url, "stripe_customer_portal", features);
+      if (child) {
+        child.focus();
+      } else {
+        window.location.href = json.url;
+      }
     } catch {
       alert("Could not open billing portal.");
     } finally {
