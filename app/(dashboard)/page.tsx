@@ -4,6 +4,7 @@ import { useSavedProducts } from "@/app/context/SavedProductsContext";
 import { useExplorerCategory } from "@/app/context/ExplorerCategoryContext";
 import { getSubcategoriesForCategory } from "@/lib/catalogCategories";
 import { DashboardHeaderAccount } from "@/app/components/DashboardHeaderAccount";
+import { ProductInsightBlurb } from "@/app/components/ProductInsightBlurb";
 import { AmazonAccountModal } from "@/app/settings/AmazonAccountModal";
 import { AmazonOAuthAlerts } from "@/app/settings/AmazonOAuthAlerts";
 import { amazonOfferListingUrl, amazonProductDetailUrl, amazonSellerStorefrontUrl } from "@/lib/marketplaces";
@@ -75,23 +76,6 @@ function decisionExplanation(item: ProductAnalysis): string | null {
     return "Profit and ROI look good at current data.";
   }
   return item.reasons[0] ?? null;
-}
-
-function buildAiInsight(item: ProductAnalysis): string {
-  if (item.error) {
-    if (/rate limit|QuotaExceeded|wait a few minutes/i.test(item.error))
-      return "Amazon's API limit was reached. Wait a few minutes and try again.";
-    return "Data connection issue. Re-run and verify account/API credentials.";
-  }
-  if (item.approvalRequired || item.listingRestricted || item.restrictedBrand)
-    return "Listing/gating risk detected. Check approvals before buying.";
-  if (item.netProfit === null || item.roiPercent === null || item.buyBoxPrice === null)
-    return "Incomplete market data. Validate buy box and fees before deciding.";
-  if (item.decision === "BUY") return "Strong candidate. Verify in Seller Central before sourcing.";
-  if (item.decision === "WORTH UNGATING") return "Potentially attractive after ungating.";
-  if (item.decision === "LOW_MARGIN") return "Margin is thin. Negotiate cost or skip.";
-  if (item.decision === "NO_MARGIN") return "No margin or deficit. Do not source.";
-  return "Needs deeper review.";
 }
 
 function parsePositiveInput(raw: string): number | null {
@@ -1472,10 +1456,12 @@ export default function ExplorerPage() {
                   </div>
                 ) : null}
 
-                <p className="rounded-lg border border-slate-600 bg-slate-700/30 px-3 py-2 text-sm text-slate-300">
-                  <span className="font-semibold text-slate-100">AI: </span>
-                  {buildAiInsight(selectedProduct)}
-                </p>
+                <ProductInsightBlurb
+                  product={selectedProduct}
+                  sessionSignedIn={Boolean(session?.user)}
+                  amazonConnected={amazonHeaderConnected}
+                  onConnectAmazon={() => setShowAmazonAccountModal(true)}
+                />
               </div>
             </div>
           )}

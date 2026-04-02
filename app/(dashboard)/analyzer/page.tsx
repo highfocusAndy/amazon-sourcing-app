@@ -17,6 +17,7 @@ import {
 import { useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { DashboardHeaderAccount } from "@/app/components/DashboardHeaderAccount";
+import { ProductInsightBlurb } from "@/app/components/ProductInsightBlurb";
 import { AmazonAccountModal } from "@/app/settings/AmazonAccountModal";
 import { useSavedProducts } from "@/app/context/SavedProductsContext";
 import { amazonOfferListingUrl, amazonProductDetailUrl, amazonSellerStorefrontUrl } from "@/lib/marketplaces";
@@ -311,41 +312,6 @@ function decisionExplanation(item: ProductAnalysis): string | null {
     return "Profit and ROI look good at current data.";
   }
   return item.reasons[0] ?? null;
-}
-
-function buildAiInsight(item: ProductAnalysis): string {
-  if (item.error) {
-    if (/rate limit|QuotaExceeded|wait a few minutes/i.test(item.error)) {
-      return "Amazon’s API limit was reached. Wait a few minutes and try again.";
-    }
-    return "Data connection issue. Re-run this item and verify account/API credentials.";
-  }
-
-  if (item.approvalRequired || item.listingRestricted || item.restrictedBrand) {
-    return "Listing/gating risk detected. Check approvals and ungating docs before buying.";
-  }
-
-  if (item.netProfit === null || item.roiPercent === null || item.buyBoxPrice === null) {
-    return "Incomplete market data. Validate buy box and fee data before making a sourcing decision.";
-  }
-
-  if (item.decision === "BUY") {
-    return "Strong candidate. Profit and ROI are acceptable with current market snapshot. Verify the product exists in your Seller Central (Inventory > Add a product) before sourcing.";
-  }
-
-  if (item.decision === "WORTH UNGATING") {
-    return "Potentially attractive after ungating. Confirm docs and post-ungating margin stability.";
-  }
-
-  if (item.decision === "LOW_MARGIN") {
-    return "Margin is thin. Negotiate lower cost, reduce shipping, or skip.";
-  }
-
-  if (item.decision === "NO_MARGIN") {
-    return "No margin or deficit. Do not source at current costs.";
-  }
-
-  return "Needs deeper review: compare offer depth, rank trend, and competition before buying.";
 }
 
 function compareValues(
@@ -1810,10 +1776,12 @@ function AnalyzerPageContent() {
             </div>
           ) : null}
 
-          <p className="rounded-lg border border-slate-600 bg-slate-700/30 px-3 py-2 text-sm text-slate-300">
-            <span className="font-semibold text-slate-100">AI: </span>
-            {buildAiInsight(selectedProduct)}
-          </p>
+          <ProductInsightBlurb
+            product={selectedProduct}
+            sessionSignedIn={Boolean(session?.user)}
+            amazonConnected={amazonHeaderConnected}
+            onConnectAmazon={() => setShowAmazonAccountModal(true)}
+          />
         </div>
       </div>
     );
