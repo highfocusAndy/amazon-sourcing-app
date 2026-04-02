@@ -110,7 +110,14 @@ export function SubscribeContent({
         alert(json.error ?? "Could not open billing portal.");
         return;
       }
-      // Avoid noopener so /subscribe/portal-return can refresh this tab via window.opener.
+      // Small screens: popups are often blocked or open as a full tab anyway—use one tab for Stripe + return.
+      const narrow =
+        typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches;
+      if (narrow) {
+        window.location.href = json.url;
+        return;
+      }
+      // Desktop: popup keeps the app tab open; /subscribe/portal-return refreshes opener and closes.
       const features = "popup=yes,width=720,height=840,menubar=no,toolbar=no";
       const child = window.open(json.url, "stripe_customer_portal", features);
       if (child) {

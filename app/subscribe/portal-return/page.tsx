@@ -11,23 +11,26 @@ export default function BillingPortalReturnPage() {
   const [hint, setHint] = useState("Refreshing your account and closing this window…");
 
   useEffect(() => {
+    const subscribeUrl = `${window.location.origin}/subscribe`;
     try {
       const opener = window.opener;
       if (opener && !opener.closed) {
-        opener.location.href = `${window.location.origin}/subscribe`;
+        opener.location.href = subscribeUrl;
+        try {
+          window.close();
+        } catch {
+          // ignore
+        }
+        const t = window.setTimeout(() => {
+          setHint("You can close this tab if it is still open, then return to the app.");
+        }, 600);
+        return () => window.clearTimeout(t);
       }
     } catch {
       // ignore
     }
-    try {
-      window.close();
-    } catch {
-      // ignore
-    }
-    const t = window.setTimeout(() => {
-      setHint("You can close this tab if it is still open, then return to the app.");
-    }, 600);
-    return () => window.clearTimeout(t);
+    // Mobile / same-tab flow: Stripe opened in this tab, so send user straight back to Subscribe.
+    window.location.replace(subscribeUrl);
   }, []);
 
   return (
