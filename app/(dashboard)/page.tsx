@@ -654,10 +654,13 @@ export default function ExplorerPage() {
     if (!mobileDetailsOpen) return;
     const mq = window.matchMedia("(max-width: 1023px)");
     if (!mq.matches) return;
-    const prev = document.body.style.overflow;
+    const prevBody = document.body.style.overflow;
+    const prevHtml = document.documentElement.style.overflow;
     document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
     return () => {
-      document.body.style.overflow = prev;
+      document.body.style.overflow = prevBody;
+      document.documentElement.style.overflow = prevHtml;
     };
   }, [mobileDetailsOpen]);
 
@@ -687,7 +690,7 @@ export default function ExplorerPage() {
   }, [sellerModal]);
 
   return (
-    <>
+    <div className="flex min-h-0 min-w-0 w-full flex-1 flex-col overflow-hidden">
       {showAmazonAccountModal && (
         <AmazonAccountModal
           onClose={() => setShowAmazonAccountModal(false)}
@@ -696,8 +699,9 @@ export default function ExplorerPage() {
       <Suspense fallback={null}>
         <AmazonOAuthAlerts />
       </Suspense>
-      <main className="flex min-w-0 flex-1 flex-col gap-4 p-4 pb-10 mr-0 sm:gap-6 sm:p-6 sm:pb-10 lg:mr-80 xl:mr-96">
-        <header className="sticky top-[4.75rem] z-20 shrink-0 rounded-xl border border-slate-600/80 bg-slate-800/95 px-3 py-3 shadow-lg shadow-black/10 border-t-4 border-t-teal-500 backdrop-blur sm:px-4 sm:py-4 md:top-0">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-y-contain p-4 pb-10 sm:gap-6 sm:p-6 sm:pb-10">
+        <header className="sticky top-0 z-20 shrink-0 rounded-xl border border-slate-600/80 bg-slate-800/95 px-3 py-3 shadow-lg shadow-black/10 border-t-4 border-t-teal-500 backdrop-blur sm:px-4 sm:py-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
             <div className="hidden min-w-0 items-center gap-2 sm:gap-3 md:flex">
               <div className="flex min-w-0 items-center gap-2 sm:gap-3">
@@ -1013,11 +1017,11 @@ export default function ExplorerPage() {
         />
       ) : null}
 
-      {/* Right panel: full-screen sheet on mobile when open; fixed column on lg+ */}
+      {/* Right panel: overlay sheet on small screens; in-flow column on lg+ so the page does not scroll under it */}
       <aside
         className={`fixed z-50 flex min-h-0 flex-col border-l border-slate-700 bg-slate-800 shadow-xl transition-transform duration-300 ease-out max-lg:right-0 max-lg:top-0 max-lg:h-[100dvh] max-lg:max-h-[100dvh] max-lg:w-full max-lg:max-w-xl ${
           mobileDetailsOpen ? "max-lg:translate-x-0" : "max-lg:pointer-events-none max-lg:translate-x-full"
-        } lg:pointer-events-auto lg:inset-auto lg:right-0 lg:top-0 lg:flex lg:h-screen lg:max-h-screen lg:w-80 lg:translate-x-0 xl:w-96`}
+        } lg:static lg:z-auto lg:h-full lg:max-h-full lg:w-80 lg:shrink-0 lg:translate-x-0 xl:w-96`}
       >
         <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b border-slate-700 bg-slate-800 px-4 py-3">
           <h3 className="text-base font-semibold text-slate-100">Product details</h3>
@@ -1070,7 +1074,7 @@ export default function ExplorerPage() {
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="sticky top-16 z-[5] flex flex-col gap-3 bg-slate-800 pb-2">
+              <div className="flex flex-col gap-3 bg-slate-800 pb-2">
                 {selectedProduct.imageUrl ? (
                   <img
                     src={selectedProduct.imageUrl}
@@ -1447,6 +1451,7 @@ export default function ExplorerPage() {
           )}
         </div>
       </aside>
+      </div>
 
       {sellerModal && selectedProduct?.sellerDetails && (selectedProduct.sellerDetails ?? []).length > 0 ? (
         <>
@@ -1555,6 +1560,6 @@ export default function ExplorerPage() {
           </div>
         </>
       ) : null}
-    </>
+    </div>
   );
 }

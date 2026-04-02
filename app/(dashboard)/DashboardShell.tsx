@@ -275,9 +275,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   return (
     <SavedProductsProvider>
       <ExplorerCategoryProvider>
-        <div className="relative min-h-screen min-h-[100dvh] w-full bg-slate-900/50">
+        <div className="relative h-[100dvh] max-h-[100dvh] w-full overflow-hidden bg-slate-900/50">
           <BrandBackdrop variant="onDark" />
-          <div className="relative z-[1] flex min-h-screen min-h-[100dvh] w-full flex-col md:flex-row">
+          <div className="relative z-[1] flex h-full min-h-0 w-full flex-col md:flex-row">
             <header className="sticky top-0 z-40 shrink-0 border-b border-slate-700/80 bg-slate-900/95 px-3 py-2 backdrop-blur-md md:hidden">
               <div className="flex min-w-0 items-center gap-2 sm:gap-3">
                 <div className="flex shrink-0 flex-col items-center gap-1">
@@ -313,8 +313,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               mobileDrawerOpen={mobileDrawerOpen}
               onCloseMobileMenu={() => setMobileDrawerOpen(false)}
             />
-            {/* No min-h-0 here so tall pages scroll the document; inner layouts may still use their own sticky headers. */}
-            <div className="flex min-w-0 flex-1 flex-col">{children}</div>
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">{children}</div>
           </div>
         </div>
       </ExplorerCategoryProvider>

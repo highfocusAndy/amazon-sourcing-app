@@ -26,7 +26,7 @@ export default function SavedPage() {
   const { products, remove, clearAll } = useSavedProducts();
 
   return (
-    <main className="flex-1 min-w-0 flex flex-col gap-4 p-4 sm:gap-6 sm:p-6">
+    <main className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-y-contain p-4 sm:gap-6 sm:p-6">
       <header className="rounded-xl border border-slate-600/80 bg-slate-800/90 p-4 shadow-lg shadow-black/10 border-t-4 border-t-teal-500 sm:p-6">
         <h1 className="text-xl font-bold text-slate-100 tracking-tight sm:text-2xl">Saved Products</h1>
         <p className="mt-2 text-sm text-slate-400">
