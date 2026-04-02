@@ -1012,18 +1012,18 @@ export default function ExplorerPage() {
         <button
           type="button"
           aria-label="Close product details"
-          className="fixed inset-0 z-40 bg-slate-950/60 backdrop-blur-[1px] lg:hidden"
+          className="fixed inset-0 z-[90] bg-slate-950/60 backdrop-blur-[1px] lg:hidden"
           onClick={() => setMobileDetailsOpen(false)}
         />
       ) : null}
 
       {/* Right panel: overlay sheet on small screens; in-flow column on lg+ so the page does not scroll under it */}
       <aside
-        className={`fixed z-50 flex min-h-0 flex-col border-l border-slate-700 bg-slate-800 shadow-xl transition-transform duration-300 ease-out max-lg:right-0 max-lg:top-0 max-lg:h-[100dvh] max-lg:max-h-[100dvh] max-lg:w-full max-lg:max-w-xl ${
+        className={`fixed flex min-h-0 flex-col border-l border-slate-700 bg-slate-800 shadow-xl transition-transform duration-300 ease-out max-lg:inset-x-0 max-lg:top-0 max-lg:z-[100] max-lg:h-[100svh] max-lg:max-h-[100svh] max-lg:w-full max-lg:max-w-none ${
           mobileDetailsOpen ? "max-lg:translate-x-0" : "max-lg:pointer-events-none max-lg:translate-x-full"
         } lg:static lg:z-auto lg:h-full lg:max-h-full lg:w-80 lg:shrink-0 lg:translate-x-0 xl:w-96`}
       >
-        <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b border-slate-700 bg-slate-800 px-4 py-3">
+        <div className="flex shrink-0 items-center justify-between border-b border-slate-700 bg-slate-800 px-4 py-3 max-lg:py-0 max-lg:pb-3 max-lg:pt-[calc(0.75rem+env(safe-area-inset-top,0px))]">
           <h3 className="text-base font-semibold text-slate-100">Product details</h3>
           <div className="flex items-center gap-2">
             <button
@@ -1048,7 +1048,7 @@ export default function ExplorerPage() {
             ) : null}
           </div>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain p-4 text-[13px] text-slate-200">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-4 pb-4 pt-3 text-[13px] text-slate-200 lg:p-4">
           {panelAnalysisLoading ? (
             <div className="flex flex-col items-center justify-center gap-3 py-8 text-slate-400">
               <p className="font-medium">Loading…</p>
@@ -1487,7 +1487,7 @@ export default function ExplorerPage() {
         <>
           <button
             type="button"
-            className="fixed inset-0 z-[55] bg-slate-950/50 backdrop-blur-[1px]"
+            className="fixed inset-0 z-[110] bg-slate-950/50 backdrop-blur-[1px]"
             onClick={() => setSellerModal(null)}
             aria-label="Close sellers list"
           />
@@ -1497,10 +1497,10 @@ export default function ExplorerPage() {
             aria-label="Sellers list"
             className={
               sellerModal.layout === "sheet"
-                ? `fixed inset-y-0 right-0 z-[60] flex max-h-[100dvh] w-[min(100vw,24rem)] flex-col overflow-hidden border-l border-slate-600 bg-slate-800 shadow-2xl transition-transform duration-300 ease-out ${
+                ? `fixed inset-y-0 right-0 z-[115] flex max-h-[100svh] w-[min(100vw,24rem)] flex-col overflow-hidden border-l border-slate-600 bg-slate-800 shadow-2xl transition-transform duration-300 ease-out ${
                     sellerSheetVisible ? "translate-x-0" : "translate-x-full pointer-events-none"
                   }`
-                : "fixed z-[60] flex min-h-0 flex-col overflow-hidden rounded-xl border border-slate-600 bg-slate-800 shadow-xl"
+                : "fixed z-[115] flex min-h-0 flex-col overflow-hidden rounded-xl border border-slate-600 bg-slate-800 shadow-xl"
             }
             style={
               sellerModal.layout === "popover"
