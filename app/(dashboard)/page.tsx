@@ -663,7 +663,7 @@ export default function ExplorerPage() {
       <Suspense fallback={null}>
         <AmazonOAuthAlerts />
       </Suspense>
-      <main className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 p-4 max-md:min-h-[calc(100dvh-3.5rem)] mr-0 sm:gap-6 sm:p-6 lg:mr-80 xl:mr-96">
+      <main className="flex min-w-0 flex-1 flex-col gap-4 p-4 pb-10 mr-0 sm:gap-6 sm:p-6 sm:pb-10 lg:mr-80 xl:mr-96">
         <header className="sticky top-14 z-20 shrink-0 rounded-xl border border-slate-600/80 bg-slate-800/95 px-3 py-3 shadow-lg shadow-black/10 border-t-4 border-t-teal-500 backdrop-blur sm:px-4 sm:py-4 md:top-0">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
             <div className="hidden min-w-0 items-center gap-2 sm:gap-3 md:flex">
@@ -796,7 +796,7 @@ export default function ExplorerPage() {
         {showProductTable && (
           <section
             ref={productTableContainerRef}
-            className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-600/80 bg-slate-800/90 shadow-lg shadow-black/10"
+            className="flex min-w-0 flex-col rounded-xl border border-slate-600/80 bg-slate-800/90 shadow-lg shadow-black/10"
           >
             <div className="border-b border-slate-600/80 px-3 py-2.5 flex flex-col gap-0.5 bg-slate-800/50">
               <div className="flex items-center justify-between gap-2">
@@ -876,7 +876,7 @@ export default function ExplorerPage() {
                 </p>
               )}
             </div>
-            <div className="min-w-0 max-h-[60vh] overflow-y-auto">
+            <div className="min-w-0 overflow-x-auto">
               <table className="w-full table-fixed border-collapse text-left text-sm">
                 <thead className="bg-slate-700/50 text-xs uppercase tracking-wide text-slate-400">
                   <tr>

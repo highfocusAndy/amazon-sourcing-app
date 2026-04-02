@@ -1854,7 +1854,7 @@ function AnalyzerPageContent() {
       {showAmazonAccountModal && (
         <AmazonAccountModal onClose={() => setShowAmazonAccountModal(false)} />
       )}
-      <main className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 p-4 max-md:min-h-[calc(100dvh-3.5rem)] mr-0 sm:gap-6 sm:p-6 lg:mr-80 xl:mr-96">
+      <main className="flex min-w-0 flex-1 flex-col gap-4 p-4 pb-10 mr-0 sm:gap-6 sm:p-6 sm:pb-10 lg:mr-80 xl:mr-96">
         <header className="sticky top-14 z-20 shrink-0 rounded-xl border border-slate-600/80 bg-slate-800/95 px-3 py-3 shadow-lg shadow-black/10 border-t-4 border-t-teal-500 backdrop-blur sm:px-4 sm:py-4 md:top-0">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
             <div className="hidden min-w-0 items-center gap-2 sm:gap-3 md:flex">
@@ -1944,7 +1944,7 @@ function AnalyzerPageContent() {
       ) : null}
 
       {results.length > 0 ? (
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
+        <div className="flex min-w-0 flex-col gap-4">
       <section className="shrink-0 rounded-xl border border-slate-700 bg-slate-800/90 px-4 py-3 shadow-sm">
         <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
           <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -1970,7 +1970,7 @@ function AnalyzerPageContent() {
         </div>
       </section>
 
-      <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-700 bg-slate-800/90 shadow-sm">
+      <section className="flex min-w-0 flex-col rounded-xl border border-slate-700 bg-slate-800/90 shadow-sm">
         <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-slate-700 px-4 py-3">
           <div className="flex flex-wrap items-center gap-3">
             <label className="text-sm font-medium text-slate-300">
@@ -2042,7 +2042,7 @@ function AnalyzerPageContent() {
             </div>
           )}
         </div>
-        <div className="min-h-0 min-w-0 flex-1 overflow-auto md:max-h-[60vh]">
+        <div className="min-w-0 overflow-x-auto">
           <table className="min-w-full border-collapse text-left text-sm">
             <thead className="bg-slate-700/50 text-xs uppercase tracking-wide text-slate-400">
               <tr>

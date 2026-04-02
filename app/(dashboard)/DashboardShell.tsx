@@ -296,7 +296,8 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               mobileDrawerOpen={mobileDrawerOpen}
               onCloseMobileMenu={() => setMobileDrawerOpen(false)}
             />
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col">{children}</div>
+            {/* No min-h-0 here so tall pages scroll the document; inner layouts may still use their own sticky headers. */}
+            <div className="flex min-w-0 flex-1 flex-col">{children}</div>
           </div>
         </div>
       </ExplorerCategoryProvider>
