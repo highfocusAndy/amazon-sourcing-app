@@ -11,6 +11,7 @@ import {
   type ChangeEvent,
   type DragEvent,
   type FormEvent,
+  type MouseEvent,
   type ReactNode,
 } from "react";
 import { useSearchParams } from "next/navigation";
@@ -18,6 +19,7 @@ import { useSession } from "next-auth/react";
 import { DashboardHeaderAccount } from "@/app/components/DashboardHeaderAccount";
 import { AmazonAccountModal } from "@/app/settings/AmazonAccountModal";
 import { useSavedProducts } from "@/app/context/SavedProductsContext";
+import { amazonSellerProfileUrl } from "@/lib/marketplaces";
 import type { ProductAnalysis, SellerType } from "@/lib/types";
 
 type SortColumn =
@@ -442,7 +444,9 @@ function AnalyzerPageContent() {
   const [selectedProduct, setSelectedProduct] = useState<ProductAnalysis | null>(null);
   const [mobileDetailsOpen, setMobileDetailsOpen] = useState(false);
   const [popupQuantity, setPopupQuantity] = useState("");
-  const [sellerModalFilter, setSellerModalFilter] = useState<null | "all" | "FBA" | "FBM">(null);
+  const [sellerModal, setSellerModal] = useState<null | { filter: "all" | "FBA" | "FBM"; top: number; left: number; width: number }>(
+    null,
+  );
   const [panelAnalysisLoading, setPanelAnalysisLoading] = useState(false);
   const [detailPanelCost, setDetailPanelCost] = useState("");
   const [resultsPage, setResultsPage] = useState(1);
@@ -458,6 +462,19 @@ function AnalyzerPageContent() {
   const zxingReaderRef = useRef<ZxingReaderLike | null>(null);
   const hasScannedRef = useRef(false);
   const lastAutoManualCalcKeyRef = useRef("");
+
+  const openSellerModal = useCallback((e: MouseEvent<HTMLButtonElement>, filter: "all" | "FBA" | "FBM") => {
+    const r = e.currentTarget.getBoundingClientRect();
+    const margin = 8;
+    const width = Math.min(320, window.innerWidth - 2 * margin);
+    const left = Math.max(margin, Math.min(r.left, window.innerWidth - width - margin));
+    const top = r.bottom + 8;
+    setSellerModal({ filter, top, left, width });
+  }, []);
+
+  useEffect(() => {
+    setSellerModal(null);
+  }, [selectedProduct?.id]);
 
   /** Load user preferences (analysis defaults) once on mount. */
   useEffect(() => {
@@ -1625,7 +1642,11 @@ function AnalyzerPageContent() {
               <p className="text-sm font-medium text-slate-100">
                 {selectedProduct.offerCount != null ? (
                   (selectedProduct.sellerDetails ?? []).length > 0 ? (
-                    <button type="button" onClick={() => setSellerModalFilter("all")} className="underline decoration-slate-500 underline-offset-2 hover:decoration-slate-400">
+                    <button
+                      type="button"
+                      onClick={(ev) => openSellerModal(ev, "all")}
+                      className="underline decoration-slate-500 underline-offset-2 hover:decoration-slate-400"
+                    >
                       {selectedProduct.offerCount} seller{selectedProduct.offerCount !== 1 ? "s" : ""}
                     </button>
                   ) : (
@@ -1636,7 +1657,11 @@ function AnalyzerPageContent() {
                   <span className="text-slate-400">
                     {" "}(FBA:{" "}
                     {(selectedProduct.sellerDetails ?? []).length > 0 ? (
-                      <button type="button" onClick={() => setSellerModalFilter("FBA")} className="underline decoration-slate-500 underline-offset-2 hover:decoration-slate-400">
+                      <button
+                        type="button"
+                        onClick={(ev) => openSellerModal(ev, "FBA")}
+                        className="underline decoration-slate-500 underline-offset-2 hover:decoration-slate-400"
+                      >
                         {selectedProduct.fbaOfferCount ?? "—"}
                       </button>
                     ) : (
@@ -1644,7 +1669,11 @@ function AnalyzerPageContent() {
                     )}
                     , FBM:{" "}
                     {(selectedProduct.sellerDetails ?? []).length > 0 ? (
-                      <button type="button" onClick={() => setSellerModalFilter("FBM")} className="underline decoration-slate-500 underline-offset-2 hover:decoration-slate-400">
+                      <button
+                        type="button"
+                        onClick={(ev) => openSellerModal(ev, "FBM")}
+                        className="underline decoration-slate-500 underline-offset-2 hover:decoration-slate-400"
+                      >
                         {selectedProduct.fbmOfferCount ?? "—"}
                       </button>
                     ) : (
@@ -1657,30 +1686,96 @@ function AnalyzerPageContent() {
             </div>
           ) : null}
 
-          {sellerModalFilter != null && selectedProduct.sellerDetails && (selectedProduct.sellerDetails ?? []).length > 0 ? (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setSellerModalFilter(null)} role="dialog" aria-modal="true" aria-label="Sellers list">
-              <div className="max-h-[80vh] w-full max-w-md overflow-hidden rounded-xl border border-slate-600 bg-slate-800 shadow-xl" onClick={(e) => e.stopPropagation()}>
-                <div className="flex items-center justify-between border-b border-slate-600 px-4 py-3">
-                  <h3 className="text-sm font-semibold text-slate-100">
-                    {sellerModalFilter === "all" ? "Sellers" : sellerModalFilter === "FBA" ? "FBA sellers" : "FBM sellers"}
-                  </h3>
-                  <button type="button" onClick={() => setSellerModalFilter(null)} className="rounded p-1 text-slate-400 hover:bg-slate-700 hover:text-slate-200" aria-label="Close">×</button>
+          {sellerModal && selectedProduct.sellerDetails && (selectedProduct.sellerDetails ?? []).length > 0 ? (
+            <>
+              <div className="fixed inset-0 z-50 bg-black/40" onClick={() => setSellerModal(null)} aria-hidden />
+              <div
+                role="dialog"
+                aria-modal="true"
+                aria-label="Sellers list"
+                className="fixed z-[51] flex min-h-0 flex-col overflow-hidden rounded-xl border border-slate-600 bg-slate-800 shadow-xl"
+                style={{
+                  top: sellerModal.top,
+                  left: sellerModal.left,
+                  width: sellerModal.width,
+                  maxHeight: Math.min(window.innerHeight * 0.65, window.innerHeight - sellerModal.top - 8),
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="shrink-0 border-b border-slate-600 px-4 py-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-sm font-semibold text-slate-100">
+                      {sellerModal.filter === "all"
+                        ? "Sellers"
+                        : sellerModal.filter === "FBA"
+                          ? "FBA sellers"
+                          : "FBM sellers"}
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => setSellerModal(null)}
+                      className="rounded p-1 text-slate-400 hover:bg-slate-700 hover:text-slate-200"
+                      aria-label="Close"
+                    >
+                      ×
+                    </button>
+                  </div>
+                  <p className="mt-1 text-[10px] leading-snug text-slate-500">
+                    Opens next to this control. Click a seller to open their Amazon storefront in a new tab. Display names
+                    show only when Amazon includes them on the offer.
+                  </p>
                 </div>
-                <ul className="max-h-[60vh] overflow-y-auto p-2">
-                  {(sellerModalFilter === "all" ? (selectedProduct.sellerDetails ?? []) : (selectedProduct.sellerDetails ?? []).filter((s) => s.channel === sellerModalFilter)).map((s, i) => (
-                    <li key={`${s.sellerId}-${i}`} className="flex items-center justify-between gap-2 rounded-lg border border-slate-600/80 bg-slate-700/50 px-3 py-2 text-xs">
-                      <span className="font-mono text-slate-200">{s.sellerId}</span>
-                      <span className="rounded bg-slate-600 px-1.5 py-0.5 text-[10px] text-slate-300">{s.channel}</span>
-                      <div className="flex gap-3 text-slate-400">
-                        {s.feedbackCount != null && <span title="Feedback count">{s.feedbackCount.toLocaleString()} feedback</span>}
-                        {s.feedbackPercent != null && <span title="Positive feedback %">{s.feedbackPercent}% positive</span>}
-                        {s.feedbackCount == null && s.feedbackPercent == null && <span>—</span>}
-                      </div>
+                <ul className="min-h-0 flex-1 overflow-y-auto p-2">
+                  {(sellerModal.filter === "all"
+                    ? (selectedProduct.sellerDetails ?? [])
+                    : (selectedProduct.sellerDetails ?? []).filter((s) => s.channel === sellerModal.filter)
+                  ).map((s, i) => (
+                    <li key={`${s.sellerId}-${i}`} className="mb-2 last:mb-0">
+                      <a
+                        href={amazonSellerProfileUrl(marketplaceDomain, s.sellerId)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex flex-col gap-1 rounded-lg border border-slate-600/80 bg-slate-700/50 px-3 py-2 text-xs outline-none transition hover:border-slate-500 hover:bg-slate-600/45 focus-visible:ring-2 focus-visible:ring-teal-400"
+                        title={`View seller ${s.sellerId} on Amazon`}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            {s.sellerDisplayName ? (
+                              <span className="block truncate font-medium text-slate-100">{s.sellerDisplayName}</span>
+                            ) : null}
+                            <span
+                              className={
+                                s.sellerDisplayName
+                                  ? "block break-all font-mono text-[11px] text-slate-500"
+                                  : "block break-all font-mono text-slate-200"
+                              }
+                            >
+                              {s.sellerId}
+                            </span>
+                          </div>
+                          <span className="shrink-0 rounded bg-slate-600 px-1.5 py-0.5 text-[10px] text-slate-300">
+                            {s.channel}
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 text-slate-400">
+                          <span className="flex flex-wrap gap-x-3 gap-y-0.5">
+                            {s.feedbackCount != null && (
+                              <span title="Feedback count">{s.feedbackCount.toLocaleString()} feedback</span>
+                            )}
+                            {s.feedbackPercent != null && (
+                              <span title="Positive feedback %">{s.feedbackPercent}% positive</span>
+                            )}
+                            {s.feedbackCount == null && s.feedbackPercent == null && <span>—</span>}
+                          </span>
+                          <span className="shrink-0 text-[10px] font-medium text-teal-400/90">Amazon store ↗</span>
+                        </div>
+                      </a>
                     </li>
                   ))}
                 </ul>
               </div>
-            </div>
+            </>
           ) : null}
 
           {(() => {

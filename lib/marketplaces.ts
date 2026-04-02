@@ -16,3 +16,13 @@ export const MARKETPLACE_OPTIONS: { value: string; label: string }[] = [
 export function isAllowedMarketplaceId(id: string | null | undefined): id is MarketplaceId {
   return id != null && Object.values(MARKETPLACE_IDS).includes(id as MarketplaceId);
 }
+
+/**
+ * Amazon retail seller profile URL for a merchant ID.
+ * @param marketplaceDomain Host segment only, e.g. `amazon.com`, `amazon.co.uk` (no `https://`).
+ */
+export function amazonSellerProfileUrl(marketplaceDomain: string, sellerId: string): string {
+  const host = marketplaceDomain.replace(/^www\./i, "").trim() || "amazon.com";
+  const id = sellerId.trim();
+  return `https://www.${host}/sp?seller=${encodeURIComponent(id)}`;
+}

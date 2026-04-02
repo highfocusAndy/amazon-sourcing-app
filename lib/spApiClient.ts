@@ -74,6 +74,7 @@ export interface SellerOfferDetail {
   channel: "FBA" | "FBM";
   feedbackCount: number | null;
   feedbackPercent: number | null;
+  sellerDisplayName?: string | null;
 }
 
 export interface CatalogItem {
@@ -702,6 +703,21 @@ export class SpApiClient {
       const feedbackPercent = readNumber(
         getField(feedback ?? null, ["SellerPositiveFeedbackRating", "sellerPositiveFeedbackRating"]),
       );
+      const sellerDisplayName =
+        readString(
+          getField(offer, [
+            "SellerDisplayName",
+            "sellerDisplayName",
+            "StoreName",
+            "storeName",
+            "SellerName",
+            "sellerName",
+            "MerchantName",
+            "merchantName",
+            "DisplayName",
+            "displayName",
+          ]),
+        )?.trim() || null;
       if (!seenIds.has(sellerId.toUpperCase())) {
         seenIds.add(sellerId.toUpperCase());
         sellerIds.push(sellerId);
@@ -711,6 +727,7 @@ export class SpApiClient {
         channel: isFba ? "FBA" : "FBM",
         feedbackCount: feedbackCount ?? null,
         feedbackPercent: feedbackPercent ?? null,
+        sellerDisplayName,
       });
     }
     if (fbaOfferCount === 0 && fbmOfferCount === 0 && offers.length > 0) {

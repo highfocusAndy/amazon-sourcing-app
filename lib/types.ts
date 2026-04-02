@@ -24,6 +24,8 @@ export interface SellerOfferDetail {
   channel: "FBA" | "FBM";
   feedbackCount: number | null;
   feedbackPercent: number | null;
+  /** Store / display name when SP-API includes it on the offer; often absent. */
+  sellerDisplayName?: string | null;
 }
 
 export interface ProductAnalysis {
