@@ -18,11 +18,13 @@ export function isAllowedMarketplaceId(id: string | null | undefined): id is Mar
 }
 
 /**
- * Amazon retail seller profile URL for a merchant ID.
+ * Amazon retail URL to browse this seller’s product catalog (search scoped to their merchant ID).
+ * Prefer this over `/sp?seller=` — that path is the seller profile (feedback, policies), not their listings.
+ *
  * @param marketplaceDomain Host segment only, e.g. `amazon.com`, `amazon.co.uk` (no `https://`).
  */
-export function amazonSellerProfileUrl(marketplaceDomain: string, sellerId: string): string {
+export function amazonSellerStorefrontUrl(marketplaceDomain: string, sellerId: string): string {
   const host = marketplaceDomain.replace(/^www\./i, "").trim() || "amazon.com";
   const id = sellerId.trim();
-  return `https://www.${host}/sp?seller=${encodeURIComponent(id)}`;
+  return `https://www.${host}/s?me=${encodeURIComponent(id)}`;
 }

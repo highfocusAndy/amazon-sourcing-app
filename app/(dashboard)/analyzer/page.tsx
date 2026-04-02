@@ -19,7 +19,7 @@ import { useSession } from "next-auth/react";
 import { DashboardHeaderAccount } from "@/app/components/DashboardHeaderAccount";
 import { AmazonAccountModal } from "@/app/settings/AmazonAccountModal";
 import { useSavedProducts } from "@/app/context/SavedProductsContext";
-import { amazonSellerProfileUrl } from "@/lib/marketplaces";
+import { amazonSellerStorefrontUrl } from "@/lib/marketplaces";
 import type { ProductAnalysis, SellerType } from "@/lib/types";
 
 type SortColumn =
@@ -444,9 +444,13 @@ function AnalyzerPageContent() {
   const [selectedProduct, setSelectedProduct] = useState<ProductAnalysis | null>(null);
   const [mobileDetailsOpen, setMobileDetailsOpen] = useState(false);
   const [popupQuantity, setPopupQuantity] = useState("");
-  const [sellerModal, setSellerModal] = useState<null | { filter: "all" | "FBA" | "FBM"; top: number; left: number; width: number }>(
-    null,
-  );
+  /** Popover on lg+; full-height sheet from the right on smaller screens (mirrors left nav direction). */
+  const [sellerModal, setSellerModal] = useState<
+    | null
+    | { filter: "all" | "FBA" | "FBM"; layout: "sheet" }
+    | { filter: "all" | "FBA" | "FBM"; layout: "popover"; top: number; left: number; width: number }
+  >(null);
+  const [sellerSheetVisible, setSellerSheetVisible] = useState(false);
   const [panelAnalysisLoading, setPanelAnalysisLoading] = useState(false);
   const [detailPanelCost, setDetailPanelCost] = useState("");
   const [resultsPage, setResultsPage] = useState(1);
@@ -464,12 +468,17 @@ function AnalyzerPageContent() {
   const lastAutoManualCalcKeyRef = useRef("");
 
   const openSellerModal = useCallback((e: MouseEvent<HTMLButtonElement>, filter: "all" | "FBA" | "FBM") => {
+    const narrow = typeof window !== "undefined" && window.innerWidth < 1024;
+    if (narrow) {
+      setSellerModal({ filter, layout: "sheet" });
+      return;
+    }
     const r = e.currentTarget.getBoundingClientRect();
     const margin = 8;
     const width = Math.min(320, window.innerWidth - 2 * margin);
     const left = Math.max(margin, Math.min(r.left, window.innerWidth - width - margin));
     const top = r.bottom + 8;
-    setSellerModal({ filter, top, left, width });
+    setSellerModal({ filter, layout: "popover", top, left, width });
   }, []);
 
   useEffect(() => {
@@ -555,6 +564,31 @@ function AnalyzerPageContent() {
       document.body.style.overflow = prev;
     };
   }, [mobileDetailsOpen]);
+
+  useEffect(() => {
+    if (!sellerModal || sellerModal.layout !== "sheet") {
+      setSellerSheetVisible(false);
+      return;
+    }
+    setSellerSheetVisible(false);
+    let innerId = 0;
+    const outerId = requestAnimationFrame(() => {
+      innerId = requestAnimationFrame(() => setSellerSheetVisible(true));
+    });
+    return () => {
+      cancelAnimationFrame(outerId);
+      cancelAnimationFrame(innerId);
+    };
+  }, [sellerModal]);
+
+  useEffect(() => {
+    if (!sellerModal || sellerModal.layout !== "sheet") return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [sellerModal]);
 
   const searchParams = useSearchParams();
   useEffect(() => {
@@ -1686,98 +1720,6 @@ function AnalyzerPageContent() {
             </div>
           ) : null}
 
-          {sellerModal && selectedProduct.sellerDetails && (selectedProduct.sellerDetails ?? []).length > 0 ? (
-            <>
-              <div className="fixed inset-0 z-50 bg-black/40" onClick={() => setSellerModal(null)} aria-hidden />
-              <div
-                role="dialog"
-                aria-modal="true"
-                aria-label="Sellers list"
-                className="fixed z-[51] flex min-h-0 flex-col overflow-hidden rounded-xl border border-slate-600 bg-slate-800 shadow-xl"
-                style={{
-                  top: sellerModal.top,
-                  left: sellerModal.left,
-                  width: sellerModal.width,
-                  maxHeight: Math.min(window.innerHeight * 0.65, window.innerHeight - sellerModal.top - 8),
-                }}
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="shrink-0 border-b border-slate-600 px-4 py-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <h3 className="text-sm font-semibold text-slate-100">
-                      {sellerModal.filter === "all"
-                        ? "Sellers"
-                        : sellerModal.filter === "FBA"
-                          ? "FBA sellers"
-                          : "FBM sellers"}
-                    </h3>
-                    <button
-                      type="button"
-                      onClick={() => setSellerModal(null)}
-                      className="rounded p-1 text-slate-400 hover:bg-slate-700 hover:text-slate-200"
-                      aria-label="Close"
-                    >
-                      ×
-                    </button>
-                  </div>
-                  <p className="mt-1 text-[10px] leading-snug text-slate-500">
-                    Opens next to this control. Click a seller to open their Amazon storefront in a new tab. Display names
-                    show only when Amazon includes them on the offer.
-                  </p>
-                </div>
-                <ul className="min-h-0 flex-1 overflow-y-auto p-2">
-                  {(sellerModal.filter === "all"
-                    ? (selectedProduct.sellerDetails ?? [])
-                    : (selectedProduct.sellerDetails ?? []).filter((s) => s.channel === sellerModal.filter)
-                  ).map((s, i) => (
-                    <li key={`${s.sellerId}-${i}`} className="mb-2 last:mb-0">
-                      <a
-                        href={amazonSellerProfileUrl(marketplaceDomain, s.sellerId)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex flex-col gap-1 rounded-lg border border-slate-600/80 bg-slate-700/50 px-3 py-2 text-xs outline-none transition hover:border-slate-500 hover:bg-slate-600/45 focus-visible:ring-2 focus-visible:ring-teal-400"
-                        title={`View seller ${s.sellerId} on Amazon`}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0 flex-1">
-                            {s.sellerDisplayName ? (
-                              <span className="block truncate font-medium text-slate-100">{s.sellerDisplayName}</span>
-                            ) : null}
-                            <span
-                              className={
-                                s.sellerDisplayName
-                                  ? "block break-all font-mono text-[11px] text-slate-500"
-                                  : "block break-all font-mono text-slate-200"
-                              }
-                            >
-                              {s.sellerId}
-                            </span>
-                          </div>
-                          <span className="shrink-0 rounded bg-slate-600 px-1.5 py-0.5 text-[10px] text-slate-300">
-                            {s.channel}
-                          </span>
-                        </div>
-                        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 text-slate-400">
-                          <span className="flex flex-wrap gap-x-3 gap-y-0.5">
-                            {s.feedbackCount != null && (
-                              <span title="Feedback count">{s.feedbackCount.toLocaleString()} feedback</span>
-                            )}
-                            {s.feedbackPercent != null && (
-                              <span title="Positive feedback %">{s.feedbackPercent}% positive</span>
-                            )}
-                            {s.feedbackCount == null && s.feedbackPercent == null && <span>—</span>}
-                          </span>
-                          <span className="shrink-0 text-[10px] font-medium text-teal-400/90">Amazon store ↗</span>
-                        </div>
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </>
-          ) : null}
-
           {(() => {
             const codes = selectedProduct.restrictionReasonCodes;
             const hasHazmat = codes.some((c) => /HAZMAT|HAZARD|DANGEROUS/i.test(c));
@@ -1855,7 +1797,7 @@ function AnalyzerPageContent() {
         <AmazonAccountModal onClose={() => setShowAmazonAccountModal(false)} />
       )}
       <main className="flex min-w-0 flex-1 flex-col gap-4 p-4 pb-10 mr-0 sm:gap-6 sm:p-6 sm:pb-10 lg:mr-80 xl:mr-96">
-        <header className="sticky top-14 z-20 shrink-0 rounded-xl border border-slate-600/80 bg-slate-800/95 px-3 py-3 shadow-lg shadow-black/10 border-t-4 border-t-teal-500 backdrop-blur sm:px-4 sm:py-4 md:top-0">
+        <header className="sticky top-[4.75rem] z-20 shrink-0 rounded-xl border border-slate-600/80 bg-slate-800/95 px-3 py-3 shadow-lg shadow-black/10 border-t-4 border-t-teal-500 backdrop-blur sm:px-4 sm:py-4 md:top-0">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
             <div className="hidden min-w-0 items-center gap-2 sm:gap-3 md:flex">
               <div className="flex min-w-0 items-center gap-2 sm:gap-3">
@@ -2235,11 +2177,11 @@ function AnalyzerPageContent() {
       ) : null}
 
       <aside
-        className={`fixed z-50 overflow-y-auto border-l border-slate-700 bg-slate-800 shadow-xl transition-transform duration-300 ease-out max-lg:right-0 max-lg:top-0 max-lg:h-full max-lg:w-full max-lg:max-w-xl ${
+        className={`fixed z-50 flex min-h-0 flex-col border-l border-slate-700 bg-slate-800 shadow-xl transition-transform duration-300 ease-out max-lg:right-0 max-lg:top-0 max-lg:h-[100dvh] max-lg:max-h-[100dvh] max-lg:w-full max-lg:max-w-xl ${
           mobileDetailsOpen ? "max-lg:translate-x-0" : "max-lg:pointer-events-none max-lg:translate-x-full"
-        } lg:pointer-events-auto lg:inset-auto lg:right-0 lg:top-0 lg:block lg:h-screen lg:w-80 lg:translate-x-0 lg:rounded-l-xl xl:w-96`}
+        } lg:pointer-events-auto lg:inset-auto lg:right-0 lg:top-0 lg:flex lg:h-screen lg:max-h-screen lg:w-80 lg:translate-x-0 lg:rounded-l-xl xl:w-96`}
       >
-        <div className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-slate-700 bg-slate-800 px-3 py-3 sm:px-4">
+        <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between gap-2 border-b border-slate-700 bg-slate-800 px-3 py-3 sm:px-4">
           <h3 className="min-w-0 truncate text-base font-semibold text-slate-100">Product details</h3>
           <div className="flex shrink-0 items-center gap-2">
             <button
@@ -2271,10 +2213,118 @@ function AnalyzerPageContent() {
             ) : null}
           </div>
         </div>
-        <div className="p-4 text-[13px] text-slate-200">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain p-4 text-[13px] text-slate-200">
           {getRightPanelBody()}
         </div>
-        </aside>
+      </aside>
+
+      {sellerModal && selectedProduct?.sellerDetails && (selectedProduct.sellerDetails ?? []).length > 0 ? (
+        <>
+          <button
+            type="button"
+            className="fixed inset-0 z-[55] bg-slate-950/50 backdrop-blur-[1px]"
+            onClick={() => setSellerModal(null)}
+            aria-label="Close sellers list"
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Sellers list"
+            className={
+              sellerModal.layout === "sheet"
+                ? `fixed inset-y-0 right-0 z-[60] flex max-h-[100dvh] w-[min(100vw,24rem)] flex-col overflow-hidden border-l border-slate-600 bg-slate-800 shadow-2xl transition-transform duration-300 ease-out ${
+                    sellerSheetVisible ? "translate-x-0" : "translate-x-full pointer-events-none"
+                  }`
+                : "fixed z-[60] flex min-h-0 flex-col overflow-hidden rounded-xl border border-slate-600 bg-slate-800 shadow-xl"
+            }
+            style={
+              sellerModal.layout === "popover"
+                ? {
+                    top: sellerModal.top,
+                    left: sellerModal.left,
+                    width: sellerModal.width,
+                    maxHeight: Math.min(window.innerHeight * 0.65, window.innerHeight - sellerModal.top - 8),
+                  }
+                : undefined
+            }
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="shrink-0 border-b border-slate-600 px-4 py-3">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-sm font-semibold text-slate-100">
+                  {sellerModal.filter === "all"
+                    ? "Sellers"
+                    : sellerModal.filter === "FBA"
+                      ? "FBA sellers"
+                      : "FBM sellers"}
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setSellerModal(null)}
+                  className="rounded p-1 text-slate-400 hover:bg-slate-700 hover:text-slate-200"
+                  aria-label="Close"
+                >
+                  ×
+                </button>
+              </div>
+              <p className="mt-1 text-[10px] leading-snug text-slate-500">
+                {sellerModal.layout === "sheet"
+                  ? "Opens from the right (main menu opens from the left). Tap outside or × to close. Tap a seller for their Amazon storefront."
+                  : "Opens next to this control. Click a seller to open their Amazon storefront in a new tab. Display names show only when Amazon includes them on the offer."}
+              </p>
+            </div>
+            <ul className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain p-2">
+              {(sellerModal.filter === "all"
+                ? (selectedProduct.sellerDetails ?? [])
+                : (selectedProduct.sellerDetails ?? []).filter((s) => s.channel === sellerModal.filter)
+              ).map((s, i) => (
+                <li key={`${s.sellerId}-${i}`} className="mb-2 last:mb-0">
+                  <a
+                    href={amazonSellerStorefrontUrl(marketplaceDomain, s.sellerId)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex flex-col gap-1 rounded-lg border border-slate-600/80 bg-slate-700/50 px-3 py-2 text-xs outline-none transition hover:border-slate-500 hover:bg-slate-600/45 focus-visible:ring-2 focus-visible:ring-teal-400"
+                    title={`View products from seller ${s.sellerId} on Amazon`}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        {s.sellerDisplayName ? (
+                          <span className="block truncate font-medium text-slate-100">{s.sellerDisplayName}</span>
+                        ) : null}
+                        <span
+                          className={
+                            s.sellerDisplayName
+                              ? "block break-all font-mono text-[11px] text-slate-500"
+                              : "block break-all font-mono text-slate-200"
+                          }
+                        >
+                          {s.sellerId}
+                        </span>
+                      </div>
+                      <span className="shrink-0 rounded bg-slate-600 px-1.5 py-0.5 text-[10px] text-slate-300">
+                        {s.channel}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 text-slate-400">
+                      <span className="flex flex-wrap gap-x-3 gap-y-0.5">
+                        {s.feedbackCount != null && (
+                          <span title="Feedback count">{s.feedbackCount.toLocaleString()} feedback</span>
+                        )}
+                        {s.feedbackPercent != null && (
+                          <span title="Positive feedback %">{s.feedbackPercent}% positive</span>
+                        )}
+                        {s.feedbackCount == null && s.feedbackPercent == null && <span>—</span>}
+                      </span>
+                      <span className="shrink-0 text-[10px] font-medium text-teal-400/90">All listings ↗</span>
+                    </div>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </>
+      ) : null}
     </>
   );
 }

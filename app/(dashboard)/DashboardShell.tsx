@@ -278,11 +278,28 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         <div className="relative min-h-screen min-h-[100dvh] w-full bg-slate-900/50">
           <BrandBackdrop variant="onDark" />
           <div className="relative z-[1] flex min-h-screen min-h-[100dvh] w-full flex-col md:flex-row">
-            <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center gap-3 border-b border-slate-700/80 bg-slate-900/95 px-3 backdrop-blur-md md:hidden">
-              <MobileMenuOpenButton onClick={() => setMobileDrawerOpen(true)} menuOpen={mobileDrawerOpen} />
-              <span className="min-w-0 truncate text-sm font-semibold text-slate-100">
-                {mobilePageTitle(pathname)}
-              </span>
+            <header className="sticky top-0 z-40 shrink-0 border-b border-slate-700/80 bg-slate-900/95 px-3 py-2 backdrop-blur-md md:hidden">
+              <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                <div className="flex shrink-0 flex-col items-center gap-1">
+                  <MobileMenuOpenButton onClick={() => setMobileDrawerOpen(true)} menuOpen={mobileDrawerOpen} />
+                  <span
+                    className="max-w-[4.25rem] text-center text-[9px] font-semibold uppercase leading-tight tracking-wide text-slate-400"
+                    title={mobilePageTitle(pathname)}
+                  >
+                    {mobilePageTitle(pathname)}
+                  </span>
+                </div>
+                <div className="flex min-w-0 flex-1 items-center gap-2">
+                  <img
+                    src="/HF_LOGO.png"
+                    alt="HIGH FOCUS Professional"
+                    className="h-8 w-auto shrink-0 brightness-0 invert sm:h-9"
+                  />
+                  <span className="min-w-0 truncate text-sm font-bold leading-snug tracking-tight text-slate-100 sm:text-base">
+                    HIGH FOCUS Sourcing App
+                  </span>
+                </div>
+              </div>
             </header>
             {mobileDrawerOpen ? (
               <button
