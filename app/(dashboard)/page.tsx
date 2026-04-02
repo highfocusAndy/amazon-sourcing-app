@@ -6,7 +6,7 @@ import { getSubcategoriesForCategory } from "@/lib/catalogCategories";
 import { DashboardHeaderAccount } from "@/app/components/DashboardHeaderAccount";
 import { AmazonAccountModal } from "@/app/settings/AmazonAccountModal";
 import { AmazonOAuthAlerts } from "@/app/settings/AmazonOAuthAlerts";
-import { amazonSellerStorefrontUrl } from "@/lib/marketplaces";
+import { amazonOfferListingUrl, amazonProductDetailUrl, amazonSellerStorefrontUrl } from "@/lib/marketplaces";
 import type { CatalogItem } from "@/lib/spApiClient";
 import type { ProductAnalysis, SellerType } from "@/lib/types";
 import Link from "next/link";
@@ -1076,21 +1076,39 @@ export default function ExplorerPage() {
             <div className="space-y-4">
               <div className="flex flex-col gap-3 bg-slate-800 pb-2">
                 {selectedProduct.imageUrl ? (
-                  <img
-                    src={selectedProduct.imageUrl}
-                    alt={selectedProduct.title || "Product"}
-                    referrerPolicy="no-referrer"
-                    className="h-32 w-full rounded-lg border border-slate-600 object-contain bg-slate-700/30"
-                  />
+                  selectedProduct.asin ? (
+                    <a
+                      href={amazonOfferListingUrl(marketplaceDomain, selectedProduct.asin)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="See all sellers on Amazon for this product"
+                      className="block rounded-lg outline-none ring-offset-2 ring-offset-slate-800 focus-visible:ring-2 focus-visible:ring-teal-400"
+                    >
+                      <img
+                        src={selectedProduct.imageUrl}
+                        alt={selectedProduct.title || "Product"}
+                        referrerPolicy="no-referrer"
+                        className="h-32 w-full rounded-lg border border-slate-600 object-contain bg-slate-700/30 transition hover:border-slate-500"
+                      />
+                    </a>
+                  ) : (
+                    <img
+                      src={selectedProduct.imageUrl}
+                      alt={selectedProduct.title || "Product"}
+                      referrerPolicy="no-referrer"
+                      className="h-32 w-full rounded-lg border border-slate-600 object-contain bg-slate-700/30"
+                    />
+                  )
                 ) : (
                   <div className="flex h-32 w-full items-center justify-center rounded-lg border border-slate-600 bg-slate-700/30 text-slate-500">—</div>
                 )}
                 <div>
                   {selectedProduct.asin ? (
                     <a
-                      href={`https://www.${marketplaceDomain}/dp/${selectedProduct.asin}`}
+                      href={amazonOfferListingUrl(marketplaceDomain, selectedProduct.asin)}
                       target="_blank"
                       rel="noopener noreferrer"
+                      title="See all sellers on Amazon for this product"
                       className="font-medium text-slate-100 underline decoration-slate-500 underline-offset-2 transition hover:text-teal-300 hover:decoration-teal-300"
                     >
                       {selectedProduct.title || selectedProduct.asin || "Product"}
@@ -1098,6 +1116,18 @@ export default function ExplorerPage() {
                   ) : (
                     <p className="font-medium text-slate-100">{selectedProduct.title || selectedProduct.asin || "Product"}</p>
                   )}
+                  {selectedProduct.asin ? (
+                    <p className="mt-1 text-[11px] text-slate-500">
+                      <a
+                        href={amazonProductDetailUrl(marketplaceDomain, selectedProduct.asin)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-slate-400 underline decoration-slate-600 underline-offset-2 hover:text-slate-200 hover:decoration-slate-400"
+                      >
+                        Open product page on Amazon
+                      </a>
+                    </p>
+                  ) : null}
                   {selectedProduct.offerLabel ? (
                     <p className="text-sm text-teal-400">Listing: {selectedProduct.offerLabel}</p>
                   ) : null}

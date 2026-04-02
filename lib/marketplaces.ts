@@ -28,3 +28,19 @@ export function amazonSellerStorefrontUrl(marketplaceDomain: string, sellerId: s
   const id = sellerId.trim();
   return `https://www.${host}/s?me=${encodeURIComponent(id)}`;
 }
+
+/**
+ * Amazon retail URL for the offer-listing page (all sellers / buying options for this ASIN).
+ */
+export function amazonOfferListingUrl(marketplaceDomain: string, asin: string): string {
+  const host = marketplaceDomain.replace(/^www\./i, "").trim() || "amazon.com";
+  const id = asin.trim().toUpperCase();
+  return `https://www.${host}/gp/offer-listing/${encodeURIComponent(id)}/`;
+}
+
+/** Standard product detail (PDP) URL. */
+export function amazonProductDetailUrl(marketplaceDomain: string, asin: string): string {
+  const host = marketplaceDomain.replace(/^www\./i, "").trim() || "amazon.com";
+  const id = asin.trim().toUpperCase();
+  return `https://www.${host}/dp/${encodeURIComponent(id)}`;
+}
