@@ -98,20 +98,13 @@ export function AmazonAccountForm({
   return (
     <div className={`flex flex-col gap-4 ${className}`}>
       <p className="text-sm text-slate-600">
-        Connect your Selling Partner account with Amazon&apos;s secure OAuth flow. Your password is never
-        stored—we only keep an encrypted refresh token so the app can call SP-API on your behalf. Your server
-        must still have{" "}
-        <code className="rounded bg-slate-100 px-1 text-xs">SP_API_CLIENT_ID</code>,{" "}
-        <code className="rounded bg-slate-100 px-1 text-xs">SP_API_CLIENT_SECRET</code>, and AWS signing keys
-        in the environment.
+        You&apos;ll sign in on Amazon&apos;s site in the next step. We never see or store your Amazon password—only a
+        secure authorization so this app can refresh product data for you.
       </p>
 
       {status.connected && status.connectionLabel && (
         <p className="rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-700">
           Connected: <span className="font-medium">{status.connectionLabel}</span>
-          {status.oauthConnected ? (
-            <span className="ml-2 text-xs text-emerald-700">(OAuth)</span>
-          ) : null}
         </p>
       )}
 
@@ -134,23 +127,13 @@ export function AmazonAccountForm({
           </button>
         ) : (
           <button type="button" onClick={startOAuth} className={BTN_PRIMARY}>
-            Connect Amazon (OAuth)
+            Connect Amazon
           </button>
         )}
       </div>
 
       <p className="text-xs text-slate-500">
-        In{" "}
-        <a
-          href="https://developercentral.amazon.com"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="font-medium text-teal-600 hover:underline"
-        >
-          Amazon Developer Central
-        </a>
-        , register a <strong>Login URI</strong> and <strong>Redirect URI</strong> that match this app (see
-        README). Use the same marketplace region as your Seller Central account when authorizing.
+        Choose the same country or marketplace on Amazon as in your Seller Central account when asked.
       </p>
     </div>
   );

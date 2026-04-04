@@ -65,9 +65,9 @@ export function AmazonAccountModal({ onClose }: { onClose: () => void }) {
         </header>
         <div className="px-6 pb-6 pt-4">
           <p className="mb-3 text-sm text-slate-600">
-            Connect your <strong className="font-semibold text-slate-800">Amazon seller</strong> account (the email you
-            use for Seller Central can be different from your HIGH FOCUS app login). Explorer and Analyzer need this to
-            call Amazon&apos;s APIs on your behalf.
+            Link the <strong className="font-semibold text-slate-800">Amazon seller account</strong> you use in Seller
+            Central (it can be a different email than your HIGH FOCUS login). After you connect, this app can show live
+            prices, offers, and eligibility for products you research.
           </p>
           <AmazonAccountForm onStatusChange={setStatus} />
         </div>

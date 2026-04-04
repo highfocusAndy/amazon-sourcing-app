@@ -1,13 +1,30 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { AuthSessionProvider } from "./components/AuthSessionProvider";
+import { publicSiteOrigin } from "@/lib/publicSiteUrl";
 
-const defaultTitle = "Amazon FBA Wholesale Sourcing Dashboard";
+const defaultTitle = "HIGH FOCUS Sourcing App — Amazon wholesale & FBA research";
 const siteTitle = process.env.NEXT_PUBLIC_APP_TITLE?.trim() || defaultTitle;
 
+const siteDescription =
+  "HIGH FOCUS Sourcing App: research Amazon wholesale lists, catalog & keyword search, offers, and FBA opportunity analysis. Sign in to connect your seller account.";
+
 export const metadata: Metadata = {
+  metadataBase: publicSiteOrigin(),
+  applicationName: "HIGH FOCUS Sourcing App",
   title: siteTitle,
-  description: "Upload wholesale sheets, pull SP-API data, and evaluate Amazon FBA opportunities.",
+  description: siteDescription,
+  openGraph: {
+    type: "website",
+    siteName: "HIGH FOCUS Sourcing App",
+    title: siteTitle,
+    description: siteDescription,
+  },
+  twitter: {
+    card: "summary",
+    title: siteTitle,
+    description: siteDescription,
+  },
 };
 
 export const viewport: Viewport = {

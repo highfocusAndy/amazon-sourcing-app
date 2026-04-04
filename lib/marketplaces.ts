@@ -17,6 +17,11 @@ export function isAllowedMarketplaceId(id: string | null | undefined): id is Mar
   return id != null && Object.values(MARKETPLACE_IDS).includes(id as MarketplaceId);
 }
 
+/** Normalize a product identifier for retail links: trim, uppercase, strip non-alphanumeric. No length cap — Amazon resolves `/dp/{id}`. */
+export function normalizeRetailAsin(raw: string): string {
+  return raw.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
 /**
  * Amazon retail URL to browse this seller’s product catalog (search scoped to their merchant ID).
  * Prefer this over `/sp?seller=` — that path is the seller profile (feedback, policies), not their listings.
@@ -30,17 +35,17 @@ export function amazonSellerStorefrontUrl(marketplaceDomain: string, sellerId: s
 }
 
 /**
- * Amazon retail URL for the offer-listing page (all sellers / buying options for this ASIN).
+ * URL intended for “see other sellers / offers” on Amazon.
+ * Legacy `/gp/offer-listing/{ASIN}/` often loads a blank page (especially on mobile); Amazon now surfaces
+ * offers via the product detail page (All-Offers Display / “Buying options”). We open the canonical PDP.
  */
 export function amazonOfferListingUrl(marketplaceDomain: string, asin: string): string {
-  const host = marketplaceDomain.replace(/^www\./i, "").trim() || "amazon.com";
-  const id = asin.trim().toUpperCase();
-  return `https://www.${host}/gp/offer-listing/${encodeURIComponent(id)}/`;
+  return amazonProductDetailUrl(marketplaceDomain, asin);
 }
 
-/** Standard product detail (PDP) URL. */
+/** Standard product detail (PDP) URL — most reliable across devices and marketplaces. */
 export function amazonProductDetailUrl(marketplaceDomain: string, asin: string): string {
   const host = marketplaceDomain.replace(/^www\./i, "").trim() || "amazon.com";
-  const id = asin.trim().toUpperCase();
+  const id = normalizeRetailAsin(asin);
   return `https://www.${host}/dp/${encodeURIComponent(id)}`;
 }

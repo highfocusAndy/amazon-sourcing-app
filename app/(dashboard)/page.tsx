@@ -7,7 +7,7 @@ import { DashboardHeaderAccount } from "@/app/components/DashboardHeaderAccount"
 import { ProductInsightBlurb } from "@/app/components/ProductInsightBlurb";
 import { AmazonAccountModal } from "@/app/settings/AmazonAccountModal";
 import { AmazonOAuthAlerts } from "@/app/settings/AmazonOAuthAlerts";
-import { amazonOfferListingUrl, amazonProductDetailUrl, amazonSellerStorefrontUrl } from "@/lib/marketplaces";
+import { amazonOfferListingUrl, amazonSellerStorefrontUrl } from "@/lib/marketplaces";
 import type { CatalogItem } from "@/lib/spApiClient";
 import type { ProductAnalysis, SellerType } from "@/lib/types";
 import Link from "next/link";
@@ -1003,36 +1003,38 @@ export default function ExplorerPage() {
 
       {/* Right panel: overlay sheet on small screens; in-flow column on lg+ so the page does not scroll under it */}
       <aside
-        className={`fixed flex min-h-0 flex-col border-l border-slate-700 bg-slate-800 shadow-xl transition-transform duration-300 ease-out max-lg:inset-x-0 max-lg:top-0 max-lg:z-[100] max-lg:h-[100svh] max-lg:max-h-[100svh] max-lg:w-full max-lg:max-w-none ${
+        className={`fixed flex min-h-0 flex-col overflow-hidden border-l border-slate-700 bg-slate-800 shadow-xl transition-transform duration-300 ease-out max-lg:inset-x-0 max-lg:top-0 max-lg:z-[100] max-lg:h-[100svh] max-lg:max-h-[100svh] max-lg:w-full max-lg:max-w-none ${
           mobileDetailsOpen ? "max-lg:translate-x-0" : "max-lg:pointer-events-none max-lg:translate-x-full"
         } lg:static lg:z-auto lg:h-full lg:max-h-full lg:w-80 lg:shrink-0 lg:translate-x-0 xl:w-96`}
       >
-        <div className="flex shrink-0 items-center justify-between border-b border-slate-700 bg-slate-800 px-4 py-3 max-lg:py-0 max-lg:pb-3 max-lg:pt-[calc(0.75rem+env(safe-area-inset-top,0px))]">
-          <h3 className="text-base font-semibold text-slate-100">Product details</h3>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setMobileDetailsOpen(false)}
-              className="rounded-lg border border-slate-600 bg-slate-700 px-3 py-1.5 text-sm font-semibold text-slate-200 hover:bg-slate-600 lg:hidden"
-            >
-              Back
-            </button>
-            {selectedProduct ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedProduct(null);
-                  setDetailPanelCost("");
-                  setMobileDetailsOpen(false);
-                }}
-                className="rounded-lg border border-slate-600 bg-slate-700 px-3 py-1.5 text-sm font-semibold text-slate-200 hover:bg-slate-600"
-              >
-                Clear
-              </button>
-            ) : null}
-          </div>
-        </div>
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-4 pb-4 pt-3 text-[13px] text-slate-200 lg:p-4">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain">
+            <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b border-slate-700 bg-slate-800 px-4 py-3 max-lg:py-0 max-lg:pb-3 max-lg:pt-[calc(0.75rem+env(safe-area-inset-top,0px))]">
+              <h3 className="text-base font-semibold text-slate-100">Product details</h3>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setMobileDetailsOpen(false)}
+                  className="rounded-lg border border-slate-600 bg-slate-700 px-3 py-1.5 text-sm font-semibold text-slate-200 hover:bg-slate-600 lg:hidden"
+                >
+                  Back
+                </button>
+                {selectedProduct ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedProduct(null);
+                      setDetailPanelCost("");
+                      setMobileDetailsOpen(false);
+                    }}
+                    className="rounded-lg border border-slate-600 bg-slate-700 px-3 py-1.5 text-sm font-semibold text-slate-200 hover:bg-slate-600"
+                  >
+                    Clear
+                  </button>
+                ) : null}
+              </div>
+            </div>
+            <div className="px-4 pb-4 pt-3 text-[13px] text-slate-200 lg:p-4">
           {panelAnalysisLoading ? (
             <div className="flex flex-col items-center justify-center gap-3 py-8 text-slate-400">
               <p className="font-medium">Loading…</p>
@@ -1065,7 +1067,7 @@ export default function ExplorerPage() {
                       href={amazonOfferListingUrl(marketplaceDomain, selectedProduct.asin)}
                       target="_blank"
                       rel="noopener noreferrer"
-                      title="See all sellers on Amazon for this product"
+                      title="Open this product on Amazon (use Buying options / Other sellers there to compare offers)"
                       className="block rounded-lg outline-none ring-offset-2 ring-offset-slate-800 focus-visible:ring-2 focus-visible:ring-teal-400"
                     >
                       <img
@@ -1092,7 +1094,7 @@ export default function ExplorerPage() {
                       href={amazonOfferListingUrl(marketplaceDomain, selectedProduct.asin)}
                       target="_blank"
                       rel="noopener noreferrer"
-                      title="See all sellers on Amazon for this product"
+                      title="Open this product on Amazon (use Buying options / Other sellers there to compare offers)"
                       className="font-medium text-slate-100 underline decoration-slate-500 underline-offset-2 transition hover:text-teal-300 hover:decoration-teal-300"
                     >
                       {selectedProduct.title || selectedProduct.asin || "Product"}
@@ -1101,15 +1103,9 @@ export default function ExplorerPage() {
                     <p className="font-medium text-slate-100">{selectedProduct.title || selectedProduct.asin || "Product"}</p>
                   )}
                   {selectedProduct.asin ? (
-                    <p className="mt-1 text-[11px] text-slate-500">
-                      <a
-                        href={amazonProductDetailUrl(marketplaceDomain, selectedProduct.asin)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-slate-400 underline decoration-slate-600 underline-offset-2 hover:text-slate-200 hover:decoration-slate-400"
-                      >
-                        Open product page on Amazon
-                      </a>
+                    <p className="mt-1 text-[11px] leading-snug text-slate-500">
+                      On Amazon, use <span className="text-slate-400">Buying options</span> or{" "}
+                      <span className="text-slate-400">Other sellers</span> on that page to see who is selling this ASIN.
                     </p>
                   ) : null}
                   {selectedProduct.offerLabel ? (
@@ -1465,6 +1461,8 @@ export default function ExplorerPage() {
               </div>
             </div>
           )}
+            </div>
+          </div>
         </div>
       </aside>
       </div>
