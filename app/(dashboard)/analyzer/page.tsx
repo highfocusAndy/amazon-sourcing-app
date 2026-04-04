@@ -17,6 +17,7 @@ import {
 import { useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { DashboardHeaderAccount } from "@/app/components/DashboardHeaderAccount";
+import { DashboardHeaderMark } from "@/app/components/DashboardHeaderMark";
 import { ProductInsightBlurb } from "@/app/components/ProductInsightBlurb";
 import { AmazonAccountModal } from "@/app/settings/AmazonAccountModal";
 import { useSavedProducts } from "@/app/context/SavedProductsContext";
@@ -1792,17 +1793,13 @@ function AnalyzerPageContent() {
         <AmazonAccountModal onClose={() => setShowAmazonAccountModal(false)} />
       )}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
-      <main className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-y-contain p-4 pb-10 sm:gap-6 sm:p-6 sm:pb-10">
-        <header className="sticky top-0 z-20 shrink-0 rounded-xl border border-slate-600/80 bg-slate-800/95 px-3 py-3 shadow-lg shadow-black/10 border-t-4 border-t-teal-500 backdrop-blur sm:px-4 sm:py-4">
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-hidden p-4 pb-4 sm:gap-6 sm:p-6 sm:pb-6">
+        <header className="hidden shrink-0 rounded-xl border border-slate-600/80 border-t-4 border-t-teal-500 bg-slate-800/95 px-3 py-3 shadow-lg shadow-black/10 backdrop-blur md:block sm:px-4 sm:py-4 lg:px-5 lg:py-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
             <div className="hidden min-w-0 items-center gap-2 sm:gap-3 md:flex">
-              <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-                <img
-                  src="/HF_LOGO.png"
-                  alt="HIGH FOCUS Professional"
-                  className="h-9 w-auto shrink-0 brightness-0 invert sm:h-12"
-                />
-                <h1 className="min-w-0 truncate text-base font-bold text-slate-100 tracking-tight sm:text-lg sm:whitespace-normal">
+              <div className="flex min-w-0 items-center gap-0">
+                <DashboardHeaderMark />
+                <h1 className="min-w-0 truncate pl-0.5 text-base font-bold tracking-tight text-slate-100 sm:pl-1 sm:text-lg md:text-xl lg:text-2xl xl:text-3xl sm:whitespace-normal">
                   HIGH FOCUS Sourcing App
                 </h1>
               </div>
@@ -1881,8 +1878,11 @@ function AnalyzerPageContent() {
         </div>
       ) : null}
 
+      <div
+        className={`flex min-h-0 min-w-0 flex-1 flex-col gap-4 ${results.length > 0 ? "overflow-hidden" : "overflow-y-auto overscroll-y-contain"}`}
+      >
       {results.length > 0 ? (
-        <div className="flex min-w-0 flex-col gap-4">
+        <>
       <section className="shrink-0 rounded-xl border border-slate-700 bg-slate-800/90 px-4 py-3 shadow-sm">
         <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
           <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -1908,7 +1908,7 @@ function AnalyzerPageContent() {
         </div>
       </section>
 
-      <section className="flex min-w-0 flex-col rounded-xl border border-slate-700 bg-slate-800/90 shadow-sm">
+      <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-700 bg-slate-800/90 shadow-sm">
         <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-slate-700 px-4 py-3">
           <div className="flex flex-wrap items-center gap-3">
             <label className="text-sm font-medium text-slate-300">
@@ -1980,12 +1980,12 @@ function AnalyzerPageContent() {
             </div>
           )}
         </div>
-        <div className="min-w-0 overflow-x-auto">
+        <div className="min-h-0 flex-1 overflow-y-auto overflow-x-auto overscroll-y-contain pb-14 md:pb-3">
           <table className="min-w-full border-collapse text-left text-sm">
-            <thead className="bg-slate-700/50 text-xs uppercase tracking-wide text-slate-400">
+            <thead className="sticky top-0 z-[1] border-b border-slate-600/80 bg-slate-700/95 text-xs uppercase tracking-wide text-slate-400 backdrop-blur-sm">
               <tr>
                 {tableHeaders.map((header) => (
-                  <th key={header.key} className="px-3 py-3">
+                  <th key={header.key} className="bg-slate-700/95 px-3 py-3">
                     <button
                       type="button"
                       onClick={() => handleSort(header.key)}
@@ -2047,7 +2047,7 @@ function AnalyzerPageContent() {
             </tbody>
           </table>
         </div>
-        {totalPages > 1 && (
+        {totalPages > 1 ? (
           <div className="flex shrink-0 items-center justify-between gap-4 border-t border-slate-700 px-4 py-3">
             <button
               type="button"
@@ -2069,9 +2069,9 @@ function AnalyzerPageContent() {
               Next
             </button>
           </div>
-        )}
+        ) : null}
       </section>
-        </div>
+        </>
       ) : null}
 
       <details className="group shrink-0 rounded-xl border border-slate-700 bg-slate-800/90 shadow-sm">
@@ -2118,6 +2118,7 @@ function AnalyzerPageContent() {
 
         </div>
       </details>
+      </div>
 
       {isScannerOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-4">

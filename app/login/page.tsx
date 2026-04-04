@@ -35,13 +35,13 @@ export default async function LoginPage({
     <div className="relative flex min-h-screen min-h-[100dvh] flex-col items-center justify-center bg-gradient-to-br from-slate-100 via-slate-50 to-teal-50/30 px-4 py-4 sm:px-6 sm:py-5">
       <BrandBackdrop variant="onLight" />
       <div className="relative z-[1] w-full max-w-lg rounded-2xl border border-slate-200/80 bg-white px-8 py-7 shadow-xl shadow-slate-200/50 sm:max-w-xl sm:px-10 sm:py-8">
-        <div className="flex flex-col items-center gap-2 sm:gap-3">
+        <div className="flex flex-col items-center gap-3 sm:gap-4">
           <img
             src="/HF_LOGO.png"
             alt="HIGH FOCUS Professional"
-            className="h-16 w-auto sm:h-[4.5rem]"
+            className="h-28 w-auto max-w-[min(100%,15rem)] object-contain sm:h-32 sm:max-w-[17rem] md:h-36 md:max-w-[19rem]"
           />
-          <h1 className="text-center text-2xl font-bold tracking-tight text-slate-900 sm:text-[1.75rem]">
+          <h1 className="text-center text-2xl font-bold tracking-tight text-slate-900 sm:text-[1.75rem] md:text-3xl">
             HIGH FOCUS Sourcing App
           </h1>
         </div>

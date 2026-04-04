@@ -6,8 +6,8 @@ export function BrandBackdrop({ variant }: { variant: "onDark" | "onLight" }) {
     variant === "onDark" ? "brightness(0) invert(1)" : "brightness(0)";
   const opacityClass =
     variant === "onDark"
-      ? "opacity-[0.035] sm:opacity-[0.05]"
-      : "opacity-[0.04] sm:opacity-[0.055]";
+      ? "opacity-[0.065] sm:opacity-[0.09]"
+      : "opacity-[0.06] sm:opacity-[0.085]";
 
   return (
     <div
@@ -19,7 +19,7 @@ export function BrandBackdrop({ variant }: { variant: "onDark" | "onLight" }) {
         style={{
           backgroundImage: "url(/HF_LOGO.png)",
           backgroundRepeat: "repeat",
-          backgroundSize: "clamp(72px, 14vw, 112px) auto",
+          backgroundSize: "clamp(104px, 22vw, 168px) auto",
           backgroundPosition: "center",
           filter,
         }}

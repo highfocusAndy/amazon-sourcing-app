@@ -4,6 +4,7 @@ import { useSavedProducts } from "@/app/context/SavedProductsContext";
 import { useExplorerCategory } from "@/app/context/ExplorerCategoryContext";
 import { getSubcategoriesForCategory } from "@/lib/catalogCategories";
 import { DashboardHeaderAccount } from "@/app/components/DashboardHeaderAccount";
+import { DashboardHeaderMark } from "@/app/components/DashboardHeaderMark";
 import { ProductInsightBlurb } from "@/app/components/ProductInsightBlurb";
 import { AmazonAccountModal } from "@/app/settings/AmazonAccountModal";
 import { AmazonOAuthAlerts } from "@/app/settings/AmazonOAuthAlerts";
@@ -684,17 +685,13 @@ export default function ExplorerPage() {
         <AmazonOAuthAlerts />
       </Suspense>
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
-      <main className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-y-contain p-4 pb-10 sm:gap-6 sm:p-6 sm:pb-10">
-        <header className="sticky top-0 z-20 shrink-0 rounded-xl border border-slate-600/80 bg-slate-800/95 px-3 py-3 shadow-lg shadow-black/10 border-t-4 border-t-teal-500 backdrop-blur sm:px-4 sm:py-4">
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-hidden p-4 pb-4 sm:gap-6 sm:p-6 sm:pb-6">
+        <header className="hidden shrink-0 rounded-xl border border-slate-600/80 border-t-4 border-t-teal-500 bg-slate-800/95 px-3 py-3 shadow-lg shadow-black/10 backdrop-blur md:block sm:px-4 sm:py-4 lg:px-5 lg:py-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
             <div className="hidden min-w-0 items-center gap-2 sm:gap-3 md:flex">
-              <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-                <img
-                  src="/HF_LOGO.png"
-                  alt="HIGH FOCUS Professional"
-                  className="h-9 w-auto shrink-0 brightness-0 invert sm:h-12"
-                />
-                <h1 className="min-w-0 truncate text-base font-bold text-slate-100 tracking-tight sm:text-lg sm:whitespace-normal">
+              <div className="flex min-w-0 items-center gap-0">
+                <DashboardHeaderMark />
+                <h1 className="min-w-0 truncate pl-0.5 text-base font-bold tracking-tight text-slate-100 sm:pl-1 sm:text-lg md:text-xl lg:text-2xl xl:text-3xl sm:whitespace-normal">
                   HIGH FOCUS Sourcing App
                 </h1>
               </div>
@@ -793,7 +790,7 @@ export default function ExplorerPage() {
         </section>
 
         {error ? (
-          <div className="rounded-lg border border-rose-800 bg-rose-900/30 px-4 py-3 text-sm text-rose-300">
+          <div className="shrink-0 rounded-lg border border-rose-800 bg-rose-900/30 px-4 py-3 text-sm text-rose-300">
             {error}
             {analyzeRequiresAuth && (
               <p className="mt-2">
@@ -817,9 +814,9 @@ export default function ExplorerPage() {
         {showProductTable && (
           <section
             ref={productTableContainerRef}
-            className="flex min-w-0 flex-col rounded-xl border border-slate-600/80 bg-slate-800/90 shadow-lg shadow-black/10"
+            className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-600/80 bg-slate-800/90 shadow-lg shadow-black/10"
           >
-            <div className="border-b border-slate-600/80 px-3 py-2.5 flex flex-col gap-0.5 bg-slate-800/50">
+            <div className="flex shrink-0 flex-col gap-0.5 border-b border-slate-600/80 bg-slate-800/50 px-3 py-2.5">
               <div className="flex items-center justify-between gap-2">
                 <p className="text-xs font-medium text-slate-500 uppercase tracking-wide truncate">
                   {selectedCategory && selectedSubcategory
@@ -897,13 +894,13 @@ export default function ExplorerPage() {
                 </p>
               )}
             </div>
-            <div className="min-w-0 overflow-x-auto">
+            <div className="min-h-0 flex-1 overflow-y-auto overflow-x-auto overscroll-y-contain pb-14 md:pb-3">
               <table className="w-full table-fixed border-collapse text-left text-sm">
-                <thead className="bg-slate-700/50 text-xs uppercase tracking-wide text-slate-400">
+                <thead className="sticky top-0 z-[1] border-b border-slate-600/80 bg-slate-700/95 text-xs uppercase tracking-wide text-slate-400 backdrop-blur-sm">
                   <tr>
-                    <th className="w-[60%] px-2 py-2">Product</th>
-                    <th className="w-[20%] px-2 py-2">Brand</th>
-                    <th className="w-[20%] px-2 py-2">BSR</th>
+                    <th className="w-[60%] bg-slate-700/95 px-2 py-2">Product</th>
+                    <th className="w-[20%] bg-slate-700/95 px-2 py-2">Brand</th>
+                    <th className="w-[20%] bg-slate-700/95 px-2 py-2">BSR</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -977,7 +974,7 @@ export default function ExplorerPage() {
               </table>
             </div>
             {catalogNextPageToken && !catalogLoading ? (
-              <div className="flex justify-center border-t border-slate-700 px-3 py-2">
+              <div className="flex shrink-0 justify-center border-t border-slate-700 px-3 py-2">
                 <button
                   type="button"
                   onClick={() => loadMoreProducts()}

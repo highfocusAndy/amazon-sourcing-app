@@ -10,6 +10,8 @@ import { ExplorerCategoryProvider, useExplorerCategoryOptional } from "@/app/con
 import { TOP_LEVEL_CATEGORIES, getSubcategoriesForCategory } from "@/lib/catalogCategories";
 import { BrandBackdrop } from "@/app/components/BrandBackdrop";
 import { AccountSettingsModal } from "@/app/settings/AccountSettingsModal";
+import { DashboardHeaderMark } from "@/app/components/DashboardHeaderMark";
+import { MobileHeaderAmazon } from "@/app/components/MobileHeaderAmazon";
 import { SettingsModal } from "@/app/settings/SettingsModal";
 
 function NavLink({
@@ -46,15 +48,16 @@ function NavLink({
 function LeftNavWithCategories({
   mobileDrawerOpen,
   onCloseMobileMenu,
+  onOpenSettings,
 }: {
   mobileDrawerOpen: boolean;
   onCloseMobileMenu: () => void;
+  onOpenSettings: () => void;
 }) {
   const pathname = usePathname();
   const ctx = useExplorerCategoryOptional();
   const { data: session, status } = useSession();
   const [showAccountModal, setShowAccountModal] = useState(false);
-  const [showSettingsModal, setShowSettingsModal] = useState(false);
 
   return (
     <nav
@@ -135,93 +138,104 @@ function LeftNavWithCategories({
         )}
       </div>
 
-      <div className="px-4 py-3">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Menu</p>
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <div className="shrink-0 px-4 py-3">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Menu</p>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain">
+          <NavLink href="/" active={pathname === "/"} icon="◆" onNavigate={onCloseMobileMenu}>
+            Explorer
+          </NavLink>
+          {pathname === "/" && ctx && (
+            <>
+              <button
+                type="button"
+                onClick={() => ctx.setCategoriesOpen(!ctx.categoriesOpen)}
+                className="flex w-full items-center gap-3 border-l-2 border-transparent px-4 py-2 text-left text-sm text-slate-400 transition-colors hover:bg-slate-700/60 hover:text-slate-200"
+              >
+                <span
+                  className={`shrink-0 text-slate-500 transition-transform ${ctx.categoriesOpen ? "rotate-90" : ""}`}
+                  aria-hidden
+                >
+                  ▶
+                </span>
+                <span>Categories</span>
+              </button>
+              {ctx.categoriesOpen && (
+                <ul className="py-1 text-sm">
+                  {TOP_LEVEL_CATEGORIES.map((cat) => {
+                    const isExpanded = ctx.expandedCategory === cat;
+                    const subs = getSubcategoriesForCategory(cat);
+                    return (
+                      <li key={cat}>
+                        <button
+                          type="button"
+                          onClick={() => ctx.setExpandedCategory(isExpanded ? null : cat)}
+                          className="flex w-full items-center gap-2 px-4 py-1.5 pl-8 text-left text-slate-300 transition-colors hover:bg-slate-700/60 hover:text-teal-200/90"
+                        >
+                          <span
+                            className={`shrink-0 text-[10px] text-slate-500 transition-transform ${isExpanded ? "rotate-90" : ""}`}
+                          >
+                            ▶
+                          </span>
+                          <span className="truncate">{cat}</span>
+                        </button>
+                        {isExpanded && (
+                          <ul className="pb-1">
+                            {subs.map((sub) => (
+                              <li key={sub}>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const same = ctx.selectedCategory === cat && ctx.selectedSubcategory === sub;
+                                    ctx.setSelectedCategory(same ? null : cat);
+                                    ctx.setSelectedSubcategory(same ? null : sub);
+                                    onCloseMobileMenu();
+                                  }}
+                                  className={`block w-full truncate py-1 pl-12 pr-2 text-left text-xs transition-colors ${
+                                    ctx.selectedCategory === cat && ctx.selectedSubcategory === sub
+                                      ? "bg-teal-500/25 font-semibold text-teal-200"
+                                      : "text-slate-400 hover:bg-slate-700/60 hover:text-slate-200"
+                                  }`}
+                                >
+                                  {sub}
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </>
+          )}
+          <NavLink href="/analyzer" active={pathname === "/analyzer"} icon="▷" onNavigate={onCloseMobileMenu}>
+            Analyzer
+          </NavLink>
+          <NavLink href="/saved" active={pathname === "/saved"} icon="★" onNavigate={onCloseMobileMenu}>
+            Saved Products
+          </NavLink>
+          <NavLink href="/subscribe" active={pathname === "/subscribe"} icon="◈" onNavigate={onCloseMobileMenu}>
+            Plan & billing
+          </NavLink>
+        </div>
       </div>
-      <div>
-        <NavLink href="/" active={pathname === "/"} icon="◆" onNavigate={onCloseMobileMenu}>
-          Explorer
-        </NavLink>
-        {pathname === "/" && ctx && (
-          <>
-            <button
-              type="button"
-              onClick={() => ctx.setCategoriesOpen(!ctx.categoriesOpen)}
-              className="flex items-center gap-3 px-4 py-2 text-sm text-slate-400 hover:bg-slate-700/60 hover:text-slate-200 border-l-2 border-transparent w-full text-left transition-colors"
-            >
-              <span className={`text-slate-500 shrink-0 transition-transform ${ctx.categoriesOpen ? "rotate-90" : ""}`} aria-hidden>
-                ▶
-              </span>
-              <span>Categories</span>
-            </button>
-            {ctx.categoriesOpen && (
-              <ul className="max-h-[60vh] overflow-y-auto py-1 text-sm">
-                {TOP_LEVEL_CATEGORIES.map((cat) => {
-                  const isExpanded = ctx.expandedCategory === cat;
-                  const subs = getSubcategoriesForCategory(cat);
-                  return (
-                    <li key={cat}>
-                      <button
-                        type="button"
-                        onClick={() => ctx.setExpandedCategory(isExpanded ? null : cat)}
-                        className="flex items-center gap-2 px-4 py-1.5 pl-8 text-left text-slate-300 hover:bg-slate-700/60 hover:text-teal-200/90 w-full transition-colors"
-                      >
-                        <span className={`shrink-0 text-slate-500 text-[10px] transition-transform ${isExpanded ? "rotate-90" : ""}`}>▶</span>
-                        <span className="truncate">{cat}</span>
-                      </button>
-                      {isExpanded && (
-                        <ul className="pb-1">
-                          {subs.map((sub) => (
-                            <li key={sub}>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const same = ctx.selectedCategory === cat && ctx.selectedSubcategory === sub;
-                                  ctx.setSelectedCategory(same ? null : cat);
-                                  ctx.setSelectedSubcategory(same ? null : sub);
-                                  onCloseMobileMenu();
-                                }}
-                                className={`block w-full py-1 pl-12 pr-2 text-left text-xs truncate transition-colors ${
-                                  ctx.selectedCategory === cat && ctx.selectedSubcategory === sub
-                                    ? "bg-teal-500/25 text-teal-200 font-semibold"
-                                    : "text-slate-400 hover:bg-slate-700/60 hover:text-slate-200"
-                                }`}
-                              >
-                                {sub}
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </>
-        )}
-      </div>
-      <NavLink href="/analyzer" active={pathname === "/analyzer"} icon="▷" onNavigate={onCloseMobileMenu}>
-        Analyzer
-      </NavLink>
-      <NavLink href="/saved" active={pathname === "/saved"} icon="★" onNavigate={onCloseMobileMenu}>
-        Saved Products
-      </NavLink>
-      <NavLink href="/subscribe" active={pathname === "/subscribe"} icon="◈" onNavigate={onCloseMobileMenu}>
-        Plan & billing
-      </NavLink>
-      <div className="mt-auto border-t border-slate-700/80 pt-2 bg-slate-800/30">
+      <div className="shrink-0 border-t border-slate-700/80 bg-slate-800/30 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2">
         <button
           type="button"
-          onClick={() => setShowSettingsModal(true)}
-          className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-slate-400 hover:bg-slate-700/60 hover:text-teal-300 transition-colors"
+          onClick={() => {
+            onOpenSettings();
+            onCloseMobileMenu();
+          }}
+          className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-slate-400 transition-colors hover:bg-slate-700/60 hover:text-teal-300"
         >
           <span className="text-slate-500" aria-hidden>
             ⚙
           </span>
           Settings
         </button>
-        {showSettingsModal && <SettingsModal onClose={() => setShowSettingsModal(false)} />}
       </div>
     </nav>
   );
@@ -258,6 +272,7 @@ function MobileMenuOpenButton({ onClick, menuOpen }: { onClick: () => void; menu
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+  const [settingsModalOpen, setSettingsModalOpen] = useState(false);
 
   useEffect(() => {
     setMobileDrawerOpen(false);
@@ -289,16 +304,13 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                     {mobilePageTitle(pathname)}
                   </span>
                 </div>
-                <div className="flex min-w-0 flex-1 items-center gap-2">
-                  <img
-                    src="/HF_LOGO.png"
-                    alt="HIGH FOCUS Professional"
-                    className="h-8 w-auto shrink-0 brightness-0 invert sm:h-9"
-                  />
-                  <span className="min-w-0 truncate text-sm font-bold leading-snug tracking-tight text-slate-100 sm:text-base">
+                <div className="flex min-w-0 flex-1 items-center gap-0">
+                  <DashboardHeaderMark variant="compact" />
+                  <span className="min-w-0 truncate pl-0.5 text-sm font-bold leading-snug tracking-tight text-slate-100 sm:pl-1 sm:text-base">
                     HIGH FOCUS Sourcing App
                   </span>
                 </div>
+                <MobileHeaderAmazon />
               </div>
             </header>
             {mobileDrawerOpen ? (
@@ -312,7 +324,20 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             <LeftNavWithCategories
               mobileDrawerOpen={mobileDrawerOpen}
               onCloseMobileMenu={() => setMobileDrawerOpen(false)}
+              onOpenSettings={() => setSettingsModalOpen(true)}
             />
+            {!mobileDrawerOpen ? (
+              <button
+                type="button"
+                onClick={() => setSettingsModalOpen(true)}
+                className="pointer-events-auto fixed bottom-[max(0.75rem,env(safe-area-inset-bottom))] left-3 z-[44] flex h-12 w-12 items-center justify-center rounded-full border border-slate-600 bg-slate-800/95 text-lg text-slate-200 shadow-lg shadow-black/30 backdrop-blur-sm transition hover:border-teal-500/50 hover:bg-slate-700 hover:text-teal-200 md:hidden"
+                aria-label="Settings"
+                title="Settings"
+              >
+                <span aria-hidden>⚙</span>
+              </button>
+            ) : null}
+            {settingsModalOpen ? <SettingsModal onClose={() => setSettingsModalOpen(false)} /> : null}
             <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">{children}</div>
           </div>
         </div>
