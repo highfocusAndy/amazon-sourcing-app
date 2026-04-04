@@ -145,11 +145,6 @@ export function LoginForm({ supportEmail }: LoginFormProps) {
           Invalid email or password.
         </p>
       )}
-      <p className="rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2.5 text-sm leading-snug text-slate-600">
-        Sign in with the <strong className="font-semibold text-slate-800">email and password you chose for this app</strong>{" "}
-        (from Get access / your invite code). That is separate from linking your{" "}
-        <strong className="font-semibold text-slate-800">Amazon seller</strong> account inside the app after you sign in.
-      </p>
       <label className="text-base font-medium text-slate-700">
         Email
         <input

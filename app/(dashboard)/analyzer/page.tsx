@@ -694,17 +694,18 @@ function AnalyzerPageContent() {
 
           setManualIdentifierResolved(true);
           setResults(analysisResults);
-          addProduct(analysisResult);
-          setSelectedProduct(analysisResult);
-          setMobileDetailsOpen(true);
+          addProducts(analysisResults);
+          setSelectedProduct(null);
+          setMobileDetailsOpen(false);
           setDetailPanelCost("");
+          setViewFilter("all");
           setLastRunMode("manual");
           setInfoMessage(
             isScannerTriggered
-              ? `Scanned ${effectiveIdentifier}. Product found. Add cost and units in the panel.`
+              ? `Scanned ${effectiveIdentifier}. ${analysisResults.length} listing(s) — tap a row to open details and run profit analysis.`
               : analysisResults.length > 1
-                ? `${analysisResults.length} listings found. Click a row for details.`
-                : "Product found. Add cost and units in the panel.",
+                ? `${analysisResults.length} listings found. Click a row for details and profit analysis.`
+                : "1 listing found. Click the row for details and profit analysis.",
           );
           return;
         }
@@ -737,7 +738,7 @@ function AnalyzerPageContent() {
         setIsManualLoading(false);
       }
     },
-    [identifier, wholesalePrice, brand, projectedMonthlyUnits, shippingCost],
+    [identifier, wholesalePrice, brand, projectedMonthlyUnits, shippingCost, addProducts],
   );
 
   useEffect(() => {
@@ -980,8 +981,7 @@ function AnalyzerPageContent() {
     return { profitable, ungating, bad, ungated };
   }, [results]);
 
-  const manualResult = lastRunMode === "manual" && results.length > 0 ? results[0] : null;
-  const detailProduct = selectedProduct ?? manualResult;
+  const detailProduct = selectedProduct;
   const parsedUnitQuantity = parsePositiveInput(projectedMonthlyUnits);
   const detailWholesalePrice =
     detailProduct?.wholesalePrice ?? (parseNonNegativeInput(wholesalePrice) ?? 0);
@@ -1200,8 +1200,10 @@ function AnalyzerPageContent() {
       setManualIdentifierResolved(false);
       setIsKeywordMode(true);
       setLastKeyword(effectiveKeyword);
+      setViewFilter("all");
       if (analysisResults.length > 0) {
-        setSelectedProduct(analysisResults[0]);
+        setSelectedProduct(null);
+        setMobileDetailsOpen(false);
         setInfoMessage(`${analysisResults.length} products found. Click a row for details.`);
       } else {
         setSelectedProduct(null);

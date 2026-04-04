@@ -306,8 +306,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                 </div>
                 <div className="flex min-w-0 flex-1 items-center gap-0">
                   <DashboardHeaderMark variant="compact" />
-                  <span className="min-w-0 truncate pl-0.5 text-sm font-bold leading-snug tracking-tight text-slate-100 sm:pl-1 sm:text-base">
-                    HIGH FOCUS Sourcing App
+                  <span className="min-w-0 pl-0.5 text-xs font-bold leading-tight tracking-tight text-slate-100 sm:pl-1 sm:text-base sm:leading-snug">
+                    <span className="sm:hidden">Sourcing App</span>
+                    <span className="hidden sm:inline">HIGH FOCUS Sourcing App</span>
                   </span>
                 </div>
                 <MobileHeaderAmazon />
