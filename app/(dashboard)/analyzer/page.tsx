@@ -20,6 +20,7 @@ import { DashboardHeaderAccount } from "@/app/components/DashboardHeaderAccount"
 import { DashboardHeaderMark } from "@/app/components/DashboardHeaderMark";
 import { ProductInsightBlurb } from "@/app/components/ProductInsightBlurb";
 import { AmazonAccountModal } from "@/app/settings/AmazonAccountModal";
+import { useOpenDashboardSettings } from "@/app/context/DashboardSettingsContext";
 import { useSavedProducts } from "@/app/context/SavedProductsContext";
 import { amazonOfferListingUrl, amazonSellerStorefrontUrl } from "@/lib/marketplaces";
 import type { ProductAnalysis, SellerType } from "@/lib/types";
@@ -381,6 +382,7 @@ export default function AnalyzerPage() {
 
 function AnalyzerPageContent() {
   const { addProducts, getByAsin } = useSavedProducts();
+  const openDashboardSettings = useOpenDashboardSettings();
   const { data: session } = useSession();
   const [identifier, setIdentifier] = useState("");
   const [keyword, setKeyword] = useState("");
@@ -404,6 +406,7 @@ function AnalyzerPageContent() {
   const [lastKeyword, setLastKeyword] = useState<string | null>(null);
   const [keywordPageSize, setKeywordPageSize] = useState(20);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [mobileBulkOpen, setMobileBulkOpen] = useState(false);
   const [scannerError, setScannerError] = useState<string | null>(null);
   const [scannerRunNonce, setScannerRunNonce] = useState(0);
   const [manualIdentifierResolved, setManualIdentifierResolved] = useState(false);
@@ -1272,6 +1275,7 @@ function AnalyzerPageContent() {
       }
       setInfoMessage(msg);
       setLastRunMode("upload");
+      setMobileBulkOpen(false);
       startTransition(() => {
         addProducts(resultsList);
         setResults(resultsList);
@@ -1899,55 +1903,59 @@ function AnalyzerPageContent() {
     );
   }
 
+  const bulkUploadInner = (
+    <div className="space-y-6">
+      {!bulkUploadEnabled ? (
+        <p className="rounded-lg border border-slate-600 bg-slate-700/40 px-3 py-2 text-xs text-slate-300">
+          Bulk upload is available on Pro plan.
+        </p>
+      ) : null}
+
+      <form onSubmit={handleUploadSubmit} className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h2 className="text-lg font-semibold text-slate-900">Upload Wholesale File</h2>
+        <p className="mt-1 text-sm text-slate-600">Include ASIN, UPC, or EAN plus wholesale cost per unit.</p>
+
+        <div
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          className={`mt-4 rounded-xl border-2 border-dashed p-6 text-center transition ${
+            dragging ? "border-sky-400 bg-sky-50" : "border-slate-300 bg-slate-50"
+          } ${bulkUploadEnabled ? "" : "pointer-events-none opacity-60"}`}
+        >
+          <p className="text-sm text-slate-700">{file ? file.name : "Drag and drop .xlsx/.xls/.csv here"}</p>
+          <p className="mt-1 text-xs text-slate-500">or</p>
+          <label
+            className={`mt-3 inline-flex items-center rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 ${bulkUploadEnabled ? "cursor-pointer hover:bg-slate-100" : "cursor-not-allowed opacity-70"}`}
+          >
+            Select File
+            <input
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              className="hidden"
+              onChange={handleFileInput}
+              disabled={!bulkUploadEnabled}
+            />
+          </label>
+        </div>
+
+        <button
+          type="submit"
+          disabled={isUploadLoading || !bulkUploadEnabled}
+          className="mt-5 inline-flex items-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {isUploadLoading ? "Analyzing File..." : "Run Batch Analysis"}
+        </button>
+      </form>
+    </div>
+  );
+
   const bulkUploadPanel = (
     <details className="group shrink-0 rounded-xl border border-slate-700 bg-slate-800/90 shadow-sm">
       <summary className="cursor-pointer list-none px-6 py-4 text-sm font-semibold text-slate-300 hover:bg-slate-700/50 [&::-webkit-details-marker]:hidden">
         Bulk upload
       </summary>
-      <div className="border-t border-slate-700 p-6 pt-4 space-y-6">
-        {!bulkUploadEnabled ? (
-          <p className="rounded-lg border border-slate-600 bg-slate-700/40 px-3 py-2 text-xs text-slate-300">
-            Bulk upload is available on Pro plan.
-          </p>
-        ) : null}
-
-        <form onSubmit={handleUploadSubmit} className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-slate-900">Upload Wholesale File</h2>
-          <p className="mt-1 text-sm text-slate-600">Include ASIN, UPC, or EAN plus wholesale cost per unit.</p>
-
-          <div
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-            className={`mt-4 rounded-xl border-2 border-dashed p-6 text-center transition ${
-              dragging ? "border-sky-400 bg-sky-50" : "border-slate-300 bg-slate-50"
-            } ${bulkUploadEnabled ? "" : "pointer-events-none opacity-60"}`}
-          >
-            <p className="text-sm text-slate-700">{file ? file.name : "Drag and drop .xlsx/.xls/.csv here"}</p>
-            <p className="mt-1 text-xs text-slate-500">or</p>
-            <label
-              className={`mt-3 inline-flex items-center rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 ${bulkUploadEnabled ? "cursor-pointer hover:bg-slate-100" : "cursor-not-allowed opacity-70"}`}
-            >
-              Select File
-              <input
-                type="file"
-                accept=".xlsx,.xls,.csv"
-                className="hidden"
-                onChange={handleFileInput}
-                disabled={!bulkUploadEnabled}
-              />
-            </label>
-          </div>
-
-          <button
-            type="submit"
-            disabled={isUploadLoading || !bulkUploadEnabled}
-            className="mt-5 inline-flex items-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {isUploadLoading ? "Analyzing File..." : "Run Batch Analysis"}
-          </button>
-        </form>
-      </div>
+      <div className="border-t border-slate-700 p-6 pt-4">{bulkUploadInner}</div>
     </details>
   );
 
@@ -1962,7 +1970,7 @@ function AnalyzerPageContent() {
         <AmazonAccountModal onClose={() => setShowAmazonAccountModal(false)} />
       )}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
-      <main className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-hidden p-4 pb-4 sm:gap-6 sm:p-6 sm:pb-6">
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto overflow-x-hidden overscroll-y-contain p-4 pb-[calc(4.75rem+env(safe-area-inset-bottom,0px))] sm:gap-6 sm:p-6 sm:pb-[calc(4.75rem+env(safe-area-inset-bottom,0px))] lg:overflow-hidden lg:pb-6">
         <header className="hidden shrink-0 rounded-xl border border-slate-600/80 border-t-4 border-t-teal-500 bg-slate-800/95 px-3 py-3 shadow-lg shadow-black/10 backdrop-blur md:block sm:px-4 sm:py-4 lg:px-5 lg:py-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
             <div className="hidden min-w-0 items-center gap-2 sm:gap-3 md:flex">
@@ -2049,11 +2057,13 @@ function AnalyzerPageContent() {
 
       <div
         className={`flex min-h-0 min-w-0 flex-col ${
-          results.length > 0 ? "min-h-0 flex-1 overflow-hidden" : "flex-1"
+          results.length > 0
+            ? "max-lg:shrink-0 lg:min-h-0 lg:flex-1 lg:overflow-hidden"
+            : "flex-1"
         }`}
       >
       {results.length > 0 ? (
-      <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-600/80 bg-slate-800/90 shadow-lg shadow-black/10">
+      <section className="flex min-h-0 min-w-0 max-lg:shrink-0 flex-col rounded-xl border border-slate-600/80 bg-slate-800/90 shadow-lg shadow-black/10 lg:flex-1 lg:overflow-hidden">
         <div className="flex shrink-0 flex-col gap-0.5 border-b border-slate-600/80 bg-slate-800/50 px-3 py-2.5">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
@@ -2152,6 +2162,76 @@ function AnalyzerPageContent() {
             </div>
           )}
         </div>
+        <div className="flex flex-col gap-2 px-2 pb-2 lg:hidden">
+          {displayedResults.length === 0 ? (
+            <p className="px-2 py-8 text-center text-sm text-slate-500">
+              No products match the selected view filter.
+            </p>
+          ) : (
+            displayedResults.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => void handleSelectProduct(item)}
+                className={`flex w-full gap-3 rounded-lg border border-slate-600 bg-slate-800/80 p-3 text-left transition hover:bg-slate-700/50 ${
+                  selectedProduct?.id === item.id || pendingProductId === item.id
+                    ? "ring-2 ring-inset ring-teal-400"
+                    : ""
+                }`}
+              >
+                <div className="shrink-0">
+                  {item.imageUrl ? (
+                    <img
+                      src={item.imageUrl}
+                      alt=""
+                      referrerPolicy="no-referrer"
+                      className="h-14 w-14 rounded border border-slate-600 object-contain bg-slate-700/30"
+                    />
+                  ) : (
+                    <span className="inline-flex h-14 w-14 items-center justify-center rounded border border-slate-600 bg-slate-700/50 text-slate-500 text-[11px]">
+                      —
+                    </span>
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="line-clamp-2 text-sm font-medium text-slate-100">
+                    {item.title || item.asin || item.inputIdentifier || "—"}
+                  </p>
+                  <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-slate-400">
+                    {item.asin ? <span>ASIN {item.asin}</span> : null}
+                    <span>BSR {formatNumber(item.salesRank)}</span>
+                    <span>{item.brand || "—"}</span>
+                  </div>
+                  {item.offerLabel ? <p className="mt-0.5 text-[11px] text-slate-500">{item.offerLabel}</p> : null}
+                </div>
+              </button>
+            ))
+          )}
+          {totalPages > 1 ? (
+            <div className="flex items-center justify-between gap-4 border-t border-slate-600/80 px-2 py-3">
+              <button
+                type="button"
+                onClick={() => setResultsPage((p) => Math.max(1, p - 1))}
+                disabled={resultsPage <= 1}
+                className="rounded-lg border border-slate-600 bg-slate-700/50 px-3 py-1.5 text-sm font-medium text-slate-200 hover:bg-slate-600 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Previous
+              </button>
+              <span className="text-sm text-slate-400">
+                Page {resultsPage} of {totalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setResultsPage((p) => Math.min(totalPages, p + 1))}
+                disabled={resultsPage >= totalPages}
+                className="rounded-lg border border-slate-600 bg-slate-700/50 px-3 py-1.5 text-sm font-medium text-slate-200 hover:bg-slate-600 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Next
+              </button>
+            </div>
+          ) : null}
+        </div>
+        <div className="hidden min-h-0 flex-1 flex-col overflow-hidden lg:flex">
         <div className="min-h-0 flex-1 overflow-y-auto overflow-x-auto overscroll-y-contain pb-14 md:pb-3">
           <table className="min-w-full border-collapse text-left text-sm">
             <thead className="sticky top-0 z-[1] border-b border-slate-600/80 bg-slate-700/95 text-xs uppercase tracking-wide text-slate-400 backdrop-blur-sm">
@@ -2243,11 +2323,58 @@ function AnalyzerPageContent() {
           ) : null}
           <div className="border-t border-slate-600/80 px-1 pt-4">{bulkUploadPanel}</div>
         </div>
+        </div>
       </section>
       ) : null}
       </div>
 
-      {results.length === 0 ? bulkUploadPanel : null}
+      {results.length === 0 ? <div className="hidden shrink-0 lg:block">{bulkUploadPanel}</div> : null}
+
+      <div className="fixed bottom-0 left-0 right-0 z-[44] border-t border-slate-700/90 bg-slate-900/95 backdrop-blur-md lg:hidden">
+        <div className="flex items-stretch gap-2 px-2 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom,0px))]">
+          <button
+            type="button"
+            onClick={() => setMobileBulkOpen(true)}
+            className="flex min-h-12 min-w-0 flex-1 items-center justify-center rounded-lg border border-teal-500/45 bg-teal-500/15 px-3 text-sm font-semibold text-teal-100 shadow-sm transition hover:bg-teal-500/25"
+          >
+            Bulk upload
+          </button>
+          <button
+            type="button"
+            onClick={() => openDashboardSettings()}
+            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-slate-600 bg-slate-800 text-lg leading-none text-slate-200 shadow-md transition hover:border-teal-500/50 hover:bg-slate-700 hover:text-teal-200"
+            aria-label="Settings"
+            title="Settings"
+          >
+            <span aria-hidden>⚙</span>
+          </button>
+        </div>
+      </div>
+
+      {mobileBulkOpen ? (
+        <>
+          <button
+            type="button"
+            aria-label="Close bulk upload"
+            className="fixed inset-0 z-[90] bg-slate-950/60 backdrop-blur-[1px] lg:hidden"
+            onClick={() => setMobileBulkOpen(false)}
+          />
+          <div className="fixed inset-x-0 bottom-0 z-[100] max-h-[min(90dvh,42rem)] overflow-y-auto overflow-x-hidden rounded-t-2xl border border-slate-600 border-b-0 bg-slate-800 px-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))] pt-3 shadow-2xl lg:hidden">
+            <div className="flex items-center justify-between gap-2 border-b border-slate-600/80 pb-3">
+              <h3 className="text-base font-semibold text-slate-100">Bulk upload</h3>
+              <button
+                type="button"
+                onClick={() => setMobileBulkOpen(false)}
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-600 bg-slate-700 text-xl leading-none text-slate-100 hover:bg-slate-600"
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            <div className="pt-4">{bulkUploadInner}</div>
+          </div>
+        </>
+      ) : null}
 
       {isScannerOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-4">

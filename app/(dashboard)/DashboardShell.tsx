@@ -6,6 +6,7 @@ import { useSession } from "next-auth/react";
 import { signOut } from "next-auth/react";
 import { useEffect, useState } from "react";
 import { SavedProductsProvider } from "@/app/context/SavedProductsContext";
+import { DashboardSettingsProvider } from "@/app/context/DashboardSettingsContext";
 import { ExplorerCategoryProvider, useExplorerCategoryOptional } from "@/app/context/ExplorerCategoryContext";
 import { TOP_LEVEL_CATEGORIES, getSubcategoriesForCategory } from "@/lib/catalogCategories";
 import { BrandBackdrop } from "@/app/components/BrandBackdrop";
@@ -290,6 +291,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   return (
     <SavedProductsProvider>
       <ExplorerCategoryProvider>
+        <DashboardSettingsProvider openSettings={() => setSettingsModalOpen(true)}>
         <div className="relative h-[100dvh] max-h-[100dvh] w-full overflow-hidden bg-slate-900/50">
           <BrandBackdrop variant="onDark" />
           <div className="relative z-[1] flex h-full min-h-0 w-full flex-col md:flex-row">
@@ -327,7 +329,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               onCloseMobileMenu={() => setMobileDrawerOpen(false)}
               onOpenSettings={() => setSettingsModalOpen(true)}
             />
-            {!mobileDrawerOpen ? (
+            {!mobileDrawerOpen && !pathname.startsWith("/analyzer") ? (
               <button
                 type="button"
                 onClick={() => setSettingsModalOpen(true)}
@@ -342,6 +344,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">{children}</div>
           </div>
         </div>
+        </DashboardSettingsProvider>
       </ExplorerCategoryProvider>
     </SavedProductsProvider>
   );
