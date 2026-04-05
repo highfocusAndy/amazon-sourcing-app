@@ -46,6 +46,14 @@ type SortColumn =
 type SortDirection = "asc" | "desc";
 type ViewFilter = "all" | "buy_now" | "ungated" | "ungate_profitable" | "restricted" | "needs_review";
 
+type ManualAnalysisRunner = (
+  selectedSellerType: SellerType,
+  isAutoRerun?: boolean,
+  identifierOverride?: string,
+  isScannerTriggered?: boolean,
+  lookupOnly?: boolean,
+) => Promise<void>;
+
 type DetectedBarcode = {
   rawValue?: string;
 };
@@ -55,6 +63,23 @@ type BarcodeDetectorInstance = {
 };
 
 type BarcodeDetectorCtor = new (options?: { formats?: string[] }) => BarcodeDetectorInstance;
+
+/** Formats we try for camera + still images (QR/Datamatrix help with “photo of label” cases). */
+const BARCODE_DETECTOR_FORMATS = [
+  "aztec",
+  "code_128",
+  "code_39",
+  "code_93",
+  "codabar",
+  "data_matrix",
+  "ean_13",
+  "ean_8",
+  "itf",
+  "pdf417",
+  "qr_code",
+  "upc_a",
+  "upc_e",
+] as const;
 
 type ZxingScanResultLike = {
   getText: () => string;
@@ -68,6 +93,11 @@ type ZxingReaderLike = {
   decodeFromVideoDevice: (
     deviceId: string | null,
     videoSource: string | HTMLVideoElement | null,
+    callbackFn: (result: ZxingScanResultLike | undefined, error?: ZxingScanErrorLike) => void,
+  ) => Promise<void>;
+  decodeFromStream?: (
+    stream: MediaStream,
+    videoSource: string | HTMLVideoElement,
     callbackFn: (result: ZxingScanResultLike | undefined, error?: ZxingScanErrorLike) => void,
   ) => Promise<void>;
   decodeFromImageElement: (image: HTMLImageElement) => Promise<ZxingScanResultLike>;
@@ -408,7 +438,6 @@ function AnalyzerPageContent() {
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [mobileBulkOpen, setMobileBulkOpen] = useState(false);
   const [scannerError, setScannerError] = useState<string | null>(null);
-  const [scannerRunNonce, setScannerRunNonce] = useState(0);
   const [manualIdentifierResolved, setManualIdentifierResolved] = useState(false);
   const [marketplaceDomain, setMarketplaceDomain] = useState("amazon.com");
   const [selectedProduct, setSelectedProduct] = useState<ProductAnalysis | null>(null);
@@ -436,6 +465,11 @@ function AnalyzerPageContent() {
   const zxingReaderRef = useRef<ZxingReaderLike | null>(null);
   const hasScannedRef = useRef(false);
   const lastAutoManualCalcKeyRef = useRef("");
+  const scannerPreferredDeviceIdRef = useRef<string | null>(null);
+  const sellerTypeRef = useRef<SellerType>(sellerType);
+  const runManualAnalysisRef = useRef<ManualAnalysisRunner | null>(null);
+  const isManualLoadingRef = useRef(isManualLoading);
+  const isUploadLoadingRef = useRef(isUploadLoading);
 
   const openSellerModal = useCallback((e: MouseEvent<HTMLButtonElement>, filter: "all" | "FBA" | "FBM") => {
     const narrow = typeof window !== "undefined" && window.innerWidth < 1024;
@@ -474,7 +508,7 @@ function AnalyzerPageContent() {
 
   useEffect(() => {
     setResultsPage(1);
-  }, [results.length, viewFilter]);
+  }, [results.length, viewFilter, lastRunMode]);
 
   const refreshAmazonHeaderStatus = useCallback(() => {
     if (!session?.user) {
@@ -599,6 +633,38 @@ function AnalyzerPageContent() {
     hasScannedRef.current = false;
   }, []);
 
+  const acquireScannerStream = useCallback(async (): Promise<boolean> => {
+    if (!window.isSecureContext) {
+      setScannerError(
+        "Camera is blocked on insecure pages. Open this app on https:// or on http://localhost, then allow camera permission.",
+      );
+      return false;
+    }
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setScannerError("Camera access is not available in this browser.");
+      return false;
+    }
+    stopScanner();
+    try {
+      const constraints: MediaStreamConstraints = {
+        video: scannerPreferredDeviceIdRef.current
+          ? { deviceId: { ideal: scannerPreferredDeviceIdRef.current } }
+          : { facingMode: { ideal: "environment" } },
+        audio: false,
+      };
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      const deviceId = stream.getVideoTracks()[0]?.getSettings?.().deviceId;
+      if (deviceId) {
+        scannerPreferredDeviceIdRef.current = deviceId;
+      }
+      scannerStreamRef.current = stream;
+      return true;
+    } catch (error) {
+      setScannerError(error instanceof Error ? error.message : "Unable to access camera.");
+      return false;
+    }
+  }, [stopScanner]);
+
   const runManualAnalysis = useCallback(
     async (
       selectedSellerType: SellerType,
@@ -703,13 +769,7 @@ function AnalyzerPageContent() {
           setDetailPanelCost("");
           setViewFilter("all");
           setLastRunMode("manual");
-          setInfoMessage(
-            isScannerTriggered
-              ? `Scanned ${effectiveIdentifier}. ${analysisResults.length} listing(s) — tap a row to open details and run profit analysis.`
-              : analysisResults.length > 1
-                ? `${analysisResults.length} listings found. Click a row for details and profit analysis.`
-                : "1 listing found. Click the row for details and profit analysis.",
-          );
+          setInfoMessage(null);
           return;
         }
 
@@ -719,17 +779,7 @@ function AnalyzerPageContent() {
         setSelectedProduct(null);
         setMobileDetailsOpen(false);
 
-        if (isAutoRerun) {
-          setInfoMessage(`Re-analyzed for ${selectedSellerType}. Tap a row for details.`);
-        } else {
-          setInfoMessage(
-            analysisResults.length > 1
-              ? `${analysisResults.length} listings. Tap a row for profit details.`
-              : isScannerTriggered
-                ? "Tap the row for profit details."
-                : "Tap the row for profit details.",
-          );
-        }
+        setInfoMessage(null);
         if (analysisResult.error) {
           setErrorMessage(analysisResult.error);
         }
@@ -794,9 +844,6 @@ function AnalyzerPageContent() {
             : prev,
         );
 
-        if (isAutoRerun) {
-          setInfoMessage(`Re-analyzed for ${effectiveSellerType}.`);
-        }
         if (full.error) {
           setErrorMessage(full.error);
         }
@@ -837,9 +884,21 @@ function AnalyzerPageContent() {
     [wholesalePrice, projectedMonthlyUnits, sellerType, shippingCost],
   );
 
+  sellerTypeRef.current = sellerType;
+  runManualAnalysisRef.current = runManualAnalysis;
+  isManualLoadingRef.current = isManualLoading;
+  isUploadLoadingRef.current = isUploadLoading;
+
   useEffect(() => {
-    if (!isScannerOpen || !videoRef.current) {
+    if (!isScannerOpen) {
       stopScanner();
+      return;
+    }
+
+    const stream = scannerStreamRef.current;
+    if (!stream) {
+      setScannerError("Camera failed to start. Close and try Scan again.");
+      setIsScannerOpen(false);
       return;
     }
 
@@ -847,6 +906,8 @@ function AnalyzerPageContent() {
     hasScannedRef.current = false;
     let cancelled = false;
     let detectionErrorShown = false;
+    let attachAttempts = 0;
+
     const applyScannedValue = (scannedValue: string): void => {
       if (!scannedValue || cancelled || hasScannedRef.current) {
         return;
@@ -861,13 +922,16 @@ function AnalyzerPageContent() {
       setErrorMessage(null);
       setIsScannerOpen(false);
 
-      if (isManualLoading || isUploadLoading) {
+      if (isManualLoadingRef.current || isUploadLoadingRef.current) {
         setInfoMessage(`Scanned identifier: ${scannedValue}. Finish current run, then continue.`);
         return;
       }
 
       setInfoMessage(`Scanned identifier: ${scannedValue}. Loading product data...`);
-      void runManualAnalysis(sellerType, false, scannedValue, true, true);
+      const run = runManualAnalysisRef.current;
+      if (run) {
+        void run(sellerTypeRef.current, false, scannedValue, true, true);
+      }
     };
 
     const scanLoop = async (detector: BarcodeDetectorInstance): Promise<void> => {
@@ -899,35 +963,23 @@ function AnalyzerPageContent() {
       });
     };
 
-    const startScanner = async (): Promise<void> => {
+    const startDecodeOnVideo = async (video: HTMLVideoElement): Promise<void> => {
       try {
-        if (!window.isSecureContext) {
-          setScannerError(
-            "Camera is blocked on insecure pages. Open this app on https:// or on http://localhost, then allow camera permission.",
-          );
-          return;
-        }
-
-        if (!navigator.mediaDevices?.getUserMedia) {
-          setScannerError("Camera access is not available in this browser.");
-          return;
-        }
+        video.srcObject = stream;
+        await video.play();
 
         const detectorCtor = (window as Window & { BarcodeDetector?: BarcodeDetectorCtor }).BarcodeDetector;
 
-        if (!videoRef.current) {
-          return;
-        }
-
         if (!detectorCtor) {
           const zxingModule = await import("@zxing/library");
-          if (cancelled || !videoRef.current) {
+          if (cancelled || hasScannedRef.current) {
             return;
           }
 
           const zxingReader = new zxingModule.BrowserMultiFormatReader() as unknown as ZxingReaderLike;
           zxingReaderRef.current = zxingReader;
-          await zxingReader.decodeFromVideoDevice(null, videoRef.current, (result, error) => {
+
+          const onZXingResult = (result: ZxingScanResultLike | undefined, error?: ZxingScanErrorLike): void => {
             if (cancelled || hasScannedRef.current) {
               return;
             }
@@ -949,30 +1001,18 @@ function AnalyzerPageContent() {
               setScannerError("Scanner is active but could not decode this frame. Try better lighting and distance.");
               detectionErrorShown = true;
             }
-          });
+          };
+
+          if (zxingReader.decodeFromStream) {
+            await zxingReader.decodeFromStream(stream, video, onZXingResult);
+          } else {
+            await zxingReader.decodeFromVideoDevice(null, video, onZXingResult);
+          }
           return;
         }
-
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: "environment" } },
-          audio: false,
-        });
-        if (cancelled) {
-          stream.getTracks().forEach((track) => track.stop());
-          return;
-        }
-
-        scannerStreamRef.current = stream;
-        if (!videoRef.current) {
-          stream.getTracks().forEach((track) => track.stop());
-          return;
-        }
-
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
 
         const detector = new detectorCtor({
-          formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "code_39", "itf"],
+          formats: [...BARCODE_DETECTOR_FORMATS],
         });
 
         scannerFrameRef.current = window.requestAnimationFrame(() => {
@@ -982,17 +1022,35 @@ function AnalyzerPageContent() {
         if (cancelled) {
           return;
         }
-        setScannerError(error instanceof Error ? error.message : "Unable to access camera.");
+        setScannerError(error instanceof Error ? error.message : "Unable to start scanner preview.");
       }
     };
 
-    void startScanner();
+    const tryAttach = (): void => {
+      if (cancelled) {
+        return;
+      }
+      const video = videoRef.current;
+      if (!video) {
+        attachAttempts += 1;
+        if (attachAttempts > 120) {
+          setScannerError("Camera view failed to load.");
+          setIsScannerOpen(false);
+          return;
+        }
+        scannerFrameRef.current = window.requestAnimationFrame(tryAttach);
+        return;
+      }
+      void startDecodeOnVideo(video);
+    };
+
+    tryAttach();
 
     return () => {
       cancelled = true;
       stopScanner();
     };
-  }, [isScannerOpen, scannerRunNonce, stopScanner, isManualLoading, isUploadLoading, sellerType, runManualAnalysis]);
+  }, [isScannerOpen, stopScanner]);
 
   useEffect(() => {
     fetch("/api/config")
@@ -1066,10 +1124,12 @@ function AnalyzerPageContent() {
   ]);
 
   const filteredSortedResults = useMemo(() => {
-    return [...results]
-      .filter((item) => matchesViewFilter(item, viewFilter))
-      .sort((left, right) => compareValues(left, right, sortColumn, sortDirection));
-  }, [results, viewFilter, sortColumn, sortDirection]);
+    const base =
+      lastRunMode === "upload"
+        ? results.filter((item) => matchesViewFilter(item, viewFilter))
+        : [...results];
+    return base.sort((left, right) => compareValues(left, right, sortColumn, sortDirection));
+  }, [results, lastRunMode, viewFilter, sortColumn, sortDirection]);
 
   const RESULTS_PAGE_SIZE = 50;
   const totalPages = Math.max(1, Math.ceil(filteredSortedResults.length / RESULTS_PAGE_SIZE));
@@ -1319,7 +1379,7 @@ function AnalyzerPageContent() {
       if (analysisResults.length > 0) {
         setSelectedProduct(null);
         setMobileDetailsOpen(false);
-        setInfoMessage(`${analysisResults.length} products found. Click a row for details.`);
+        setInfoMessage(null);
       } else {
         setSelectedProduct(null);
         setInfoMessage("No products found for this keyword.");
@@ -1390,10 +1450,12 @@ function AnalyzerPageContent() {
     await runKeywordSearch(lastKeyword, keywordPageSize);
   }
 
-  function handleOpenScanner(): void {
+  async function handleOpenScanner(): Promise<void> {
     setScannerError(null);
-    setScannerRunNonce((current) => current + 1);
-    setIsScannerOpen(true);
+    const ok = await acquireScannerStream();
+    if (ok) {
+      setIsScannerOpen(true);
+    }
   }
 
   async function handleImageUpload(event: React.ChangeEvent<HTMLInputElement>): Promise<void> {
@@ -1417,7 +1479,7 @@ function AnalyzerPageContent() {
         const detectorCtor = (window as Window & { BarcodeDetector?: BarcodeDetectorCtor }).BarcodeDetector;
         if (detectorCtor) {
           const detector = new detectorCtor({
-            formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "code_39", "itf"],
+            formats: [...BARCODE_DETECTOR_FORMATS],
           });
           const detections = await detector.detect(img);
           const value = detections.map((d) => (d as { rawValue?: string }).rawValue?.trim()).find((v) => v && v.length > 0);
@@ -1425,10 +1487,10 @@ function AnalyzerPageContent() {
           if (value) {
             setIdentifier(value);
             setManualIdentifierResolved(false);
-            setInfoMessage(`Barcode from image: ${value}. Loading product...`);
+            setInfoMessage(`Code from image: ${value}. Loading product...`);
             void runManualAnalysis(sellerType, false, value, false, true);
           } else {
-            setErrorMessage("No barcode found in image.");
+            setErrorMessage("No scannable code found in image.");
           }
           return;
         }
@@ -1441,17 +1503,17 @@ function AnalyzerPageContent() {
           if (value) {
             setIdentifier(value);
             setManualIdentifierResolved(false);
-            setInfoMessage(`Barcode from image: ${value}. Loading product...`);
+            setInfoMessage(`Code from image: ${value}. Loading product...`);
             void runManualAnalysis(sellerType, false, value, false, true);
           } else {
-            setErrorMessage("No barcode found in image.");
+            setErrorMessage("No scannable code found in image.");
           }
         } else {
-          setErrorMessage("No barcode found in image.");
+          setErrorMessage("No scannable code found in image.");
         }
       } catch {
         cleanup();
-        setErrorMessage("No barcode found in image or decode failed.");
+        setErrorMessage("No scannable code found in image or decode failed.");
       }
     };
 
@@ -2018,7 +2080,7 @@ function AnalyzerPageContent() {
             />
             <button
               type="button"
-              onClick={handleOpenScanner}
+              onClick={() => void handleOpenScanner()}
               className="shrink-0 rounded-lg border border-slate-600 bg-slate-700/50 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-600 transition-all"
             >
               Scan
@@ -2037,7 +2099,7 @@ function AnalyzerPageContent() {
               disabled={isManualLoading}
               className="shrink-0 rounded-lg bg-gradient-to-r from-teal-500 to-cyan-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-teal-500/25 hover:from-teal-400 hover:to-cyan-500 disabled:opacity-50 transition-all"
             >
-              {isManualLoading ? "Loading…" : manualIdentifierResolved ? "Calculate profit" : "Lookup"}
+              {isManualLoading ? "Loading…" : "Lookup"}
             </button>
           </div>
         </label>
@@ -2091,24 +2153,28 @@ function AnalyzerPageContent() {
           </div>
         </div>
 
-        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-slate-600/80 px-3 py-3">
-          <div className="flex flex-wrap items-center gap-3">
-            <label className="text-sm font-medium text-slate-300">
-              View
-            <select
-              value={viewFilter}
-              onChange={(event) => setViewFilter(event.target.value as ViewFilter)}
-              className="ml-2 rounded-lg border border-slate-600 bg-slate-700/50 px-3 py-1.5 text-sm text-slate-200 outline-none focus:ring-2 focus:ring-teal-500/50 focus:border-teal-500"
-            >
-              <option value="all">All products</option>
-              <option value="buy_now">Buy now (profitable)</option>
-              <option value="ungated">Ungated / Eligible only</option>
-              <option value="ungate_profitable">Ungate (profitable but gated)</option>
-              <option value="restricted">Restricted / Approval required</option>
-              <option value="needs_review">Needs review (undecided)</option>
-            </select>
-          </label>
-            {lastRunMode === "upload" ? (
+        <div
+          className={`flex shrink-0 flex-wrap items-center gap-3 border-b border-slate-600/80 px-3 py-3 ${
+            lastRunMode === "upload" ? "justify-between" : "justify-end"
+          }`}
+        >
+          {lastRunMode === "upload" ? (
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="text-sm font-medium text-slate-300">
+                View
+                <select
+                  value={viewFilter}
+                  onChange={(event) => setViewFilter(event.target.value as ViewFilter)}
+                  className="ml-2 rounded-lg border border-slate-600 bg-slate-700/50 px-3 py-1.5 text-sm text-slate-200 outline-none focus:ring-2 focus:ring-teal-500/50 focus:border-teal-500"
+                >
+                  <option value="all">All products</option>
+                  <option value="buy_now">Buy now (profitable)</option>
+                  <option value="ungated">Ungated / Eligible only</option>
+                  <option value="ungate_profitable">Ungate (profitable but gated)</option>
+                  <option value="restricted">Restricted / Approval required</option>
+                  <option value="needs_review">Needs review (undecided)</option>
+                </select>
+              </label>
               <button
                 type="button"
                 onClick={() => setViewFilter("ungated")}
@@ -2120,8 +2186,6 @@ function AnalyzerPageContent() {
               >
                 Ungated only
               </button>
-            ) : null}
-            {lastRunMode === "upload" ? (
               <button
                 type="button"
                 onClick={() => void handleSellerTypeChange(sellerType === "FBA" ? "FBM" : "FBA")}
@@ -2130,16 +2194,13 @@ function AnalyzerPageContent() {
               >
                 {sellerType} → Switch to {sellerType === "FBA" ? "FBM" : "FBA"}
               </button>
-            ) : null}
-          </div>
+            </div>
+          ) : null}
           <p className="text-xs text-slate-400">
             Showing {filteredSortedResults.length} of {results.length}
             {filteredSortedResults.length > RESULTS_PAGE_SIZE
               ? ` · Page ${resultsPage} of ${totalPages} (${RESULTS_PAGE_SIZE} per page)`
               : ""}
-            {" · "}
-            <span className="max-lg:hidden">Click a row for details in the right panel</span>
-            <span className="lg:hidden">Tap a row for product details</span>
           </p>
           {isKeywordMode && lastKeyword && (
             <div className="flex items-center gap-2">
@@ -2165,7 +2226,9 @@ function AnalyzerPageContent() {
         <div className="flex flex-col gap-2 px-2 pb-2 lg:hidden">
           {displayedResults.length === 0 ? (
             <p className="px-2 py-8 text-center text-sm text-slate-500">
-              No products match the selected view filter.
+              {lastRunMode === "upload"
+                ? "No products match the selected view filter."
+                : "No listings to show."}
             </p>
           ) : (
             displayedResults.map((item) => (
@@ -2256,7 +2319,9 @@ function AnalyzerPageContent() {
               {displayedResults.length === 0 ? (
                 <tr>
                   <td colSpan={4} className="px-3 py-8 text-center text-sm text-slate-500">
-                    No products match the selected view filter.
+                    {lastRunMode === "upload"
+                      ? "No products match the selected view filter."
+                      : "No listings to show."}
                   </td>
                 </tr>
               ) : (
@@ -2380,7 +2445,7 @@ function AnalyzerPageContent() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-4">
           <div className="w-full max-w-2xl rounded-xl border border-slate-200 bg-white shadow-lg">
             <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-              <h3 className="text-base font-semibold text-slate-900">Scan Product Barcode</h3>
+              <h3 className="text-base font-semibold text-slate-900">Scan product code</h3>
               <button
                 type="button"
                 onClick={() => setIsScannerOpen(false)}
@@ -2395,7 +2460,8 @@ function AnalyzerPageContent() {
                 <p className="text-sm text-rose-700">{scannerError}</p>
               ) : (
                 <p className="text-sm text-slate-600">
-                  Point your camera at a barcode (UPC/EAN). The scanner will auto-fill the identifier field.
+                  Point your camera at a barcode, QR code, or Datamatrix on the label. The scanner will auto-fill the
+                  identifier field.
                 </p>
               )}
               <div className="flex flex-wrap gap-2">
@@ -2408,7 +2474,16 @@ function AnalyzerPageContent() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setScannerRunNonce((current) => current + 1)}
+                  onClick={() => {
+                    setIsScannerOpen(false);
+                    setScannerError(null);
+                    void (async () => {
+                      const ok = await acquireScannerStream();
+                      if (ok) {
+                        setIsScannerOpen(true);
+                      }
+                    })();
+                  }}
                   className="rounded-lg bg-gradient-to-r from-teal-500 to-cyan-600 px-3 py-2 text-xs font-semibold text-white shadow-md shadow-teal-500/20 hover:from-teal-400 hover:to-cyan-500"
                 >
                   Restart Scanner
