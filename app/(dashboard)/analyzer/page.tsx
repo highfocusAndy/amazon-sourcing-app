@@ -1391,6 +1391,94 @@ function AnalyzerPageContent() {
     }
   }
 
+  async function runImageProductSearchFromFile(imageFile: File, pageSize = 20): Promise<void> {
+    setErrorMessage(null);
+    setInfoMessage(null);
+    setIsManualLoading(true);
+    try {
+      const form = new FormData();
+      form.append("image", imageFile);
+      form.append("pageSize", String(pageSize));
+      const res = await fetch("/api/analyze/image-search", { method: "POST", body: form });
+      const json = (await res.json()) as {
+        ok?: boolean;
+        error?: string;
+        code?: string;
+        results?: ProductAnalysis[];
+        derivedQuery?: string | null;
+      };
+      if (!res.ok || json.results === undefined) {
+        throw new Error(json.error ?? "Photo search failed.");
+      }
+      const analysisResults = json.results;
+      const derived = json.derivedQuery?.trim() ?? "";
+      setResults(analysisResults);
+      setLastRunMode("manual");
+      setManualIdentifierResolved(false);
+      setIsKeywordMode(true);
+      if (derived) {
+        setLastKeyword(derived);
+        setKeyword(derived);
+      } else {
+        setLastKeyword(null);
+      }
+      setKeywordPageSize(pageSize);
+      setViewFilter("all");
+      setIdentifier("");
+      if (analysisResults.length > 0) {
+        setSelectedProduct(null);
+        setMobileDetailsOpen(false);
+        setInfoMessage(derived ? `Matches from photo search: ${derived}` : null);
+      } else {
+        setSelectedProduct(null);
+        setInfoMessage(
+          derived
+            ? `No listings for “${derived}”. Try a clearer photo or keyword.`
+            : "Could not read a product from this photo. Try better lighting, the barcode, or a keyword.",
+        );
+      }
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : "Photo search failed.");
+    } finally {
+      setIsManualLoading(false);
+    }
+  }
+
+  async function captureScannerFrameAndSearch(): Promise<void> {
+    const video = videoRef.current;
+    if (!video || video.readyState < 2) {
+      setScannerError("Wait for the camera preview, then try again.");
+      return;
+    }
+    const w = video.videoWidth;
+    const h = video.videoHeight;
+    if (!w || !h) {
+      setScannerError("Camera is not ready yet.");
+      return;
+    }
+    setScannerError(null);
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      setScannerError("Could not capture frame.");
+      return;
+    }
+    ctx.drawImage(video, 0, 0);
+    const blob = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob(resolve, "image/jpeg", 0.88);
+    });
+    if (!blob) {
+      setScannerError("Could not capture frame.");
+      return;
+    }
+    const imageFile = new File([blob], "camera-product.jpg", { type: "image/jpeg" });
+    setIsScannerOpen(false);
+    stopScanner();
+    await runImageProductSearchFromFile(imageFile);
+  }
+
   async function handleLookupSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     const effectiveKeyword = keyword.trim();
@@ -1475,6 +1563,7 @@ function AnalyzerPageContent() {
     };
 
     img.onload = async () => {
+      let decodedCode: string | null = null;
       try {
         const detectorCtor = (window as Window & { BarcodeDetector?: BarcodeDetectorCtor }).BarcodeDetector;
         if (detectorCtor) {
@@ -1482,39 +1571,33 @@ function AnalyzerPageContent() {
             formats: [...BARCODE_DETECTOR_FORMATS],
           });
           const detections = await detector.detect(img);
-          const value = detections.map((d) => (d as { rawValue?: string }).rawValue?.trim()).find((v) => v && v.length > 0);
-          cleanup();
-          if (value) {
-            setIdentifier(value);
-            setManualIdentifierResolved(false);
-            setInfoMessage(`Code from image: ${value}. Loading product...`);
-            void runManualAnalysis(sellerType, false, value, false, true);
-          } else {
-            setErrorMessage("No scannable code found in image.");
-          }
-          return;
+          decodedCode =
+            detections
+              .map((d) => (d as { rawValue?: string }).rawValue?.trim())
+              .find((v) => v && v.length > 0) ?? null;
         }
-        const zxingModule = await import("@zxing/library");
-        const reader = new zxingModule.BrowserMultiFormatReader() as unknown as ZxingReaderLike;
-        const result = await reader.decodeFromImageElement(img);
-        cleanup();
-        if (result) {
-          const value = result.getText().trim();
+        if (!decodedCode) {
+          const zxingModule = await import("@zxing/library");
+          const reader = new zxingModule.BrowserMultiFormatReader() as unknown as ZxingReaderLike;
+          const result = await reader.decodeFromImageElement(img);
+          const value = result?.getText().trim();
           if (value) {
-            setIdentifier(value);
-            setManualIdentifierResolved(false);
-            setInfoMessage(`Code from image: ${value}. Loading product...`);
-            void runManualAnalysis(sellerType, false, value, false, true);
-          } else {
-            setErrorMessage("No scannable code found in image.");
+            decodedCode = value;
           }
-        } else {
-          setErrorMessage("No scannable code found in image.");
         }
       } catch {
-        cleanup();
-        setErrorMessage("No scannable code found in image or decode failed.");
+        // Fall through to photo-based catalog search.
       }
+
+      cleanup();
+      if (decodedCode) {
+        setIdentifier(decodedCode);
+        setManualIdentifierResolved(false);
+        setInfoMessage(`Code from image: ${decodedCode}. Loading product...`);
+        void runManualAnalysis(sellerType, false, decodedCode, false, true);
+        return;
+      }
+      await runImageProductSearchFromFile(file);
     };
 
     img.src = url;
@@ -2445,7 +2528,7 @@ function AnalyzerPageContent() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-4">
           <div className="w-full max-w-2xl rounded-xl border border-slate-200 bg-white shadow-lg">
             <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-              <h3 className="text-base font-semibold text-slate-900">Scan product code</h3>
+              <h3 className="text-base font-semibold text-slate-900">Scan product</h3>
               <button
                 type="button"
                 onClick={() => setIsScannerOpen(false)}
@@ -2460,11 +2543,19 @@ function AnalyzerPageContent() {
                 <p className="text-sm text-rose-700">{scannerError}</p>
               ) : (
                 <p className="text-sm text-slate-600">
-                  Point your camera at a barcode, QR code, or Datamatrix on the label. The scanner will auto-fill the
-                  identifier field.
+                  Scan a barcode or QR on the label for an instant match. To search by the product itself, frame it in
+                  the preview and tap <strong className="font-semibold">Find by photo</strong> (your workspace must
+                  enable photo understanding in server settings).
                 </p>
               )}
               <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => void captureScannerFrameAndSearch()}
+                  className="rounded-lg border border-teal-500/60 bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-900 hover:bg-teal-100"
+                >
+                  Find by photo
+                </button>
                 <button
                   type="button"
                   onClick={() => setIsScannerOpen(false)}
