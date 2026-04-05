@@ -1899,6 +1899,58 @@ function AnalyzerPageContent() {
     );
   }
 
+  const bulkUploadPanel = (
+    <details className="group shrink-0 rounded-xl border border-slate-700 bg-slate-800/90 shadow-sm">
+      <summary className="cursor-pointer list-none px-6 py-4 text-sm font-semibold text-slate-300 hover:bg-slate-700/50 [&::-webkit-details-marker]:hidden">
+        Bulk upload
+      </summary>
+      <div className="border-t border-slate-700 p-6 pt-4 space-y-6">
+        {!bulkUploadEnabled ? (
+          <p className="rounded-lg border border-slate-600 bg-slate-700/40 px-3 py-2 text-xs text-slate-300">
+            Bulk upload is available on Pro plan.
+          </p>
+        ) : null}
+
+        <form onSubmit={handleUploadSubmit} className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h2 className="text-lg font-semibold text-slate-900">Upload Wholesale File</h2>
+          <p className="mt-1 text-sm text-slate-600">Include ASIN, UPC, or EAN plus wholesale cost per unit.</p>
+
+          <div
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            className={`mt-4 rounded-xl border-2 border-dashed p-6 text-center transition ${
+              dragging ? "border-sky-400 bg-sky-50" : "border-slate-300 bg-slate-50"
+            } ${bulkUploadEnabled ? "" : "pointer-events-none opacity-60"}`}
+          >
+            <p className="text-sm text-slate-700">{file ? file.name : "Drag and drop .xlsx/.xls/.csv here"}</p>
+            <p className="mt-1 text-xs text-slate-500">or</p>
+            <label
+              className={`mt-3 inline-flex items-center rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 ${bulkUploadEnabled ? "cursor-pointer hover:bg-slate-100" : "cursor-not-allowed opacity-70"}`}
+            >
+              Select File
+              <input
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                className="hidden"
+                onChange={handleFileInput}
+                disabled={!bulkUploadEnabled}
+              />
+            </label>
+          </div>
+
+          <button
+            type="submit"
+            disabled={isUploadLoading || !bulkUploadEnabled}
+            className="mt-5 inline-flex items-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isUploadLoading ? "Analyzing File..." : "Run Batch Analysis"}
+          </button>
+        </form>
+      </div>
+    </details>
+  );
+
   return (
     <div className="flex min-h-0 min-w-0 w-full flex-1 flex-col overflow-hidden">
       {(isManualLoading || isUploadLoading || panelAnalysisLoading) && (
@@ -1910,7 +1962,7 @@ function AnalyzerPageContent() {
         <AmazonAccountModal onClose={() => setShowAmazonAccountModal(false)} />
       )}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
-      <main className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-y-contain p-4 pb-4 sm:gap-6 sm:p-6 sm:pb-6 lg:overflow-hidden">
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-hidden p-4 pb-4 sm:gap-6 sm:p-6 sm:pb-6">
         <header className="hidden shrink-0 rounded-xl border border-slate-600/80 border-t-4 border-t-teal-500 bg-slate-800/95 px-3 py-3 shadow-lg shadow-black/10 backdrop-blur md:block sm:px-4 sm:py-4 lg:px-5 lg:py-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
             <div className="hidden min-w-0 items-center gap-2 sm:gap-3 md:flex">
@@ -1996,37 +2048,40 @@ function AnalyzerPageContent() {
       ) : null}
 
       <div
-        className={`flex min-h-0 min-w-0 flex-1 basis-0 flex-col gap-4 ${results.length > 0 ? "overflow-hidden" : ""}`}
+        className={`flex min-h-0 min-w-0 flex-col ${
+          results.length > 0 ? "min-h-0 flex-1 overflow-hidden" : "flex-1"
+        }`}
       >
       {results.length > 0 ? (
-        <>
-      <section className="shrink-0 rounded-xl border border-slate-700 bg-slate-800/90 px-4 py-3 shadow-sm">
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
-          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-            {lastRunMode === "upload" ? "Batch summary" : "Lookup results"}
-          </span>
-          <span className="text-slate-300">
-            Total: <span className="font-semibold text-slate-100">{results.length}</span>
-          </span>
-          {lastRunMode === "upload" ? (
-            <span className="text-teal-400">
-              Ungated: <span className="font-semibold">{stats.ungated}</span>
-            </span>
-          ) : null}
-          <span className="text-emerald-400">
-            Buy: <span className="font-semibold">{stats.profitable}</span>
-          </span>
-          <span className="text-amber-400">
-            Ungate: <span className="font-semibold">{stats.ungating}</span>
-          </span>
-          <span className="text-rose-400">
-            Skip: <span className="font-semibold">{stats.bad}</span>
-          </span>
+      <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-600/80 bg-slate-800/90 shadow-lg shadow-black/10">
+        <div className="flex shrink-0 flex-col gap-0.5 border-b border-slate-600/80 bg-slate-800/50 px-3 py-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+              {lastRunMode === "upload" ? "Batch summary" : "Lookup results"}
+            </p>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-400">
+              <span>
+                <span className="text-slate-300">{results.length}</span> listings
+              </span>
+              {lastRunMode === "upload" ? (
+                <span className="text-teal-400">
+                  Ungated: <span className="font-medium text-slate-200">{stats.ungated}</span>
+                </span>
+              ) : null}
+              <span className="text-emerald-400">
+                Buy: <span className="font-medium text-slate-200">{stats.profitable}</span>
+              </span>
+              <span className="text-amber-400">
+                Ungate: <span className="font-medium text-slate-200">{stats.ungating}</span>
+              </span>
+              <span className="text-rose-400">
+                Skip: <span className="font-medium text-slate-200">{stats.bad}</span>
+              </span>
+            </div>
+          </div>
         </div>
-      </section>
 
-      <section className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-slate-700 bg-slate-800/90 shadow-sm max-lg:h-[min(72svh,38rem)] max-lg:flex-none lg:flex-1 lg:basis-0">
-        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-slate-700 px-4 py-3">
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-slate-600/80 px-3 py-3">
           <div className="flex flex-wrap items-center gap-3">
             <label className="text-sm font-medium text-slate-300">
               View
@@ -2163,79 +2218,36 @@ function AnalyzerPageContent() {
               )}
             </tbody>
           </table>
+          {totalPages > 1 ? (
+            <div className="flex shrink-0 items-center justify-between gap-4 border-t border-slate-700 px-4 py-3">
+              <button
+                type="button"
+                onClick={() => setResultsPage((p) => Math.max(1, p - 1))}
+                disabled={resultsPage <= 1}
+                className="rounded-lg border border-slate-600 bg-slate-700/50 px-3 py-1.5 text-sm font-medium text-slate-200 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Previous
+              </button>
+              <span className="text-sm text-slate-400">
+                Page {resultsPage} of {totalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setResultsPage((p) => Math.min(totalPages, p + 1))}
+                disabled={resultsPage >= totalPages}
+                className="rounded-lg border border-slate-600 bg-slate-700/50 px-3 py-1.5 text-sm font-medium text-slate-200 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Next
+              </button>
+            </div>
+          ) : null}
+          <div className="border-t border-slate-600/80 px-1 pt-4">{bulkUploadPanel}</div>
         </div>
-        {totalPages > 1 ? (
-          <div className="flex shrink-0 items-center justify-between gap-4 border-t border-slate-700 px-4 py-3">
-            <button
-              type="button"
-              onClick={() => setResultsPage((p) => Math.max(1, p - 1))}
-              disabled={resultsPage <= 1}
-              className="rounded-lg border border-slate-600 bg-slate-700/50 px-3 py-1.5 text-sm font-medium text-slate-200 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Previous
-            </button>
-            <span className="text-sm text-slate-400">
-              Page {resultsPage} of {totalPages}
-            </span>
-            <button
-              type="button"
-              onClick={() => setResultsPage((p) => Math.min(totalPages, p + 1))}
-              disabled={resultsPage >= totalPages}
-              className="rounded-lg border border-slate-600 bg-slate-700/50 px-3 py-1.5 text-sm font-medium text-slate-200 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Next
-            </button>
-          </div>
-        ) : null}
       </section>
-        </>
       ) : null}
       </div>
 
-      <details className="group shrink-0 rounded-xl border border-slate-700 bg-slate-800/90 shadow-sm">
-        <summary className="cursor-pointer list-none px-6 py-4 text-sm font-semibold text-slate-300 hover:bg-slate-700/50 [&::-webkit-details-marker]:hidden">
-          Bulk upload
-        </summary>
-        <div className="border-t border-slate-700 p-6 pt-4 space-y-6">
-          {!bulkUploadEnabled ? (
-            <p className="rounded-lg border border-slate-600 bg-slate-700/40 px-3 py-2 text-xs text-slate-300">
-              Bulk upload is available on Pro plan.
-            </p>
-          ) : null}
-
-      <form onSubmit={handleUploadSubmit} className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-slate-900">Upload Wholesale File</h2>
-        <p className="mt-1 text-sm text-slate-600">
-          Include ASIN, UPC, or EAN plus wholesale cost per unit.
-        </p>
-
-        <div
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
-          className={`mt-4 rounded-xl border-2 border-dashed p-6 text-center transition ${
-            dragging ? "border-sky-400 bg-sky-50" : "border-slate-300 bg-slate-50"
-          } ${bulkUploadEnabled ? "" : "pointer-events-none opacity-60"}`}
-        >
-          <p className="text-sm text-slate-700">{file ? file.name : "Drag and drop .xlsx/.xls/.csv here"}</p>
-          <p className="mt-1 text-xs text-slate-500">or</p>
-          <label className={`mt-3 inline-flex items-center rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 ${bulkUploadEnabled ? "cursor-pointer hover:bg-slate-100" : "cursor-not-allowed opacity-70"}`}>
-            Select File
-            <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFileInput} disabled={!bulkUploadEnabled} />
-          </label>
-        </div>
-
-        <button
-          type="submit"
-          disabled={isUploadLoading || !bulkUploadEnabled}
-          className="mt-5 inline-flex items-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {isUploadLoading ? "Analyzing File..." : "Run Batch Analysis"}
-        </button>
-      </form>
-
-        </div>
-      </details>
+      {results.length === 0 ? bulkUploadPanel : null}
 
       {isScannerOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-4">
