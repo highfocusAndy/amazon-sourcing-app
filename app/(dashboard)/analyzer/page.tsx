@@ -1795,7 +1795,7 @@ function AnalyzerPageContent() {
         <AmazonAccountModal onClose={() => setShowAmazonAccountModal(false)} />
       )}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
-      <main className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-hidden p-4 pb-4 sm:gap-6 sm:p-6 sm:pb-6">
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-y-contain p-4 pb-4 sm:gap-6 sm:p-6 sm:pb-6 lg:overflow-hidden">
         <header className="hidden shrink-0 rounded-xl border border-slate-600/80 border-t-4 border-t-teal-500 bg-slate-800/95 px-3 py-3 shadow-lg shadow-black/10 backdrop-blur md:block sm:px-4 sm:py-4 lg:px-5 lg:py-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
             <div className="hidden min-w-0 items-center gap-2 sm:gap-3 md:flex">
@@ -1881,7 +1881,7 @@ function AnalyzerPageContent() {
       ) : null}
 
       <div
-        className={`flex min-h-0 min-w-0 flex-1 flex-col gap-4 ${results.length > 0 ? "overflow-hidden" : "overflow-y-auto overscroll-y-contain"}`}
+        className={`flex min-h-0 min-w-0 flex-1 basis-0 flex-col gap-4 ${results.length > 0 ? "overflow-hidden" : ""}`}
       >
       {results.length > 0 ? (
         <>
@@ -1910,7 +1910,7 @@ function AnalyzerPageContent() {
         </div>
       </section>
 
-      <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-700 bg-slate-800/90 shadow-sm">
+      <section className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-slate-700 bg-slate-800/90 shadow-sm max-lg:h-[min(72svh,38rem)] max-lg:flex-none lg:flex-1 lg:basis-0">
         <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-slate-700 px-4 py-3">
           <div className="flex flex-wrap items-center gap-3">
             <label className="text-sm font-medium text-slate-300">
@@ -2075,6 +2075,7 @@ function AnalyzerPageContent() {
       </section>
         </>
       ) : null}
+      </div>
 
       <details className="group shrink-0 rounded-xl border border-slate-700 bg-slate-800/90 shadow-sm">
         <summary className="cursor-pointer list-none px-6 py-4 text-sm font-semibold text-slate-300 hover:bg-slate-700/50 [&::-webkit-details-marker]:hidden">
@@ -2120,7 +2121,6 @@ function AnalyzerPageContent() {
 
         </div>
       </details>
-      </div>
 
       {isScannerOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-4">
