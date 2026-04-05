@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import { appDisplayName, appShortName } from "@/lib/appBranding";
 import { AuthSessionProvider } from "./components/AuthSessionProvider";
+import { PwaRegister } from "./components/PwaRegister";
 import { publicSiteOrigin } from "@/lib/publicSiteUrl";
 
 const defaultTitle = "HIGH FOCUS Sourcing App — Amazon wholesale & FBA research";
@@ -16,7 +18,7 @@ export const metadata: Metadata = {
   description: siteDescription,
   openGraph: {
     type: "website",
-    siteName: "HIGH FOCUS Sourcing App",
+    siteName: appDisplayName,
     title: siteTitle,
     description: siteDescription,
   },
@@ -31,12 +33,14 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
+  themeColor: "#0f172a",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
       <body>
+        <PwaRegister />
         <AuthSessionProvider>{children}</AuthSessionProvider>
       </body>
     </html>

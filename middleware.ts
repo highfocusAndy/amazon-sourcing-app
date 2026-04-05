@@ -11,6 +11,8 @@ export default auth((req) => {
     path.startsWith("/reset-password");
   /** Crawlers must read these without a session (avoid redirect to /login). */
   const isSeoMetadataRoute = path === "/sitemap.xml" || path === "/robots.txt";
+  /** PWA: manifest + service worker must not 302 to login (install / audits). */
+  const isPwaPublicAsset = path === "/manifest.webmanifest" || path === "/sw.js";
 
   /**
    * NextAuth v5 runs this custom callback before the default "redirect if unauthorized"
@@ -19,7 +21,7 @@ export default auth((req) => {
    */
   // Session JSON is always an object when present; use `user` like auth.ts `authorized` callback.
   const isLoggedIn = Boolean(req.auth?.user);
-  if (!path.startsWith("/api/") && !isPublicPage && !isSeoMetadataRoute && !isLoggedIn) {
+  if (!path.startsWith("/api/") && !isPublicPage && !isSeoMetadataRoute && !isPwaPublicAsset && !isLoggedIn) {
     const signIn = new URL("/login", req.nextUrl);
     const callback = `${path}${req.nextUrl.search}`;
     signIn.searchParams.set("callbackUrl", callback);

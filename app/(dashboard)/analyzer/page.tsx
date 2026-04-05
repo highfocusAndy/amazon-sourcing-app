@@ -460,6 +460,8 @@ function AnalyzerPageContent() {
   const [bulkUploadEnabled, setBulkUploadEnabled] = useState(false);
   const [pendingProductId, setPendingProductId] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  /** Holds the camera stream while the scan modal is closed so mobile browsers don’t tear down tracks (one permission for the session). */
+  const scannerParkVideoRef = useRef<HTMLVideoElement | null>(null);
   const scannerStreamRef = useRef<MediaStream | null>(null);
   const scannerFrameRef = useRef<number | null>(null);
   const zxingReaderRef = useRef<ZxingReaderLike | null>(null);
@@ -612,7 +614,8 @@ function AnalyzerPageContent() {
     }
   }, [searchParams, getByAsin]);
 
-  const stopScanner = useCallback(() => {
+  /** Stop decoding and hide the modal preview; park the stream on a hidden video so tracks stay live (esp. iOS Safari). */
+  const pauseScannerPreview = useCallback(() => {
     if (zxingReaderRef.current) {
       zxingReaderRef.current.stopContinuousDecode?.();
       zxingReaderRef.current.stopAsyncDecode?.();
@@ -624,14 +627,48 @@ function AnalyzerPageContent() {
       window.cancelAnimationFrame(scannerFrameRef.current);
       scannerFrameRef.current = null;
     }
-    scannerStreamRef.current?.getTracks().forEach((track) => track.stop());
-    scannerStreamRef.current = null;
     if (videoRef.current) {
       videoRef.current.pause();
       videoRef.current.srcObject = null;
     }
+    const stream = scannerStreamRef.current;
+    const park = scannerParkVideoRef.current;
+    if (stream && park) {
+      for (const t of stream.getVideoTracks()) {
+        t.enabled = true;
+      }
+      park.srcObject = stream;
+      void park.play().catch(() => {});
+    }
     hasScannedRef.current = false;
   }, []);
+
+  /** Full teardown: stop camera hardware (use on restart, photo capture, leaving the page, or replacing a dead stream). */
+  const disposeScannerMedia = useCallback(() => {
+    if (zxingReaderRef.current) {
+      zxingReaderRef.current.stopContinuousDecode?.();
+      zxingReaderRef.current.stopAsyncDecode?.();
+      zxingReaderRef.current.reset();
+      zxingReaderRef.current = null;
+    }
+    if (scannerFrameRef.current !== null) {
+      window.cancelAnimationFrame(scannerFrameRef.current);
+      scannerFrameRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.pause();
+      videoRef.current.srcObject = null;
+    }
+    if (scannerParkVideoRef.current) {
+      scannerParkVideoRef.current.pause();
+      scannerParkVideoRef.current.srcObject = null;
+    }
+    scannerStreamRef.current?.getTracks().forEach((track) => track.stop());
+    scannerStreamRef.current = null;
+    hasScannedRef.current = false;
+  }, []);
+
+  const stopScanner = disposeScannerMedia;
 
   const acquireScannerStream = useCallback(async (): Promise<boolean> => {
     if (!window.isSecureContext) {
@@ -644,7 +681,18 @@ function AnalyzerPageContent() {
       setScannerError("Camera access is not available in this browser.");
       return false;
     }
-    stopScanner();
+
+    const existing = scannerStreamRef.current;
+    const videoTrack = existing?.getVideoTracks()[0];
+    if (videoTrack && videoTrack.readyState === "live") {
+      videoTrack.enabled = true;
+      return true;
+    }
+
+    if (scannerStreamRef.current) {
+      disposeScannerMedia();
+    }
+
     try {
       const constraints: MediaStreamConstraints = {
         video: scannerPreferredDeviceIdRef.current
@@ -663,7 +711,7 @@ function AnalyzerPageContent() {
       setScannerError(error instanceof Error ? error.message : "Unable to access camera.");
       return false;
     }
-  }, [stopScanner]);
+  }, [disposeScannerMedia]);
 
   const runManualAnalysis = useCallback(
     async (
@@ -891,7 +939,7 @@ function AnalyzerPageContent() {
 
   useEffect(() => {
     if (!isScannerOpen) {
-      stopScanner();
+      pauseScannerPreview();
       return;
     }
 
@@ -965,6 +1013,11 @@ function AnalyzerPageContent() {
 
     const startDecodeOnVideo = async (video: HTMLVideoElement): Promise<void> => {
       try {
+        const park = scannerParkVideoRef.current;
+        if (park && park.srcObject === stream) {
+          park.pause();
+          park.srcObject = null;
+        }
         video.srcObject = stream;
         await video.play();
 
@@ -1048,9 +1101,15 @@ function AnalyzerPageContent() {
 
     return () => {
       cancelled = true;
-      stopScanner();
+      pauseScannerPreview();
     };
-  }, [isScannerOpen, stopScanner]);
+  }, [isScannerOpen, pauseScannerPreview]);
+
+  useEffect(() => {
+    return () => {
+      disposeScannerMedia();
+    };
+  }, [disposeScannerMedia]);
 
   useEffect(() => {
     fetch("/api/config")
@@ -2106,6 +2165,13 @@ function AnalyzerPageContent() {
 
   return (
     <div className="flex min-h-0 min-w-0 w-full flex-1 flex-col overflow-hidden">
+      <video
+        ref={scannerParkVideoRef}
+        className="pointer-events-none fixed bottom-0 left-0 h-px w-px max-h-[1px] max-w-[1px] opacity-0"
+        muted
+        playsInline
+        aria-hidden
+      />
       {(isManualLoading || isUploadLoading || panelAnalysisLoading) && (
         <div className="pointer-events-none fixed inset-0 z-40 flex items-center justify-center bg-slate-900/40">
           <div className="h-10 w-10 animate-spin rounded-full border-2 border-teal-400 border-t-transparent" />
@@ -2568,6 +2634,7 @@ function AnalyzerPageContent() {
                   onClick={() => {
                     setIsScannerOpen(false);
                     setScannerError(null);
+                    disposeScannerMedia();
                     void (async () => {
                       const ok = await acquireScannerStream();
                       if (ok) {
