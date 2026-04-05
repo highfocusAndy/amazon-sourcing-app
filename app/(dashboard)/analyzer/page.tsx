@@ -380,7 +380,7 @@ export default function AnalyzerPage() {
 }
 
 function AnalyzerPageContent() {
-  const { addProduct, addProducts, getByAsin } = useSavedProducts();
+  const { addProducts, getByAsin } = useSavedProducts();
   const { data: session } = useSession();
   const [identifier, setIdentifier] = useState("");
   const [keyword, setKeyword] = useState("");
@@ -711,21 +711,20 @@ function AnalyzerPageContent() {
         }
 
         setManualIdentifierResolved(true);
-        setSelectedProduct(analysisResult);
-        setMobileDetailsOpen(true);
-        addProduct(analysisResult);
+        setResults(analysisResults);
+        addProducts(analysisResults);
+        setSelectedProduct(null);
+        setMobileDetailsOpen(false);
 
         if (isAutoRerun) {
-          setResults(analysisResults);
-          setInfoMessage(`Manual lookup re-analyzed for ${selectedSellerType}.`);
+          setInfoMessage(`Re-analyzed for ${selectedSellerType}. Tap a row for details.`);
         } else {
-          setResults(analysisResults);
           setInfoMessage(
             analysisResults.length > 1
-              ? `${analysisResults.length} listings. Click a row for details in the right panel.`
+              ? `${analysisResults.length} listings. Tap a row for profit details.`
               : isScannerTriggered
-                ? "Scanned and analyzed successfully."
-                : "Manual lookup complete.",
+                ? "Tap the row for profit details."
+                : "Tap the row for profit details.",
           );
         }
         if (analysisResult.error) {
@@ -739,6 +738,100 @@ function AnalyzerPageContent() {
       }
     },
     [identifier, wholesalePrice, brand, projectedMonthlyUnits, shippingCost, addProducts],
+  );
+
+  const refetchManualRowAnalysis = useCallback(
+    async (row: ProductAnalysis, isAutoRerun = false, sellerTypeOverride?: SellerType) => {
+      const asin = row.asin;
+      if (!asin) {
+        return;
+      }
+
+      const parsedWholesalePrice = parseNonNegativeInput(wholesalePrice);
+      const parsedProjectedUnits = parsePositiveInput(projectedMonthlyUnits);
+      if (parsedWholesalePrice === null || parsedProjectedUnits === null) {
+        return;
+      }
+
+      const effectiveSellerType = sellerTypeOverride ?? sellerType;
+
+      setErrorMessage(null);
+      if (!isAutoRerun) {
+        setInfoMessage(null);
+      }
+      setIsManualLoading(true);
+      try {
+        const res = await fetch("/api/analyze", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            identifier: asin,
+            wholesalePrice: parsedWholesalePrice,
+            brand: row.brand || brand,
+            projectedMonthlyUnits: parsedProjectedUnits,
+            sellerType: effectiveSellerType,
+            shippingCost: effectiveSellerType === "FBM" ? Number(shippingCost) : 0,
+          }),
+        });
+        const json = (await res.json()) as { error?: string; result?: ProductAnalysis };
+        if (!res.ok || !json.result) {
+          throw new Error(json.error ?? "Analysis failed.");
+        }
+        const full = json.result as ProductAnalysis;
+        full.offerLabel = row.offerLabel ?? full.offerLabel;
+
+        setResults((prev) =>
+          prev.map((p) =>
+            p.id === row.id ? { ...full, id: p.id, offerLabel: p.offerLabel ?? full.offerLabel } : p,
+          ),
+        );
+        setSelectedProduct((prev) =>
+          prev && prev.id === row.id
+            ? { ...full, id: prev.id, offerLabel: prev.offerLabel ?? full.offerLabel }
+            : prev,
+        );
+
+        if (isAutoRerun) {
+          setInfoMessage(`Re-analyzed for ${effectiveSellerType}.`);
+        }
+        if (full.error) {
+          setErrorMessage(full.error);
+        }
+        setLastRunMode("manual");
+        lastAutoManualCalcKeyRef.current = [
+          row.id,
+          row.asin,
+          effectiveSellerType,
+          shippingCost,
+          parsedWholesalePrice.toString(),
+          parsedProjectedUnits.toString(),
+        ].join("|");
+      } catch (error) {
+        setErrorMessage(error instanceof Error ? error.message : "Analysis failed.");
+      } finally {
+        setIsManualLoading(false);
+      }
+    },
+    [wholesalePrice, projectedMonthlyUnits, brand, sellerType, shippingCost],
+  );
+
+  const syncLastAutoManualCalcKeyForRow = useCallback(
+    (row: ProductAnalysis) => {
+      const parsedWholesalePrice = parseNonNegativeInput(wholesalePrice);
+      const parsedProjectedUnits = parsePositiveInput(projectedMonthlyUnits);
+      if (parsedWholesalePrice === null || parsedProjectedUnits === null || !row.asin) {
+        return;
+      }
+      lastAutoManualCalcKeyRef.current = [
+        row.id,
+        row.asin,
+        sellerType,
+        shippingCost,
+        parsedWholesalePrice.toString(),
+        parsedProjectedUnits.toString(),
+      ].join("|");
+    },
+    [wholesalePrice, projectedMonthlyUnits, sellerType, shippingCost],
   );
 
   useEffect(() => {
@@ -913,7 +1006,16 @@ function AnalyzerPageContent() {
       return;
     }
 
+    if (!selectedProduct?.asin) {
+      lastAutoManualCalcKeyRef.current = "";
+      return;
+    }
+
     if (isManualLoading || isUploadLoading || isScannerOpen || !identifier.trim()) {
+      return;
+    }
+
+    if (pendingProductId || panelAnalysisLoading) {
       return;
     }
 
@@ -924,7 +1026,8 @@ function AnalyzerPageContent() {
     }
 
     const autoCalcKey = [
-      identifier.trim().toUpperCase(),
+      selectedProduct.id,
+      selectedProduct.asin,
       sellerType,
       shippingCost,
       parsedWholesalePrice.toString(),
@@ -934,9 +1037,10 @@ function AnalyzerPageContent() {
       return;
     }
 
+    const rowSnapshot = selectedProduct;
     const rerunTimer = window.setTimeout(() => {
       lastAutoManualCalcKeyRef.current = autoCalcKey;
-      void runManualAnalysis(sellerType, true);
+      void refetchManualRowAnalysis(rowSnapshot, true);
     }, 800);
 
     return () => {
@@ -946,13 +1050,16 @@ function AnalyzerPageContent() {
     wholesalePrice,
     projectedMonthlyUnits,
     manualIdentifierResolved,
+    selectedProduct,
     isManualLoading,
     isUploadLoading,
     isScannerOpen,
     identifier,
     sellerType,
     shippingCost,
-    runManualAnalysis,
+    pendingProductId,
+    panelAnalysisLoading,
+    refetchManualRowAnalysis,
   ]);
 
   const filteredSortedResults = useMemo(() => {
@@ -1008,6 +1115,7 @@ function AnalyzerPageContent() {
     setDetailPanelCost("");
     setMobileDetailsOpen(true);
     if (item.asin && item.buyBoxPrice == null) {
+      let settledRow: ProductAnalysis = item;
       setPanelAnalysisLoading(true);
       try {
         const res = await fetch("/api/analyze", {
@@ -1026,17 +1134,20 @@ function AnalyzerPageContent() {
         if (res.ok && json.result) {
           const full = json.result as ProductAnalysis;
           full.offerLabel = item.offerLabel ?? full.offerLabel;
-          setSelectedProduct(full);
+          settledRow = { ...full, id: item.id, offerLabel: full.offerLabel };
+          setSelectedProduct(settledRow);
         }
       } catch {
         // keep catalog-only selection
       } finally {
         setPendingProductId(null);
         setPanelAnalysisLoading(false);
+        syncLastAutoManualCalcKeyForRow(settledRow);
       }
       return;
     }
     setPendingProductId(null);
+    syncLastAutoManualCalcKeyForRow(item);
   }
 
   function applyFileSelection(nextFile: File | null): void {
@@ -1249,7 +1360,11 @@ function AnalyzerPageContent() {
 
     const inferredMode = lastRunMode ?? (file ? "upload" : identifier.trim() ? "manual" : null);
     if (inferredMode === "manual" && identifier.trim()) {
-      await runManualAnalysis(nextSellerType, true);
+      if (selectedProduct?.asin) {
+        await refetchManualRowAnalysis(selectedProduct, true, nextSellerType);
+      } else {
+        await runManualAnalysis(nextSellerType, true);
+      }
       return;
     }
 
