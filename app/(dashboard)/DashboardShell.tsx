@@ -218,6 +218,9 @@ function LeftNavWithCategories({
           <NavLink href="/saved" active={pathname === "/saved"} icon="★" onNavigate={onCloseMobileMenu}>
             Saved Products
           </NavLink>
+          <NavLink href="/book" active={pathname === "/book"} icon="📘" onNavigate={onCloseMobileMenu}>
+            Playbook
+          </NavLink>
           <NavLink href="/subscribe" active={pathname === "/subscribe"} icon="◈" onNavigate={onCloseMobileMenu}>
             Plan & billing
           </NavLink>
@@ -247,6 +250,7 @@ function mobilePageTitle(pathname: string): string {
   if (p === "/" || p === "") return "Explorer";
   if (p.startsWith("/analyzer")) return "Analyzer";
   if (p.startsWith("/saved")) return "Saved";
+  if (p.startsWith("/book")) return "Playbook";
   if (p.startsWith("/subscribe")) return "Plan & billing";
   return "HIGH FOCUS";
 }
