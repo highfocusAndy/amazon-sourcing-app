@@ -124,12 +124,15 @@ export default function ExplorerPage() {
   const [sellerSheetVisible, setSellerSheetVisible] = useState(false);
   const [marketplaceDomain, setMarketplaceDomain] = useState("amazon.com");
   const [openaiConfigured, setOpenaiConfigured] = useState<boolean | null>(null);
+  /** From GET /api/billing/status — user may use AI UI when server has OpenAI (quotas enforced in API). */
+  const [proAiFeatures, setProAiFeatures] = useState(false);
   const [loadingPaused, setLoadingPaused] = useState(false);
   const catalogAbortRef = useRef<AbortController | null>(null);
   const eligibilityAbortRef = useRef<AbortController | null>(null);
   const { data: session } = useSession();
 
-  const { llmInsight, llmLoading, llmError } = useProductAiInsight(selectedProduct, openaiConfigured);
+  const openaiForProductInsight = openaiConfigured === true && proAiFeatures;
+  const { llmInsight, llmLoading, llmError } = useProductAiInsight(selectedProduct, openaiForProductInsight);
 
   /** Caps explorer catalog requests (server also enforces a max page size). */
   const catalogFetchSize = useMemo(() => Math.min(Math.max(catalogPageSize, 10), 60), [catalogPageSize]);
@@ -1472,7 +1475,7 @@ export default function ExplorerPage() {
                   sessionSignedIn={Boolean(session?.user)}
                   amazonConnected={amazonHeaderConnected}
                   onConnectAmazon={() => setShowAmazonAccountModal(true)}
-                  openaiConfigured={openaiConfigured}
+                  openaiConfigured={openaiForProductInsight}
                   llmInsight={llmInsight}
                   llmLoading={llmLoading}
                   llmError={llmError}

@@ -154,6 +154,8 @@ export type BillingOverview = {
    * True for Pro subscription (incl. trialing Pro), active promo, owner, or billing test modes.
    */
   proBulkEntitled: boolean;
+  /** OpenAI-backed UI (insight/chat) for this user when the server has a key; mirrors hasAccess (quotas enforced in API). */
+  proAiFeatures: boolean;
   trialEndsAt: string | null;
   promoAccessUntil: string | null;
   subscriptionStatus: string;
@@ -206,6 +208,7 @@ export async function getBillingOverview(userId: string, emailFallback?: string 
       testingBillingPass: false,
       appOwnerAccess: false,
       proBulkEntitled: true,
+      proAiFeatures: true,
       trialEndsAt: null,
       promoAccessUntil: null,
       subscriptionStatus: "none",
@@ -228,6 +231,7 @@ export async function getBillingOverview(userId: string, emailFallback?: string 
       testingBillingPass: true,
       appOwnerAccess: false,
       proBulkEntitled: true,
+      proAiFeatures: true,
       trialEndsAt: null,
       promoAccessUntil: null,
       subscriptionStatus: "none",
@@ -252,6 +256,7 @@ export async function getBillingOverview(userId: string, emailFallback?: string 
       testingBillingPass: false,
       appOwnerAccess: false,
       proBulkEntitled: false,
+      proAiFeatures: false,
       trialEndsAt: null,
       promoAccessUntil: null,
       subscriptionStatus: "none",
@@ -275,6 +280,7 @@ export async function getBillingOverview(userId: string, emailFallback?: string 
       testingBillingPass: false,
       appOwnerAccess: true,
       proBulkEntitled: true,
+      proAiFeatures: true,
       trialEndsAt: null,
       promoAccessUntil: null,
       subscriptionStatus: user.subscriptionStatus,
@@ -314,6 +320,7 @@ export async function getBillingOverview(userId: string, emailFallback?: string 
     testingBillingPass: false,
     appOwnerAccess: false,
     proBulkEntitled,
+    proAiFeatures: hasAccess,
     trialEndsAt: trialEnd.toISOString(),
     promoAccessUntil: user.promoAccessUntil?.toISOString() ?? null,
     subscriptionStatus: user.subscriptionStatus,
