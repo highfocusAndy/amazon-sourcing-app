@@ -4,7 +4,7 @@
   "description": "Full-stack Next.js app for Amazon FBA wholesale sourcing",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --webpack",
     "postinstall": "prisma generate",
     "build": "next build",
     "start": "next start",
