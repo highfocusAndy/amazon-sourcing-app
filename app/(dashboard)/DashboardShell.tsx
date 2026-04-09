@@ -14,6 +14,7 @@ import { AccountSettingsModal } from "@/app/settings/AccountSettingsModal";
 import { DashboardHeaderMark } from "@/app/components/DashboardHeaderMark";
 import { MobileHeaderAmazon } from "@/app/components/MobileHeaderAmazon";
 import { SettingsModal } from "@/app/settings/SettingsModal";
+import { AmazonAiChatDrawer } from "@/app/components/AmazonAiChatDrawer";
 
 function NavLink({
   href,
@@ -50,10 +51,12 @@ function LeftNavWithCategories({
   mobileDrawerOpen,
   onCloseMobileMenu,
   onOpenSettings,
+  onOpenAiChat,
 }: {
   mobileDrawerOpen: boolean;
   onCloseMobileMenu: () => void;
   onOpenSettings: () => void;
+  onOpenAiChat: () => void;
 }) {
   const pathname = usePathname();
   const ctx = useExplorerCategoryOptional();
@@ -221,6 +224,19 @@ function LeftNavWithCategories({
           <NavLink href="/book" active={pathname === "/book"} icon="📘" onNavigate={onCloseMobileMenu}>
             Playbook
           </NavLink>
+          <button
+            type="button"
+            onClick={() => {
+              onOpenAiChat();
+              onCloseMobileMenu();
+            }}
+            className="flex w-full items-center gap-3 border-l-2 border-transparent px-4 py-2.5 text-left text-sm text-slate-400 transition-colors hover:bg-slate-700/60 hover:text-slate-200"
+          >
+            <span className="text-slate-500" aria-hidden>
+              ✦
+            </span>
+            Ask AI
+          </button>
           <NavLink href="/subscribe" active={pathname === "/subscribe"} icon="◈" onNavigate={onCloseMobileMenu}>
             Plan & billing
           </NavLink>
@@ -278,6 +294,17 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+  const [aiChatOpen, setAiChatOpen] = useState(false);
+  const [openaiConfigured, setOpenaiConfigured] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    fetch("/api/config", { credentials: "same-origin" })
+      .then((res) => res.json())
+      .then((data: { openaiConfigured?: boolean }) => {
+        if (typeof data.openaiConfigured === "boolean") setOpenaiConfigured(data.openaiConfigured);
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     setMobileDrawerOpen(false);
@@ -332,6 +359,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               mobileDrawerOpen={mobileDrawerOpen}
               onCloseMobileMenu={() => setMobileDrawerOpen(false)}
               onOpenSettings={() => setSettingsModalOpen(true)}
+              onOpenAiChat={() => setAiChatOpen(true)}
             />
             {!mobileDrawerOpen && !pathname.startsWith("/analyzer") ? (
               <button
@@ -344,6 +372,26 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                 <span aria-hidden>⚙</span>
               </button>
             ) : null}
+            {!mobileDrawerOpen ? (
+              <button
+                type="button"
+                onClick={() => setAiChatOpen(true)}
+                className={`pointer-events-auto fixed ${
+                  pathname.startsWith("/analyzer")
+                    ? "bottom-[max(5.5rem,calc(env(safe-area-inset-bottom,0px)+4.75rem))]"
+                    : "bottom-[max(0.75rem,env(safe-area-inset-bottom))]"
+                } right-3 z-[44] flex h-12 w-12 items-center justify-center rounded-full border border-teal-500/40 bg-slate-800/95 text-sm font-semibold text-teal-100 shadow-lg shadow-black/30 backdrop-blur-sm transition hover:border-teal-400/60 hover:bg-slate-700 md:hidden`}
+                aria-label="Ask AI about Amazon"
+                title="Ask AI"
+              >
+                <span aria-hidden>✦</span>
+              </button>
+            ) : null}
+            <AmazonAiChatDrawer
+              open={aiChatOpen}
+              onClose={() => setAiChatOpen(false)}
+              openaiConfigured={openaiConfigured}
+            />
             {settingsModalOpen ? <SettingsModal onClose={() => setSettingsModalOpen(false)} /> : null}
             <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">{children}</div>
           </div>

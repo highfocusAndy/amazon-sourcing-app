@@ -227,7 +227,7 @@ export function SubscribeContent({
                   disabled={checkoutLoading}
                   className="rounded-xl border border-teal-500/60 bg-teal-50 px-5 py-2.5 text-sm font-semibold text-teal-800 disabled:pointer-events-none disabled:opacity-40"
                 >
-                  {checkoutLoading ? "Redirecting…" : "Subscribe Pro (bulk upload)"}
+                  {checkoutLoading ? "Redirecting…" : "Subscribe Pro (bulk + AI)"}
                 </button>
               ) : null}
             </div>
@@ -319,7 +319,7 @@ export function SubscribeContent({
                 disabled={checkoutLoading}
                 className="w-full rounded-xl border border-teal-500/60 bg-teal-50 py-3 text-sm font-semibold text-teal-800 disabled:pointer-events-none disabled:opacity-40"
               >
-                {checkoutLoading ? "Redirecting to secure checkout…" : "Start Pro plan (includes bulk upload)"}
+                {checkoutLoading ? "Redirecting to secure checkout…" : "Start Pro (bulk upload + AI features)"}
               </button>
             ) : null}
           </div>

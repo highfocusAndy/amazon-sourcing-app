@@ -264,7 +264,7 @@ export function GetAccessContent({
                 ) : null}
               </div>
               {proPlanEnabled ? (
-                <p className="mt-2 text-xs text-slate-500">Pro plan includes bulk upload tools.</p>
+                <p className="mt-2 text-xs text-slate-500">Pro plan includes bulk spreadsheet upload; AI is on all plans.</p>
               ) : null}
             </>
           ) : (

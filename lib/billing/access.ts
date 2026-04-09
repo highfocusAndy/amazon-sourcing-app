@@ -149,6 +149,11 @@ export type BillingOverview = {
   testingBillingPass: boolean;
   /** True when this user matches APP_OWNER_EMAIL (never expires). */
   appOwnerAccess: boolean;
+  /**
+   * Pro plan bulk upload (spreadsheet offers). AI features stay available on Starter for acquisition.
+   * True for Pro subscription (incl. trialing Pro), active promo, owner, or billing test modes.
+   */
+  proBulkEntitled: boolean;
   trialEndsAt: string | null;
   promoAccessUntil: string | null;
   subscriptionStatus: string;
@@ -170,6 +175,19 @@ export type BillingOverview = {
   subscriptionsPausedMessage: string;
 };
 
+function proBulkEntitlementsFromUserRow(
+  user: BillingUser | null,
+  opts: { billingDisabled: boolean; testingBillingPass: boolean; appOwnerAccess: boolean; promoEndMs: number; now: number },
+): boolean {
+  if (opts.billingDisabled || opts.testingBillingPass) return true;
+  if (opts.appOwnerAccess) return true;
+  if (!user) return false;
+  if (isAppOwnerEmail(user.email)) return true;
+  if (opts.promoEndMs > opts.now) return true;
+  const paid = user.subscriptionStatus === "active" || user.subscriptionStatus === "trialing";
+  return paid && user.subscriptionPlan === "pro";
+}
+
 export async function getBillingOverview(userId: string, emailFallback?: string | null): Promise<BillingOverview> {
   const billingDisabled = isBillingDisabled();
   const testingBillingPass = isTestingBillingPass();
@@ -187,6 +205,7 @@ export async function getBillingOverview(userId: string, emailFallback?: string 
       billingDisabled: true,
       testingBillingPass: false,
       appOwnerAccess: false,
+      proBulkEntitled: true,
       trialEndsAt: null,
       promoAccessUntil: null,
       subscriptionStatus: "none",
@@ -208,6 +227,7 @@ export async function getBillingOverview(userId: string, emailFallback?: string 
       billingDisabled: false,
       testingBillingPass: true,
       appOwnerAccess: false,
+      proBulkEntitled: true,
       trialEndsAt: null,
       promoAccessUntil: null,
       subscriptionStatus: "none",
@@ -231,6 +251,7 @@ export async function getBillingOverview(userId: string, emailFallback?: string 
       billingDisabled: false,
       testingBillingPass: false,
       appOwnerAccess: false,
+      proBulkEntitled: false,
       trialEndsAt: null,
       promoAccessUntil: null,
       subscriptionStatus: "none",
@@ -253,6 +274,7 @@ export async function getBillingOverview(userId: string, emailFallback?: string 
       billingDisabled: false,
       testingBillingPass: false,
       appOwnerAccess: true,
+      proBulkEntitled: true,
       trialEndsAt: null,
       promoAccessUntil: null,
       subscriptionStatus: user.subscriptionStatus,
@@ -278,11 +300,20 @@ export async function getBillingOverview(userId: string, emailFallback?: string 
 
   const hasAccess = await billingUserHasAppAccess(user, promoEndMs);
 
+  const proBulkEntitled = proBulkEntitlementsFromUserRow(user, {
+    billingDisabled: false,
+    testingBillingPass: false,
+    appOwnerAccess: false,
+    promoEndMs,
+    now,
+  });
+
   return {
     hasAccess,
     billingDisabled: false,
     testingBillingPass: false,
     appOwnerAccess: false,
+    proBulkEntitled,
     trialEndsAt: trialEnd.toISOString(),
     promoAccessUntil: user.promoAccessUntil?.toISOString() ?? null,
     subscriptionStatus: user.subscriptionStatus,

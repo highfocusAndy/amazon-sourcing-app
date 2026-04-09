@@ -48,6 +48,14 @@ export function rateLimitUploadPerMinute(): number {
   return intEnv("RATE_LIMIT_UPLOAD_PER_MIN", 12);
 }
 
+export function rateLimitOpenaiInsightPerMinute(): number {
+  return intEnv("RATE_LIMIT_OPENAI_INSIGHT_PER_MIN", 30);
+}
+
+export function rateLimitOpenaiChatPerMinute(): number {
+  return intEnv("RATE_LIMIT_OPENAI_CHAT_PER_MIN", 20);
+}
+
 const WINDOW_MS = 60_000;
 
 export function userCatalogSearchLimit(userId: string): boolean {
@@ -68,4 +76,12 @@ export function userKeywordSearchLimit(userId: string): boolean {
 
 export function userUploadLimit(userId: string): boolean {
   return rateLimitAllow(`upload:${userId}`, rateLimitUploadPerMinute(), WINDOW_MS);
+}
+
+export function userOpenaiInsightLimit(userId: string): boolean {
+  return rateLimitAllow(`openai_insight:${userId}`, rateLimitOpenaiInsightPerMinute(), WINDOW_MS);
+}
+
+export function userOpenaiChatLimit(userId: string): boolean {
+  return rateLimitAllow(`openai_chat:${userId}`, rateLimitOpenaiChatPerMinute(), WINDOW_MS);
 }

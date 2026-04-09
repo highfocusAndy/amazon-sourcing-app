@@ -19,13 +19,22 @@ export async function GET(): Promise<NextResponse> {
   try {
     const { marketplaceId } = getServerEnv();
     const marketplaceDomain = MARKETPLACE_DOMAINS[marketplaceId] ?? "amazon.com";
+    const openai = Boolean(process.env.OPENAI_API_KEY?.trim());
     return NextResponse.json({
       marketplaceId,
       marketplaceDomain,
+      /** True when OPENAI_API_KEY is set — photo search, AI product insight, and Amazon chat (no secret exposed). */
+      photoSearchAvailable: openai,
+      openaiConfigured: openai,
     });
   } catch {
     return NextResponse.json(
-      { marketplaceId: "ATVPDKIKX0DER", marketplaceDomain: "amazon.com" },
+      {
+        marketplaceId: "ATVPDKIKX0DER",
+        marketplaceDomain: "amazon.com",
+        photoSearchAvailable: Boolean(process.env.OPENAI_API_KEY?.trim()),
+        openaiConfigured: Boolean(process.env.OPENAI_API_KEY?.trim()),
+      },
       { status: 200 },
     );
   }

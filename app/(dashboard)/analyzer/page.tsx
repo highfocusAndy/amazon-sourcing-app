@@ -19,6 +19,7 @@ import { useSession } from "next-auth/react";
 import { DashboardHeaderAccount } from "@/app/components/DashboardHeaderAccount";
 import { DashboardHeaderMark } from "@/app/components/DashboardHeaderMark";
 import { ProductInsightBlurb } from "@/app/components/ProductInsightBlurb";
+import { useProductAiInsight } from "@/app/hooks/useProductAiInsight";
 import { AmazonAccountModal } from "@/app/settings/AmazonAccountModal";
 import { useOpenDashboardSettings } from "@/app/context/DashboardSettingsContext";
 import { useSavedProducts } from "@/app/context/SavedProductsContext";
@@ -440,6 +441,8 @@ function AnalyzerPageContent() {
   const [scannerError, setScannerError] = useState<string | null>(null);
   const [manualIdentifierResolved, setManualIdentifierResolved] = useState(false);
   const [marketplaceDomain, setMarketplaceDomain] = useState("amazon.com");
+  /** From GET /api/config — OPENAI_API_KEY set on server (never exposes the key). */
+  const [photoSearchAvailable, setPhotoSearchAvailable] = useState<boolean | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<ProductAnalysis | null>(null);
   const [mobileDetailsOpen, setMobileDetailsOpen] = useState(false);
   const [popupQuantity, setPopupQuantity] = useState("");
@@ -460,7 +463,7 @@ function AnalyzerPageContent() {
   const [bulkUploadEnabled, setBulkUploadEnabled] = useState(false);
   const [pendingProductId, setPendingProductId] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  /** Holds the camera stream while the scan modal is closed so mobile browsers don’t tear down tracks (one permission for the session). */
+  /** Hidden element used when moving the live stream from “park” to the visible preview (mobile decode quirks). */
   const scannerParkVideoRef = useRef<HTMLVideoElement | null>(null);
   const scannerStreamRef = useRef<MediaStream | null>(null);
   const scannerFrameRef = useRef<number | null>(null);
@@ -472,6 +475,8 @@ function AnalyzerPageContent() {
   const runManualAnalysisRef = useRef<ManualAnalysisRunner | null>(null);
   const isManualLoadingRef = useRef(isManualLoading);
   const isUploadLoadingRef = useRef(isUploadLoading);
+
+  const { llmInsight, llmLoading, llmError } = useProductAiInsight(selectedProduct, photoSearchAvailable);
 
   const openSellerModal = useCallback((e: MouseEvent<HTMLButtonElement>, filter: "all" | "FBA" | "FBM") => {
     const narrow = typeof window !== "undefined" && window.innerWidth < 1024;
@@ -547,13 +552,8 @@ function AnalyzerPageContent() {
   useEffect(() => {
     fetch("/api/billing/status", { credentials: "same-origin" })
       .then((res) => (res.ok ? res.json() : null))
-      .then((overview) => {
-        const proLike =
-          Boolean(overview?.appOwnerAccess) ||
-          Number(overview?.promoDaysLeft ?? 0) > 0 ||
-          ((overview?.subscriptionStatus === "active" || overview?.subscriptionStatus === "trialing") &&
-            overview?.subscriptionPlan === "pro");
-        setBulkUploadEnabled(proLike);
+      .then((overview: { proBulkEntitled?: boolean } | null) => {
+        setBulkUploadEnabled(Boolean(overview?.proBulkEntitled));
       })
       .catch(() => {
         setBulkUploadEnabled(false);
@@ -613,35 +613,6 @@ function AnalyzerPageContent() {
       }
     }
   }, [searchParams, getByAsin]);
-
-  /** Stop decoding and hide the modal preview; park the stream on a hidden video so tracks stay live (esp. iOS Safari). */
-  const pauseScannerPreview = useCallback(() => {
-    if (zxingReaderRef.current) {
-      zxingReaderRef.current.stopContinuousDecode?.();
-      zxingReaderRef.current.stopAsyncDecode?.();
-      zxingReaderRef.current.reset();
-      zxingReaderRef.current = null;
-    }
-
-    if (scannerFrameRef.current !== null) {
-      window.cancelAnimationFrame(scannerFrameRef.current);
-      scannerFrameRef.current = null;
-    }
-    if (videoRef.current) {
-      videoRef.current.pause();
-      videoRef.current.srcObject = null;
-    }
-    const stream = scannerStreamRef.current;
-    const park = scannerParkVideoRef.current;
-    if (stream && park) {
-      for (const t of stream.getVideoTracks()) {
-        t.enabled = true;
-      }
-      park.srcObject = stream;
-      void park.play().catch(() => {});
-    }
-    hasScannedRef.current = false;
-  }, []);
 
   /** Full teardown: stop camera hardware (use on restart, photo capture, leaving the page, or replacing a dead stream). */
   const disposeScannerMedia = useCallback(() => {
@@ -939,7 +910,7 @@ function AnalyzerPageContent() {
 
   useEffect(() => {
     if (!isScannerOpen) {
-      pauseScannerPreview();
+      disposeScannerMedia();
       return;
     }
 
@@ -1101,9 +1072,9 @@ function AnalyzerPageContent() {
 
     return () => {
       cancelled = true;
-      pauseScannerPreview();
+      disposeScannerMedia();
     };
-  }, [isScannerOpen, pauseScannerPreview]);
+  }, [isScannerOpen, disposeScannerMedia]);
 
   useEffect(() => {
     return () => {
@@ -1114,8 +1085,11 @@ function AnalyzerPageContent() {
   useEffect(() => {
     fetch("/api/config")
       .then((res) => res.json())
-      .then((data: { marketplaceDomain?: string }) => {
+      .then((data: { marketplaceDomain?: string; photoSearchAvailable?: boolean }) => {
         if (data.marketplaceDomain) setMarketplaceDomain(data.marketplaceDomain);
+        if (typeof data.photoSearchAvailable === "boolean") {
+          setPhotoSearchAvailable(data.photoSearchAvailable);
+        }
       })
       .catch(() => {});
   }, []);
@@ -1451,6 +1425,12 @@ function AnalyzerPageContent() {
   }
 
   async function runImageProductSearchFromFile(imageFile: File, pageSize = 20): Promise<void> {
+    if (photoSearchAvailable !== true) {
+      setErrorMessage(
+        "Photo search is not enabled on this server (needs OPENAI_API_KEY). Use barcode, keyword, or ASIN.",
+      );
+      return;
+    }
     setErrorMessage(null);
     setInfoMessage(null);
     setIsManualLoading(true);
@@ -1654,6 +1634,12 @@ function AnalyzerPageContent() {
         setManualIdentifierResolved(false);
         setInfoMessage(`Code from image: ${decodedCode}. Loading product...`);
         void runManualAnalysis(sellerType, false, decodedCode, false, true);
+        return;
+      }
+      if (photoSearchAvailable === false) {
+        setErrorMessage(
+          "Could not read a barcode from this image, and photo search is off (server needs OPENAI_API_KEY). Try another angle or use keyword / ASIN.",
+        );
         return;
       }
       await runImageProductSearchFromFile(file);
@@ -2101,6 +2087,10 @@ function AnalyzerPageContent() {
             sessionSignedIn={Boolean(session?.user)}
             amazonConnected={amazonHeaderConnected}
             onConnectAmazon={() => setShowAmazonAccountModal(true)}
+            openaiConfigured={photoSearchAvailable}
+            llmInsight={llmInsight}
+            llmLoading={llmLoading}
+            llmError={llmError}
           />
         </div>
       </div>
@@ -2251,6 +2241,19 @@ function AnalyzerPageContent() {
               {isManualLoading ? "Loading…" : "Lookup"}
             </button>
           </div>
+          {photoSearchAvailable === false ? (
+            <p className="mt-2 text-xs text-amber-200/90">
+              Photo / AI product search is off until{" "}
+              <span className="rounded bg-slate-700/80 px-1 font-mono text-[11px] text-slate-200">OPENAI_API_KEY</span> is
+              set on the server. Barcode scan, upload (code-first), keyword, and ASIN lookup still work.
+            </p>
+          ) : photoSearchAvailable === true ? (
+            <p className="mt-2 text-xs text-slate-500">
+              <span className="text-slate-400">Upload image</span> or{" "}
+              <span className="text-slate-400">Scan</span> → <span className="text-slate-400">Find by photo</span> to match a
+              product by packaging when there is no barcode.
+            </p>
+          ) : null}
         </label>
         </div>
       </form>
@@ -2609,16 +2612,25 @@ function AnalyzerPageContent() {
                 <p className="text-sm text-rose-700">{scannerError}</p>
               ) : (
                 <p className="text-sm text-slate-600">
-                  Scan a barcode or QR on the label for an instant match. To search by the product itself, frame it in
-                  the preview and tap <strong className="font-semibold">Find by photo</strong> (your workspace must
-                  enable photo understanding in server settings).
+                  Scan a barcode or QR on the label for an instant match.
+                  {photoSearchAvailable === false
+                    ? " Photo search is disabled (server missing OPENAI_API_KEY)."
+                    : photoSearchAvailable === true
+                      ? " To search by the product photo, center the packaging and tap Find by photo."
+                      : " To search by photo, the server needs OPENAI_API_KEY configured."}
                 </p>
               )}
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={() => void captureScannerFrameAndSearch()}
-                  className="rounded-lg border border-teal-500/60 bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-900 hover:bg-teal-100"
+                  disabled={photoSearchAvailable === false}
+                  title={
+                    photoSearchAvailable === false
+                      ? "Set OPENAI_API_KEY on the server to enable photo search."
+                      : undefined
+                  }
+                  className="rounded-lg border border-teal-500/60 bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-900 hover:bg-teal-100 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-teal-50"
                 >
                   Find by photo
                 </button>

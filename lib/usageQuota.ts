@@ -6,7 +6,9 @@ export type UsageMetric =
   | "analyze_offers"
   | "catalog_search"
   | "keyword_search"
-  | "restrictions";
+  | "restrictions"
+  | "openai_insight"
+  | "openai_chat";
 
 type PlanTier = "starter" | "pro" | "owner_unlimited";
 
@@ -51,11 +53,15 @@ function metricLimit(metric: UsageMetric, tier: Exclude<PlanTier, "owner_unlimit
     USAGE_LIMIT_STARTER_CATALOG_SEARCH_MONTHLY: 3000,
     USAGE_LIMIT_STARTER_KEYWORD_SEARCH_MONTHLY: 1200,
     USAGE_LIMIT_STARTER_RESTRICTIONS_MONTHLY: 5000,
+    USAGE_LIMIT_STARTER_OPENAI_INSIGHT_MONTHLY: 400,
+    USAGE_LIMIT_STARTER_OPENAI_CHAT_MONTHLY: 200,
     USAGE_LIMIT_PRO_ANALYZE_MONTHLY: 5000,
     USAGE_LIMIT_PRO_ANALYZE_OFFERS_MONTHLY: 1500,
     USAGE_LIMIT_PRO_CATALOG_SEARCH_MONTHLY: 20000,
     USAGE_LIMIT_PRO_KEYWORD_SEARCH_MONTHLY: 8000,
     USAGE_LIMIT_PRO_RESTRICTIONS_MONTHLY: 30000,
+    USAGE_LIMIT_PRO_OPENAI_INSIGHT_MONTHLY: 6000,
+    USAGE_LIMIT_PRO_OPENAI_CHAT_MONTHLY: 3000,
   };
   return intEnv(envName, defaults[envName] ?? 1000);
 }

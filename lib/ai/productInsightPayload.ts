@@ -1,0 +1,40 @@
+import type { ProductAnalysis } from "@/lib/types";
+
+/** Compact, JSON-safe snapshot for the product-insight LLM (no image URLs needed). */
+export function productAnalysisForInsightApi(product: ProductAnalysis): Record<string, unknown> {
+  return {
+    asin: product.asin,
+    title: product.title?.slice(0, 500) ?? "",
+    brand: product.brand,
+    sellerType: product.sellerType,
+    wholesalePrice: product.wholesalePrice,
+    shippingCost: product.shippingCost,
+    buyBoxPrice: product.buyBoxPrice,
+    salesRank: product.salesRank,
+    salesRankCategory: product.salesRankCategory,
+    estimatedMonthlySales: product.estimatedMonthlySales,
+    amazonSalesVolumeLabel: product.amazonSalesVolumeLabel,
+    offerCount: product.offerCount,
+    fbaOfferCount: product.fbaOfferCount,
+    fbmOfferCount: product.fbmOfferCount,
+    listingRestricted: product.listingRestricted,
+    approvalRequired: product.approvalRequired,
+    ipComplaintRisk: product.ipComplaintRisk,
+    meltableRisk: product.meltableRisk,
+    privateLabelRisk: product.privateLabelRisk,
+    restrictionReasonCodes: product.restrictionReasonCodes.slice(0, 30),
+    referralFee: product.referralFee,
+    fbaFee: product.fbaFee,
+    totalFees: product.totalFees,
+    netProfit: product.netProfit,
+    roiPercent: product.roiPercent,
+    restrictedBrand: product.restrictedBrand,
+    ungatingCost10Units: product.ungatingCost10Units,
+    worthUngating: product.worthUngating,
+    decision: product.decision,
+    rowColor: product.rowColor,
+    reasons: product.reasons.slice(0, 25),
+    error: product.error?.slice(0, 500) ?? undefined,
+    offerLabel: product.offerLabel ?? undefined,
+  };
+}

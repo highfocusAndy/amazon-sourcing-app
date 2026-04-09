@@ -6,6 +6,7 @@ import { getSubcategoriesForCategory } from "@/lib/catalogCategories";
 import { DashboardHeaderAccount } from "@/app/components/DashboardHeaderAccount";
 import { DashboardHeaderMark } from "@/app/components/DashboardHeaderMark";
 import { ProductInsightBlurb } from "@/app/components/ProductInsightBlurb";
+import { useProductAiInsight } from "@/app/hooks/useProductAiInsight";
 import { AmazonAccountModal } from "@/app/settings/AmazonAccountModal";
 import { AmazonOAuthAlerts } from "@/app/settings/AmazonOAuthAlerts";
 import { amazonOfferListingUrl, amazonSellerStorefrontUrl } from "@/lib/marketplaces";
@@ -122,10 +123,13 @@ export default function ExplorerPage() {
   >(null);
   const [sellerSheetVisible, setSellerSheetVisible] = useState(false);
   const [marketplaceDomain, setMarketplaceDomain] = useState("amazon.com");
+  const [openaiConfigured, setOpenaiConfigured] = useState<boolean | null>(null);
   const [loadingPaused, setLoadingPaused] = useState(false);
   const catalogAbortRef = useRef<AbortController | null>(null);
   const eligibilityAbortRef = useRef<AbortController | null>(null);
   const { data: session } = useSession();
+
+  const { llmInsight, llmLoading, llmError } = useProductAiInsight(selectedProduct, openaiConfigured);
 
   /** Caps explorer catalog requests (server also enforces a max page size). */
   const catalogFetchSize = useMemo(() => Math.min(Math.max(catalogPageSize, 10), 60), [catalogPageSize]);
@@ -151,11 +155,25 @@ export default function ExplorerPage() {
   useEffect(() => {
     fetch("/api/config", { credentials: "same-origin" })
       .then((res) => res.json())
-      .then((data: { marketplaceDomain?: string }) => {
+      .then((data: { marketplaceDomain?: string; openaiConfigured?: boolean }) => {
         if (data.marketplaceDomain) setMarketplaceDomain(data.marketplaceDomain);
+        if (typeof data.openaiConfigured === "boolean") setOpenaiConfigured(data.openaiConfigured);
       })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!session?.user) {
+      setProAiFeatures(false);
+      return;
+    }
+    fetch("/api/billing/status", { credentials: "same-origin" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { proAiFeatures?: boolean } | null) => {
+        setProAiFeatures(Boolean(data?.proAiFeatures));
+      })
+      .catch(() => setProAiFeatures(false));
+  }, [session?.user?.id]);
 
   /** Load user preferences (analysis defaults + catalog page size) once on mount. */
   useEffect(() => {
@@ -1454,6 +1472,10 @@ export default function ExplorerPage() {
                   sessionSignedIn={Boolean(session?.user)}
                   amazonConnected={amazonHeaderConnected}
                   onConnectAmazon={() => setShowAmazonAccountModal(true)}
+                  openaiConfigured={openaiConfigured}
+                  llmInsight={llmInsight}
+                  llmLoading={llmLoading}
+                  llmError={llmError}
                 />
               </div>
             </div>
