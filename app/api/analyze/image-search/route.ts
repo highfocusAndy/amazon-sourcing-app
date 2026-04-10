@@ -8,11 +8,20 @@ import {
 } from "@/lib/amazonAccount";
 import type { CatalogItem } from "@/lib/spApiClient";
 import { buildCatalogOnlyResult } from "@/lib/analysis";
+import type { ProductFormatKind } from "@/lib/imageSearchRanking";
 import {
   catalogBrandCompatibleWithSeed,
   catalogItemMatchesPackageBrand,
+  filterByFormatKeywords,
+  filterByProductFormat,
+  filterToSameProductLine,
+  formatKeywordsFallbackFromEnum,
+  inferProductFormatFromBlob,
+  parseProductFormField,
   parseVisionProductJson,
   rankCatalogItemsByImageHints,
+  scoreTitleAgainstHints,
+  titleMatchesFormatKeywords,
   strictPackageBrandFromVision,
 } from "@/lib/imageSearchRanking";
 import type { ProductAnalysis } from "@/lib/types";
@@ -114,7 +123,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       },
       body: JSON.stringify({
         model: visionModel,
-        max_tokens: 600,
+        max_tokens: 720,
         messages: [
           {
             role: "user",
@@ -127,18 +136,22 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 - Close-ups with little or no branding
 
 Return ONLY valid JSON (no markdown, no code fences, no commentary) with this exact shape:
-{"query":"...","match_hints":["..."],"brand":"...","upc_ean":""}
+{"query":"...","match_hints":["..."],"brand":"...","upc_ean":"","product_form":"","format_keywords":[]}
 
 Rules:
 - "brand": The brand or trademark exactly as printed on the product or package. Use "" if there is no readable brand, if the item looks generic/unbranded, or only a store/private label with no name visible.
 - "upc_ean": If a UPC, EAN, or GTIN barcode number is clearly visible, digits only (8–14), no spaces. Otherwise "".
-- "query": English Amazon keyword search (max 22 words).
-  - When a brand is visible: include brand + product line or model name + distinguishing details (size, scent, pack count, volume, color, etc.).
+- "query": English Amazon keyword search (max 22 words). Must read like the **specific product** in the photo — full product line name, flavor/scent, size, model #, or pack count as shown — **not** brand name alone.
+  - When a brand is visible: brand + **exact line/product name on the package** (e.g. product series, variant name, SKU words) + size/count/volume/color so a search would not return unrelated SKUs from that brand.
   - When NO brand is visible (common for phone cases, cables, generic accessories): build a **specific** search from what you see — product type (e.g. phone case, screen protector, USB cable), color/pattern, material (silicone, TPU, leather, clear), compatibility clues (e.g. iPhone 15 Pro Max, Samsung Galaxy, Pixel, USB-C, Lightning, MagSafe), and features (wallet, kickstand, card slot, glitter, shockproof). Combine enough terms to narrow results; avoid a single generic word like "case" alone.
   - Never return an empty "query" unless the image is unusable (not a product, totally blurry, or lens blocked).
-- "match_hints": 5–12 short phrases (2–8 words) for ranking: colors, materials, model fit, pattern, bundle size, connector type, etc. When unbranded, use descriptive hints only — do not invent a brand.
+- "match_hints": 5–12 phrases (2–8 words) that **pin this exact SKU**: include the **printed product name/line**, flavor, scent, net weight/volume with units, pack count (single vs 2-pack), color, model compatibility, and any distinctive words from the label. At least half the hints should be phrases that would **not** match a different product from the same brand. When unbranded, use descriptive hints only — do not invent a brand.
+- **Flavor / scent / color variant is mandatory when visible:** If the package shows Vanilla, Cocoa, Chocolate, Strawberry, Lavender, Mint, a specific color name, etc., you MUST copy that exact word into both "query" and several match_hints. A different flavor (e.g. Cocoa vs Vanilla) is a **different ASIN** — missing the visible variant causes wrong results.
+- **Product line vs brand:** The search query and hints must identify the **specific product name/line** on the package (e.g. exact collection or product family), not only the brand — otherwise unrelated SKUs from the same brand will appear.
+- **product_form (required):** Coarse bucket — **not** the scent. One of: spray | hanging_tree | vent_clip | wipes | unknown. Use **unknown** if none fit.
+- **format_keywords (required):** 3–8 short phrases (1–4 words each) describing **only** the physical product type and packaging — same for **every** category (food, electronics, beauty, automotive, toys, etc.). What you would type to distinguish this from a **different** SKU from the same brand: e.g. "spray bottle", "pump dispenser", "squeeze tube", "glass jar", "blister pack", "folding carton", "pod capsule", "hanging paper tree", "wireless earbuds case", "usb-c cable", "roll-on", "stick deodorant", "resealable pouch", "trigger spray". Do **not** put brand names here; put scent/flavor here **only** if it is the main label distinction. This keeps catalog results on the **same kind of product** as the photo.
 
-Use {"query":"","match_hints":[],"brand":"","upc_ean":""} only when the photo shows no recognizable product or is unreadable.`,
+Use {"query":"","match_hints":[],"brand":"","upc_ean":"","product_form":"","format_keywords":[]} only when the photo shows no recognizable product or is unreadable.`,
               },
               {
                 type: "image_url",
@@ -174,12 +187,20 @@ Use {"query":"","match_hints":[],"brand":"","upc_ean":""} only when the photo sh
 
     let visionBrand: string | undefined;
     let upcDigits: string | undefined;
+    let productFormat: ProductFormatKind | null = null;
+    let formatKeywords: string[] = [];
 
     if (parsed) {
       derivedQuery = parsed.query;
       matchHints = parsed.match_hints;
       visionBrand = parsed.brand;
       upcDigits = parsed.upc_ean;
+      productFormat =
+        parseProductFormField(parsed.product_form) ?? inferProductFormatFromBlob(derivedQuery, matchHints);
+      formatKeywords = parsed.format_keywords?.length ? parsed.format_keywords : [];
+      if (formatKeywords.length === 0 && productFormat) {
+        formatKeywords = formatKeywordsFallbackFromEnum(productFormat);
+      }
     } else {
       const line = firstLine(rawContent).replace(/^["']|["']$/g, "").trim();
       if (!line || /^UNKNOWN$/i.test(line)) {
@@ -191,6 +212,8 @@ Use {"query":"","match_hints":[],"brand":"","upc_ean":""} only when the photo sh
       }
       derivedQuery = line;
       matchHints = [];
+      productFormat = inferProductFormatFromBlob(derivedQuery, []);
+      if (productFormat) formatKeywords = formatKeywordsFallbackFromEnum(productFormat);
     }
 
     if (!derivedQuery) {
@@ -261,25 +284,55 @@ Use {"query":"","match_hints":[],"brand":"","upc_ean":""} only when the photo sh
       }
     }
 
-    let ranked = rankCatalogItemsByImageHints(pool, matchHints, derivedQuery, packageBrandStrict);
+    let ranked = rankCatalogItemsByImageHints(
+      pool,
+      matchHints,
+      derivedQuery,
+      packageBrandStrict,
+      productFormat,
+      formatKeywords,
+    );
 
-    if (packageBrandStrict && ranked.length > 0) {
+    /** Pull pack/size/count variants of the same product line — only if hints still match (not random same-brand ASINs). */
+    const MIN_HINT_FOR_EXPAND = 4;
+    if (packageBrandStrict && ranked.length > 0 && matchHints.length > 0) {
       const seed = ranked[0]!;
-      const expandKeyword = seed.title.slice(0, 72).trim();
-      if (expandKeyword.length >= 10) {
-        const expanded = await client.searchCatalogByKeywordMultiple(expandKeyword, IMAGE_SEARCH_EXPAND_MAX);
-        const seen = new Set(ranked.map((x) => x.asin));
-        const combined: CatalogItem[] = [...ranked];
-        for (const it of expanded) {
-          if (!it.asin || seen.has(it.asin)) continue;
-          if (!catalogItemMatchesPackageBrand(it, packageBrandStrict)) continue;
-          if (!catalogBrandCompatibleWithSeed(seed, it)) continue;
-          seen.add(it.asin);
-          combined.push(it);
+      if (scoreTitleAgainstHints(seed.title, matchHints) >= MIN_HINT_FOR_EXPAND) {
+        const expandKeyword = seed.title.slice(0, 72).trim();
+        if (expandKeyword.length >= 10) {
+          const expanded = await client.searchCatalogByKeywordMultiple(expandKeyword, IMAGE_SEARCH_EXPAND_MAX);
+          const seen = new Set(ranked.map((x) => x.asin));
+          const combined: CatalogItem[] = [...ranked];
+          for (const it of expanded) {
+            if (!it.asin || seen.has(it.asin)) continue;
+            if (!catalogItemMatchesPackageBrand(it, packageBrandStrict)) continue;
+            if (!catalogBrandCompatibleWithSeed(seed, it)) continue;
+            if (scoreTitleAgainstHints(it.title, matchHints) < MIN_HINT_FOR_EXPAND) continue;
+            if (formatKeywords.length > 0 && !titleMatchesFormatKeywords(it.title, formatKeywords)) continue;
+            seen.add(it.asin);
+            combined.push(it);
+          }
+          ranked = rankCatalogItemsByImageHints(
+            combined,
+            matchHints,
+            derivedQuery,
+            packageBrandStrict,
+            productFormat,
+            formatKeywords,
+          );
         }
-        ranked = rankCatalogItemsByImageHints(combined, matchHints, derivedQuery, packageBrandStrict);
       }
     }
+
+    /** Same physical product type as the photo (any category — uses vision format_keywords, or coarse product_form). */
+    if (formatKeywords.length > 0) {
+      ranked = filterByFormatKeywords(ranked, formatKeywords);
+    } else {
+      ranked = filterByProductFormat(ranked, productFormat);
+    }
+
+    /** Same product line as #1 match (allow vanilla/cocoa/lemon etc.); drop different products that share a brand. */
+    ranked = filterToSameProductLine(ranked);
 
     const maxRows = Math.min(IMAGE_SEARCH_EXPAND_MAX, Math.max(pageSize, ranked.length));
     const items = ranked.slice(0, maxRows);
