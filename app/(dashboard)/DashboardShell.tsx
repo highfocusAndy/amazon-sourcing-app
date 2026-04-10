@@ -361,11 +361,12 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               onOpenSettings={() => setSettingsModalOpen(true)}
               onOpenAiChat={() => setAiChatOpen(true)}
             />
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">{children}</div>
             {!mobileDrawerOpen && !pathname.startsWith("/analyzer") ? (
               <button
                 type="button"
                 onClick={() => setSettingsModalOpen(true)}
-                className="pointer-events-auto fixed bottom-[max(0.75rem,env(safe-area-inset-bottom))] left-3 z-[44] flex h-12 w-12 items-center justify-center rounded-full border border-slate-600 bg-slate-800/95 text-lg text-slate-200 shadow-lg shadow-black/30 backdrop-blur-sm transition hover:border-teal-500/50 hover:bg-slate-700 hover:text-teal-200 md:hidden"
+                className="pointer-events-auto fixed bottom-[max(0.75rem,env(safe-area-inset-bottom))] left-3 z-[60] flex h-12 w-12 items-center justify-center rounded-full border border-slate-600 bg-slate-800/95 text-lg text-slate-200 shadow-lg shadow-black/30 backdrop-blur-sm transition hover:border-teal-500/50 hover:bg-slate-700 hover:text-teal-200"
                 aria-label="Settings"
                 title="Settings"
               >
@@ -380,11 +381,18 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                   pathname.startsWith("/analyzer")
                     ? "bottom-[max(5.5rem,calc(env(safe-area-inset-bottom,0px)+4.75rem))]"
                     : "bottom-[max(0.75rem,env(safe-area-inset-bottom))]"
-                } right-3 z-[44] flex h-12 w-12 items-center justify-center rounded-full border border-teal-500/40 bg-slate-800/95 text-sm font-semibold text-teal-100 shadow-lg shadow-black/30 backdrop-blur-sm transition hover:border-teal-400/60 hover:bg-slate-700 md:hidden`}
+                } right-3 z-[60] flex h-14 w-14 items-center justify-center overflow-hidden rounded-full border border-teal-500/40 bg-slate-800/95 p-1 shadow-lg shadow-black/30 ring-1 ring-white/5 backdrop-blur-sm transition hover:border-teal-400/60 hover:bg-slate-700`}
                 aria-label="Ask AI about Amazon"
                 title="Ask AI"
               >
-                <span aria-hidden>✦</span>
+                <img
+                  src="/HF_LOGO.png"
+                  alt=""
+                  width={48}
+                  height={48}
+                  className="h-full w-full object-contain brightness-0 invert"
+                  draggable={false}
+                />
               </button>
             ) : null}
             <AmazonAiChatDrawer
@@ -393,7 +401,6 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               openaiConfigured={openaiConfigured}
             />
             {settingsModalOpen ? <SettingsModal onClose={() => setSettingsModalOpen(false)} /> : null}
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">{children}</div>
           </div>
         </div>
         </DashboardSettingsProvider>

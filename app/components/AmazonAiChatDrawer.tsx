@@ -110,7 +110,7 @@ export function AmazonAiChatDrawer({ open, onClose, openaiConfigured }: Props) {
         <div ref={listRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-3">
           {messages.length === 0 ? (
             <p className="text-sm text-slate-500">
-              Ask about selling on Amazon, policies, risk, sourcing basics — in a compliance-minded way (HIGH FOCUS style).
+              Ask about selling on Amazon, policies, risk, and sourcing — practical, educational answers (compliance-minded).
             </p>
           ) : null}
           {messages.map((m, i) => (
