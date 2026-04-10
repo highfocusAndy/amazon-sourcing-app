@@ -1401,6 +1401,16 @@ export default function ExplorerPage() {
                   const variationYes = fromCatalog === true || fromRestrictionCodes;
                   const variationNo = fromCatalog === false && !fromRestrictionCodes;
                   const variationLabel = variationYes ? "Yes" : variationNo ? "No" : "—";
+                  const variationNote =
+                    variationLabel === "Yes"
+                      ? fromCatalog === true && fromRestrictionCodes
+                        ? "Catalog reports a VARIATION parent/child link, and a restriction code also references variation."
+                        : fromCatalog === true
+                          ? "Based on Amazon catalog data: this ASIN has parent/child VARIATION relationships (other sizes/colors/flavors may exist)."
+                          : "Based on a listing restriction code (VARIATION / parent-child), not catalog relationships."
+                      : variationLabel === "No"
+                        ? "No VARIATION relationship in the catalog response we used, and no variation-related restriction code."
+                        : "Not determined — catalog may omit relationships, or this run did not load them.";
                   return (
                     <div className="grid grid-cols-1 gap-2">
                       <div className="rounded-lg border border-slate-600 bg-slate-700/30 px-3 py-2">
@@ -1422,6 +1432,7 @@ export default function ExplorerPage() {
                       <div className="rounded-lg border border-slate-600 bg-slate-700/30 px-3 py-2">
                         <p className="text-xs text-slate-500">Variation</p>
                         <p className="text-sm font-medium text-slate-100">{variationLabel}</p>
+                        <p className="mt-0.5 text-[10px] text-slate-500 leading-snug">{variationNote}</p>
                       </div>
                     </div>
                   );

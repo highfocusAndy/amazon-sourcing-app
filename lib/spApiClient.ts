@@ -243,8 +243,9 @@ function extractCatalogVariationFamilyFlag(itemObj: Record<string, unknown>): bo
       const childAsins = asArray(getField(rr, ["childAsins", "ChildAsins"]));
       const parentAsins = asArray(getField(rr, ["parentAsins", "ParentAsins"]));
       if (childAsins.length === 0 && parentAsins.length === 0) continue;
-      // Prefer explicit VARIATION; if type is missing but Amazon sent parent/child ASINs, treat as variation family.
-      if (!typeStr || typeStr.includes("VARIATION")) {
+      // Require an explicit VARIATION relationship. Parent/child ASINs with a missing or non-VARIATION type
+      // (e.g. package hierarchy) are not the same as a color/size variation family — omitting type caused "Yes" too often.
+      if (typeStr.includes("VARIATION")) {
         return true;
       }
     }
