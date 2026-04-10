@@ -116,6 +116,7 @@ function buildBaseResult(input: ProductInput): ProductAnalysis {
     meltableRisk: null,
     privateLabelRisk: null,
     restrictionReasonCodes: [],
+    hasCatalogVariationFamily: null,
     referralFee: 0,
     fbaFee: 0,
     totalFees: 0,
@@ -277,6 +278,7 @@ export function buildCatalogOnlyResult(
     meltableRisk: null,
     privateLabelRisk: null,
     restrictionReasonCodes: [],
+    hasCatalogVariationFamily: catalog.hasVariationFamily ?? null,
     referralFee: 0,
     fbaFee: 0,
     totalFees: 0,
@@ -407,6 +409,7 @@ export async function analyzeProduct(
       result.title = catalog.title;
       result.imageUrl = catalog.imageUrl ?? null;
       result.salesRank = catalog.rank;
+      result.hasCatalogVariationFamily = catalog.hasVariationFamily ?? null;
       if (!result.brand && catalog.brand) {
         result.brand = catalog.brand;
       }

@@ -83,6 +83,8 @@ export interface CatalogItem {
   brand: string;
   rank: number | null;
   imageUrl: string | null;
+  /** From `relationships` includedData: VARIATION links with parent and/or child ASINs. */
+  hasVariationFamily?: boolean;
 }
 
 export interface CompetitivePricing {
@@ -223,6 +225,31 @@ function sleep(ms: number): Promise<void> {
 
 function unique(values: string[]): string[] {
   return [...new Set(values)];
+}
+
+/** True when Catalog API returns a VARIATION relationship with at least one parent or child ASIN. */
+function extractCatalogVariationFamilyFlag(itemObj: Record<string, unknown>): boolean {
+  const relByMkt = asArray(getField(itemObj, ["relationships", "Relationships"]));
+  for (const block of relByMkt) {
+    const m = asObject(block);
+    if (!m) continue;
+    const rels = asArray(getField(m, ["relationships", "Relationships"]));
+    for (const r of rels) {
+      const rr = asObject(r);
+      if (!rr) continue;
+      const typeRaw =
+        readString(getField(rr, ["type", "Type", "relationshipType", "RelationshipType"])) ?? "";
+      const typeStr = typeRaw.toUpperCase();
+      const childAsins = asArray(getField(rr, ["childAsins", "ChildAsins"]));
+      const parentAsins = asArray(getField(rr, ["parentAsins", "ParentAsins"]));
+      if (childAsins.length === 0 && parentAsins.length === 0) continue;
+      // Prefer explicit VARIATION; if type is missing but Amazon sent parent/child ASINs, treat as variation family.
+      if (!typeStr || typeStr.includes("VARIATION")) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 function toCurrency(value: number): number {
@@ -588,7 +615,9 @@ export class SpApiClient {
       imageUrl = readString(firstImg?.link);
     }
 
-    return { asin, title, brand, rank, imageUrl };
+    const hasVariationFamily = extractCatalogVariationFamilyFlag(itemObj);
+
+    return { asin, title, brand, rank, imageUrl, hasVariationFamily };
   }
 
   private extractPricing(data: unknown): CompetitivePricing {
@@ -939,7 +968,7 @@ export class SpApiClient {
     const response = await this.request<unknown>("GET", `/catalog/2022-04-01/items/${normalized}`, {
       query: {
         marketplaceIds: this.config.marketplaceId,
-        includedData: "summaries,salesRanks,identifiers,images",
+        includedData: "summaries,salesRanks,identifiers,images,relationships",
       },
     });
 
@@ -956,7 +985,7 @@ export class SpApiClient {
         marketplaceIds: this.config.marketplaceId,
         identifiersType: identifierType,
         identifiers: identifier,
-        includedData: "summaries,salesRanks,identifiers,images",
+        includedData: "summaries,salesRanks,identifiers,images,relationships",
       },
     });
 
@@ -979,7 +1008,7 @@ export class SpApiClient {
       query: {
         marketplaceIds: this.config.marketplaceId,
         keywords: query,
-        includedData: "summaries,salesRanks,identifiers,images",
+        includedData: "summaries,salesRanks,identifiers,images,relationships",
         pageSize: "20",
       },
     });
@@ -1025,7 +1054,7 @@ export class SpApiClient {
       const queryParams: Record<string, string> = {
         marketplaceIds: this.config.marketplaceId,
         keywords: query,
-        includedData: "summaries,salesRanks,identifiers,images",
+        includedData: "summaries,salesRanks,identifiers,images,relationships",
         pageSize: String(pageSize),
       };
       if (pageToken) {
@@ -1077,7 +1106,7 @@ export class SpApiClient {
       const queryParams: Record<string, string> = {
         marketplaceIds: this.config.marketplaceId,
         keywords: query,
-        includedData: "summaries,salesRanks,identifiers,images",
+        includedData: "summaries,salesRanks,identifiers,images,relationships",
         pageSize: String(perRequest),
       };
       if (token) {

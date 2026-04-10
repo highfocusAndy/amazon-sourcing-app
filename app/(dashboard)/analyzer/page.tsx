@@ -469,6 +469,8 @@ function AnalyzerPageContent() {
   const scannerFrameRef = useRef<number | null>(null);
   const zxingReaderRef = useRef<ZxingReaderLike | null>(null);
   const hasScannedRef = useRef(false);
+  /** Latest handler for auto photo fallback (set after `captureScannerFrameAndSearch` is defined). */
+  const captureScannerFrameAndSearchRef = useRef<() => Promise<void>>(async () => {});
   const lastAutoManualCalcKeyRef = useRef("");
   const scannerPreferredDeviceIdRef = useRef<string | null>(null);
   const sellerTypeRef = useRef<SellerType>(sellerType);
@@ -1518,6 +1520,19 @@ function AnalyzerPageContent() {
     await runImageProductSearchFromFile(imageFile);
   }
 
+  captureScannerFrameAndSearchRef.current = captureScannerFrameAndSearch;
+
+  /** Barcode is tried first; if nothing is decoded after a short window, capture runs photo search automatically. */
+  useEffect(() => {
+    if (!isScannerOpen || photoSearchAvailable !== true) return;
+    const barcodeFirstMs = 2800;
+    const id = window.setTimeout(() => {
+      if (hasScannedRef.current) return;
+      void captureScannerFrameAndSearchRef.current();
+    }, barcodeFirstMs);
+    return () => window.clearTimeout(id);
+  }, [isScannerOpen, photoSearchAvailable]);
+
   async function handleLookupSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     const effectiveKeyword = keyword.trim();
@@ -2028,7 +2043,11 @@ function AnalyzerPageContent() {
           {(() => {
             const codes = selectedProduct.restrictionReasonCodes;
             const hasHazmat = codes.some((c) => /HAZMAT|HAZARD|DANGEROUS/i.test(c));
-            const hasVariation = codes.some((c) => /VARIATION|VAR\b|PARENT_CHILD/i.test(c));
+            const fromRestrictionCodes = codes.some((c) => /VARIATION|VAR\b|PARENT_CHILD/i.test(c));
+            const fromCatalog = selectedProduct.hasCatalogVariationFamily;
+            const variationYes = fromCatalog === true || fromRestrictionCodes;
+            const variationNo = fromCatalog === false && !fromRestrictionCodes;
+            const variationLabel = variationYes ? "Yes" : variationNo ? "No" : "—";
             return (
               <div className="grid grid-cols-1 gap-2">
                 <div className="rounded-lg border border-slate-600 bg-slate-700/30 px-3 py-2">
@@ -2049,7 +2068,12 @@ function AnalyzerPageContent() {
                 </div>
                 <div className="rounded-lg border border-slate-600 bg-slate-700/30 px-3 py-2">
                   <p className="text-xs text-slate-500">Variation</p>
-                  <p className="text-sm font-medium text-slate-100">{hasVariation ? "Yes" : "No"}</p>
+                  <p className="text-sm font-medium text-slate-100">{variationLabel}</p>
+                  {variationLabel === "—" ? (
+                    <p className="mt-0.5 text-[10px] text-slate-500">
+                      Shown when catalog lists parent/child ASINs or a restriction code mentions variations.
+                    </p>
+                  ) : null}
                 </div>
               </div>
             );
@@ -2249,9 +2273,8 @@ function AnalyzerPageContent() {
             </p>
           ) : photoSearchAvailable === true ? (
             <p className="mt-2 text-xs text-slate-500">
-              <span className="text-slate-400">Upload image</span> or{" "}
-              <span className="text-slate-400">Scan</span> → <span className="text-slate-400">Find by photo</span> to match a
-              product by packaging when there is no barcode.
+              <span className="text-slate-400">Upload image</span> or use <span className="text-slate-400">Scan</span>: we read
+              the barcode first; if there isn’t one, we search by photo automatically.
             </p>
           ) : null}
         </label>
@@ -2612,28 +2635,15 @@ function AnalyzerPageContent() {
                 <p className="text-sm text-rose-700">{scannerError}</p>
               ) : (
                 <p className="text-sm text-slate-600">
-                  Scan a barcode or QR on the label for an instant match.
+                  Point at a barcode or QR for an instant match.
                   {photoSearchAvailable === false
-                    ? " Photo search is disabled (server missing OPENAI_API_KEY)."
+                    ? " Photo fallback is off (server missing OPENAI_API_KEY) — use barcode only, or keyword / ASIN."
                     : photoSearchAvailable === true
-                      ? " To search by the product photo, center the packaging and tap Find by photo."
-                      : " To search by photo, the server needs OPENAI_API_KEY configured."}
+                      ? " If no code is read, we’ll snap the frame and search by product photo automatically."
+                      : " To enable photo fallback, set OPENAI_API_KEY on the server."}
                 </p>
               )}
               <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => void captureScannerFrameAndSearch()}
-                  disabled={photoSearchAvailable === false}
-                  title={
-                    photoSearchAvailable === false
-                      ? "Set OPENAI_API_KEY on the server to enable photo search."
-                      : undefined
-                  }
-                  className="rounded-lg border border-teal-500/60 bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-900 hover:bg-teal-100 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-teal-50"
-                >
-                  Find by photo
-                </button>
                 <button
                   type="button"
                   onClick={() => setIsScannerOpen(false)}

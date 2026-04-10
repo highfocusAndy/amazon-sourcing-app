@@ -1418,7 +1418,11 @@ export default function ExplorerPage() {
                 {(() => {
                   const codes = selectedProduct.restrictionReasonCodes;
                   const hasHazmat = codes.some((c) => /HAZMAT|HAZARD|DANGEROUS/i.test(c));
-                  const hasVariation = codes.some((c) => /VARIATION|VAR\b|PARENT_CHILD/i.test(c));
+                  const fromRestrictionCodes = codes.some((c) => /VARIATION|VAR\b|PARENT_CHILD/i.test(c));
+                  const fromCatalog = selectedProduct.hasCatalogVariationFamily;
+                  const variationYes = fromCatalog === true || fromRestrictionCodes;
+                  const variationNo = fromCatalog === false && !fromRestrictionCodes;
+                  const variationLabel = variationYes ? "Yes" : variationNo ? "No" : "—";
                   return (
                     <div className="grid grid-cols-1 gap-2">
                       <div className="rounded-lg border border-slate-600 bg-slate-700/30 px-3 py-2">
@@ -1439,7 +1443,7 @@ export default function ExplorerPage() {
                       </div>
                       <div className="rounded-lg border border-slate-600 bg-slate-700/30 px-3 py-2">
                         <p className="text-xs text-slate-500">Variation</p>
-                        <p className="text-sm font-medium text-slate-100">{hasVariation ? "Yes" : "No"}</p>
+                        <p className="text-sm font-medium text-slate-100">{variationLabel}</p>
                       </div>
                     </div>
                   );

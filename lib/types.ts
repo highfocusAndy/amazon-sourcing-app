@@ -64,6 +64,11 @@ export interface ProductAnalysis {
   /** Likely private label / brand-gated. */
   privateLabelRisk: boolean | null;
   restrictionReasonCodes: string[];
+  /**
+   * From Catalog Items API `relationships` (VARIATION parent/child). Independent of listing restriction codes.
+   * null = not loaded (legacy); true = catalog reports a variation family; false = no VARIATION links in catalog data.
+   */
+  hasCatalogVariationFamily?: boolean | null;
   referralFee: number;
   fbaFee: number;
   totalFees: number;
