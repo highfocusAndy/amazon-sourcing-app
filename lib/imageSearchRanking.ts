@@ -21,22 +21,13 @@ export type VisionProductParse = {
 };
 
 /**
- * Prefer explicit vision `brand`; otherwise use the first significant word of the search query
- * (e.g. "RAFFIN Beard Growth Kit..." → "RAFFIN") so we can filter SP-API noise.
+ * Use for **strict** catalog filtering only when the vision model read a brand from the photo.
+ * Do not infer a brand from the search query — generic queries like "clear phone case iPhone 15"
+ * used to pick "clear" or "phone" as a fake brand and returned zero results.
  */
-export function resolveBrandForImageSearch(parsedBrand: string | undefined, derivedQuery: string): string | null {
+export function strictPackageBrandFromVision(parsedBrand: string | undefined): string | null {
   const pb = parsedBrand?.trim();
-  if (pb) return pb;
-  const parts = derivedQuery.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return null;
-  const articles = new Set(["the", "a", "an"]);
-  let idx = 0;
-  if (articles.has(parts[0]!.toLowerCase()) && parts.length > 1) idx = 1;
-  const candidate = parts[idx] ?? "";
-  if (candidate.length >= 2 && candidate.length <= 40 && /^[A-Za-z0-9][A-Za-z0-9&.-]*$/i.test(candidate)) {
-    return candidate;
-  }
-  return null;
+  return pb || null;
 }
 
 /** True if the catalog row is likely this manufacturer (title or Amazon brand field). */

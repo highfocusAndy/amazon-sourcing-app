@@ -13,7 +13,7 @@ import {
   catalogItemMatchesPackageBrand,
   parseVisionProductJson,
   rankCatalogItemsByImageHints,
-  resolveBrandForImageSearch,
+  strictPackageBrandFromVision,
 } from "@/lib/imageSearchRanking";
 import type { ProductAnalysis } from "@/lib/types";
 import { consumeMonthlyUsage } from "@/lib/usageQuota";
@@ -114,25 +114,31 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       },
       body: JSON.stringify({
         model: visionModel,
-        max_tokens: 450,
+        max_tokens: 600,
         messages: [
           {
             role: "user",
             content: [
               {
                 type: "text",
-                text: `You analyze retail product packaging for Amazon FBA catalog search.
+                text: `You analyze product photos for Amazon FBA catalog search. Images may show:
+- Retail packaging (box, label, hang tag)
+- A loose or unboxed product (phone case, cable, accessory on a desk, in hand)
+- Close-ups with little or no branding
 
 Return ONLY valid JSON (no markdown, no code fences, no commentary) with this exact shape:
 {"query":"...","match_hints":["..."],"brand":"...","upc_ean":""}
 
 Rules:
-- "brand": The brand name exactly as printed on the package (required if readable). Empty string only if unreadable.
-- "upc_ean": If a UPC, EAN, or GTIN barcode NUMBER is clearly visible on the label, the digits only (8–14 digits), no spaces. Otherwise "".
-- "query": English Amazon keyword search (max 22 words). MUST include the brand and the specific product line / variant name — never a category-only query like "beard oil" or "shampoo" alone when the brand is visible. Add pack count, bundle vs single, volume (oz/ml), scent/flavor, color, organic, etc. Prefer exact package wording.
-- "match_hints": 5–12 short phrases (2–7 words) that distinguish THIS listing from same-category items: product line name, size, scent, count, "for men", etc. Include the brand in at least one hint when possible. Avoid hints that are only the generic category.
+- "brand": The brand or trademark exactly as printed on the product or package. Use "" if there is no readable brand, if the item looks generic/unbranded, or only a store/private label with no name visible.
+- "upc_ean": If a UPC, EAN, or GTIN barcode number is clearly visible, digits only (8–14), no spaces. Otherwise "".
+- "query": English Amazon keyword search (max 22 words).
+  - When a brand is visible: include brand + product line or model name + distinguishing details (size, scent, pack count, volume, color, etc.).
+  - When NO brand is visible (common for phone cases, cables, generic accessories): build a **specific** search from what you see — product type (e.g. phone case, screen protector, USB cable), color/pattern, material (silicone, TPU, leather, clear), compatibility clues (e.g. iPhone 15 Pro Max, Samsung Galaxy, Pixel, USB-C, Lightning, MagSafe), and features (wallet, kickstand, card slot, glitter, shockproof). Combine enough terms to narrow results; avoid a single generic word like "case" alone.
+  - Never return an empty "query" unless the image is unusable (not a product, totally blurry, or lens blocked).
+- "match_hints": 5–12 short phrases (2–8 words) for ranking: colors, materials, model fit, pattern, bundle size, connector type, etc. When unbranded, use descriptive hints only — do not invent a brand.
 
-If the image is not a recognizable retail product, reply exactly: {"query":"","match_hints":[],"brand":"","upc_ean":""}`,
+Use {"query":"","match_hints":[],"brand":"","upc_ean":""} only when the photo shows no recognizable product or is unreadable.`,
               },
               {
                 type: "image_url",
@@ -230,12 +236,13 @@ If the image is not a recognizable retail product, reply exactly: {"query":"","m
       }
     }
 
-    const effectiveBrand = resolveBrandForImageSearch(visionBrand, derivedQuery);
+    /** Only narrow the catalog pool when the model actually read a brand — avoids empty results for generic items. */
+    const packageBrandStrict = strictPackageBrandFromVision(visionBrand);
     let pool = merged;
-    if (effectiveBrand) {
-      let narrowed = merged.filter((it) => catalogItemMatchesPackageBrand(it, effectiveBrand));
+    if (packageBrandStrict) {
+      let narrowed = merged.filter((it) => catalogItemMatchesPackageBrand(it, packageBrandStrict));
       if (narrowed.length === 0) {
-        const retryItems = await client.searchCatalogByKeywordMultiple(effectiveBrand, fetchCap);
+        const retryItems = await client.searchCatalogByKeywordMultiple(packageBrandStrict, fetchCap);
         const seen = new Set(merged.map((x) => x.asin));
         const combined = [...merged];
         for (const it of retryItems) {
@@ -244,7 +251,7 @@ If the image is not a recognizable retail product, reply exactly: {"query":"","m
             combined.push(it);
           }
         }
-        narrowed = combined.filter((it) => catalogItemMatchesPackageBrand(it, effectiveBrand));
+        narrowed = combined.filter((it) => catalogItemMatchesPackageBrand(it, packageBrandStrict));
       }
       if (narrowed.length > 0) {
         pool = narrowed;
@@ -254,9 +261,9 @@ If the image is not a recognizable retail product, reply exactly: {"query":"","m
       }
     }
 
-    let ranked = rankCatalogItemsByImageHints(pool, matchHints, derivedQuery, effectiveBrand ?? visionBrand ?? null);
+    let ranked = rankCatalogItemsByImageHints(pool, matchHints, derivedQuery, packageBrandStrict);
 
-    if (effectiveBrand && ranked.length > 0) {
+    if (packageBrandStrict && ranked.length > 0) {
       const seed = ranked[0]!;
       const expandKeyword = seed.title.slice(0, 72).trim();
       if (expandKeyword.length >= 10) {
@@ -265,12 +272,12 @@ If the image is not a recognizable retail product, reply exactly: {"query":"","m
         const combined: CatalogItem[] = [...ranked];
         for (const it of expanded) {
           if (!it.asin || seen.has(it.asin)) continue;
-          if (!catalogItemMatchesPackageBrand(it, effectiveBrand)) continue;
+          if (!catalogItemMatchesPackageBrand(it, packageBrandStrict)) continue;
           if (!catalogBrandCompatibleWithSeed(seed, it)) continue;
           seen.add(it.asin);
           combined.push(it);
         }
-        ranked = rankCatalogItemsByImageHints(combined, matchHints, derivedQuery, effectiveBrand);
+        ranked = rankCatalogItemsByImageHints(combined, matchHints, derivedQuery, packageBrandStrict);
       }
     }
 
