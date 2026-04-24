@@ -38,6 +38,7 @@ const MIN_PRODUCT_TYPE_CONFIDENCE = 0.72;
 /** Extremely low vision confidence means the image is unusable. */
 const MIN_USABLE_IMAGE_CONFIDENCE = 0.12;
 const LOW_PRODUCT_TYPE_CONFIDENCE = 0.5;
+const FALLBACK_VISIBLE_TEXT_LIMIT = 4;
 
 const NOTICE_UNCLEAR =
   "Unable to confidently identify the product. Please rescan.";
@@ -225,6 +226,28 @@ function imageIdentityIsUsable(parse: VisionProductFamilyParse): boolean {
       parse.visible_text.length > 0,
   );
   return hasIdentitySignal;
+}
+
+function buildFallbackIdentityQuery(parse: VisionProductFamilyParse): string {
+  const parts: string[] = [];
+  const seen = new Set<string>();
+  const push = (value: string): void => {
+    const normalized = value.trim();
+    if (!normalized) return;
+    const key = normalized.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    parts.push(normalized);
+  };
+  push(parse.brand);
+  push(parse.product_name);
+  push(parse.product_type);
+  push(parse.variant);
+  for (const cue of parse.visible_text.slice(0, FALLBACK_VISIBLE_TEXT_LIMIT)) {
+    if (cue.trim().length < 4) continue;
+    push(cue);
+  }
+  return parts.join(" ").slice(0, 160).trim();
 }
 
 const PRODUCT_TYPE_TOKENS = ["lotion", "shampoo", "conditioner", "oil", "cream", "cleanser"] as const;
@@ -518,13 +541,67 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const typeMode = inferTypeMode(parse);
 
     if (!parse.core_product_family.trim()) {
-      console.log("[image-search] vision returned no core_product_family → not listed");
+      const fallbackKeyword = buildFallbackIdentityQuery(parse);
+      if (!fallbackKeyword) {
+        console.log("[image-search] vision returned no core_product_family and no fallback cues");
+        return NextResponse.json({
+          ok: true,
+          results: [] as ProductAnalysis[],
+          derivedQuery: derivedQuery || null,
+          imageUnclear: true,
+          notice: NOTICE_UNCLEAR,
+          visionParse: parse,
+        });
+      }
+      console.log(
+        `[image-search] no core_product_family; attempting fallback identity search with "${fallbackKeyword}"`,
+      );
+      const rawFallbackItems = await client.searchCatalogByKeywordMultiple(
+        fallbackKeyword,
+        FAMILY_SEARCH_FETCH_CAP,
+      );
+      const packageBrand = strictPackageBrandFromVision(parse.brand);
+      const fallbackCandidates = rawFallbackItems.filter((item) => {
+        if (!item.asin) return false;
+        if (!strictCatalogBrandMatch(item.brand, packageBrand)) return false;
+        const productNameCue = parse.product_name.trim()
+          ? item.title.toLowerCase().includes(parse.product_name.trim().toLowerCase())
+          : false;
+        const visibleCue = titleMatchesVisibleText(item.title, parse.visible_text);
+        const typeCue = parse.product_type.trim()
+          ? catalogTitleMatchesAuxProductType(item.title, parse.product_type)
+          : false;
+        return productNameCue || visibleCue || typeCue;
+      });
+      if (fallbackCandidates.length === 0) {
+        console.log("[image-search] fallback identity search found no confident candidates");
+        return NextResponse.json({
+          ok: true,
+          results: [] as ProductAnalysis[],
+          derivedQuery: fallbackKeyword || derivedQuery || null,
+          imageUnclear: true,
+          notice: NOTICE_UNCLEAR,
+          visionParse: parse,
+        });
+      }
+      const seed = pickFamilySeed(fallbackCandidates, parse);
+      const grouped = await collectFamilyResults({
+        client,
+        parse: {
+          ...parse,
+          core_product_family: parse.product_name.trim() || seed.title.slice(0, 80).trim(),
+        },
+        seed,
+        seedReason: "fallback identity match",
+        candidatePool: fallbackCandidates,
+      });
       return NextResponse.json({
         ok: true,
-        results: [] as ProductAnalysis[],
-        derivedQuery: derivedQuery || null,
-        notFoundOnAmazon: true,
-        notice: NOTICE_NOT_ON_AMAZON,
+        results: grouped.results.slice(0, Math.max(pageSize, grouped.results.length)),
+        derivedQuery: fallbackKeyword || null,
+        matchPath: "family",
+        lowConfidenceType: true,
+        usedRelaxedFilter: true,
         visionParse: parse,
       });
     }
