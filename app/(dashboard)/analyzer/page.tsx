@@ -437,6 +437,7 @@ function AnalyzerPageContent() {
   const [selectedProduct, setSelectedProduct] = useState<ProductAnalysis | null>(null);
   const [mobileDetailsOpen, setMobileDetailsOpen] = useState(false);
   /** Popover on lg+; full-height sheet from the right on smaller screens (mirrors left nav direction). */
+  const [, setPopupQuantity] = useState("");
   const [sellerModal, setSellerModal] = useState<
     | null
     | { filter: "all" | "FBA" | "FBM"; layout: "sheet" }
@@ -678,9 +679,13 @@ function AnalyzerPageContent() {
   const runManualAnalysis = useCallback(
     async (
       selectedSellerType: SellerType,
+      _isAutoRerun = false,
       identifierOverride?: string,
+      _isScannerTriggered = false,
       lookupOnly = false,
     ): Promise<void> => {
+      void _isAutoRerun;
+      void _isScannerTriggered;
       const effectiveIdentifier = normalizeLookupInput(identifierOverride ?? identifier);
       if (!effectiveIdentifier) {
         setErrorMessage("Enter ASIN/UPC/EAN before running manual analysis.");
