@@ -4,7 +4,6 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -48,11 +47,7 @@ type SavedProductsContextValue = {
 const SavedProductsContext = createContext<SavedProductsContextValue | null>(null);
 
 export function SavedProductsProvider({ children }: { children: ReactNode }) {
-  const [products, setProducts] = useState<ProductAnalysis[]>([]);
-
-  useEffect(() => {
-    setProducts(loadFromStorage());
-  }, []);
+  const [products, setProducts] = useState<ProductAnalysis[]>(() => loadFromStorage());
 
   const addProduct = useCallback((product: ProductAnalysis) => {
     setProducts((prev) => {

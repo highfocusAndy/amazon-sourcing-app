@@ -7,45 +7,40 @@ import { AmazonAccountModal } from "@/app/settings/AmazonAccountModal";
 /** Compact Amazon link/CTA for the mobile dashboard top bar (md+ uses page header). */
 export function MobileHeaderAmazon() {
   const { data: session } = useSession();
-  const [amazonConnected, setAmazonConnected] = useState(false);
-  const [amazonTitle, setAmazonTitle] = useState<string | null>(null);
+  const [amazonStatus, setAmazonStatus] = useState<{ connected: boolean; title: string | null }>({
+    connected: false,
+    title: null,
+  });
   const [modalOpen, setModalOpen] = useState(false);
 
   const refresh = useCallback(() => {
-    if (!session?.user) {
-      setAmazonConnected(false);
-      setAmazonTitle(null);
-      return;
-    }
     fetch("/api/settings/amazon-account")
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data?.connected) {
-          setAmazonConnected(true);
           const title =
             (data.storeName as string | undefined)?.trim() ||
             (data.connectionLabel as string | undefined) ||
             (data.emailMasked as string | undefined) ||
             "Amazon linked";
-          setAmazonTitle(title);
+          setAmazonStatus({ connected: true, title });
         } else {
-          setAmazonConnected(false);
-          setAmazonTitle(null);
+          setAmazonStatus({ connected: false, title: null });
         }
       })
       .catch(() => {
-        setAmazonConnected(false);
-        setAmazonTitle(null);
+        setAmazonStatus({ connected: false, title: null });
       });
-  }, [session?.user]);
+  }, []);
 
   useEffect(() => {
+    if (!session?.user) return;
     refresh();
-  }, [refresh]);
+  }, [refresh, session?.user]);
 
   if (!session?.user) return null;
 
-  if (!amazonConnected) {
+  if (!amazonStatus.connected) {
     return (
       <>
         <button
@@ -72,9 +67,9 @@ export function MobileHeaderAmazon() {
   return (
     <span
       className="max-w-[5.5rem] shrink-0 truncate text-right text-[10px] font-semibold leading-tight text-teal-200/90"
-      title={amazonTitle ?? "Amazon connected"}
+      title={amazonStatus.title ?? "Amazon connected"}
     >
-      {amazonTitle ?? "Amazon"}
+      {amazonStatus.title ?? "Amazon"}
     </span>
   );
 }

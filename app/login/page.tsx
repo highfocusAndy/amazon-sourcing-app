@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element */
 import { BrandBackdrop } from "@/app/components/BrandBackdrop";
 import { auth } from "@/auth";
 import { supportContactEmail } from "@/lib/supportContact";

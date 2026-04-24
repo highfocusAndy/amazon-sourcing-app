@@ -85,6 +85,10 @@ export interface CatalogItem {
   imageUrl: string | null;
   /** From `relationships` includedData: VARIATION links with parent and/or child ASINs. */
   hasVariationFamily?: boolean;
+  /** Parent ASINs from Catalog relationships for variation families. */
+  parentAsins?: string[];
+  /** Child ASINs from Catalog relationships for variation families. */
+  childAsins?: string[];
 }
 
 export interface CompetitivePricing {
@@ -243,9 +247,8 @@ function extractCatalogVariationFamilyFlag(itemObj: Record<string, unknown>): bo
       const childAsins = asArray(getField(rr, ["childAsins", "ChildAsins"]));
       const parentAsins = asArray(getField(rr, ["parentAsins", "ParentAsins"]));
       if (childAsins.length === 0 && parentAsins.length === 0) continue;
-      // Require an explicit VARIATION relationship. Parent/child ASINs with a missing or non-VARIATION type
-      // (e.g. package hierarchy) are not the same as a color/size variation family — omitting type caused "Yes" too often.
-      if (typeStr.includes("VARIATION")) {
+      // Prefer explicit VARIATION; if type is missing but Amazon sent parent/child ASINs, treat as variation family.
+      if (!typeStr || typeStr.includes("VARIATION")) {
         return true;
       }
     }
@@ -304,6 +307,92 @@ function buildNumericIdentifierCandidates(rawDigits: string): string[] {
   }
 
   return [...candidates].filter((candidate) => UPC_EAN_REGEX.test(candidate));
+}
+
+function normalizeFamilyTitleKey(title: string): string {
+  let t = title.toLowerCase();
+  t = t.replace(/\s*[|/]\s*/g, " ");
+  t = t.replace(/\bpack\s+of\s+\d+\b/g, " ");
+  t = t.replace(/\b\d+[-\s]?(pack|pk|pks|ct|count)\b/g, " ");
+  t = t.replace(/\bset\s+of\s+\d+\b/g, " ");
+  t = t.replace(/\b\d+(\.\d+)?\s*(fl\.?\s*oz|oz|ml|cl|l|lb|lbs|g|kg)\b/g, " ");
+  t = t.replace(/\b\d+(\.\d+)?\s*(ounce|ounces|gram|grams)\b/g, " ");
+  t = t.replace(/\s+/g, " ").trim();
+  return t;
+}
+
+function titleTokenSet(title: string): Set<string> {
+  const stop = new Set([
+    "the",
+    "a",
+    "an",
+    "and",
+    "or",
+    "with",
+    "for",
+    "from",
+    "by",
+    "of",
+    "to",
+    "in",
+    "on",
+    "pack",
+    "count",
+    "set",
+  ]);
+  const out = new Set<string>();
+  for (const raw of normalizeFamilyTitleKey(title).split(/\s+/)) {
+    const w = raw.replace(/[^a-z0-9]/g, "");
+    if (w.length < 2 || stop.has(w)) continue;
+    out.add(w);
+  }
+  return out;
+}
+
+function titleFamilyLooksCompatible(seedTitle: string, candidateTitle: string): boolean {
+  const a = titleTokenSet(seedTitle);
+  const b = titleTokenSet(candidateTitle);
+  if (a.size === 0 || b.size === 0) return false;
+  let inter = 0;
+  for (const tok of b) {
+    if (a.has(tok)) inter++;
+  }
+  const union = a.size + b.size - inter;
+  const jaccard = union > 0 ? inter / union : 0;
+  if (jaccard >= 0.5) return true;
+  const containment = inter / Math.min(a.size, b.size);
+  return containment >= 0.75 && inter >= 3;
+}
+
+function extractVariationRelationshipAsins(itemObj: Record<string, unknown>): {
+  parentAsins: string[];
+  childAsins: string[];
+} {
+  const parents = new Set<string>();
+  const children = new Set<string>();
+  const relByMkt = asArray(getField(itemObj, ["relationships", "Relationships"]));
+  for (const block of relByMkt) {
+    const m = asObject(block);
+    if (!m) continue;
+    const rels = asArray(getField(m, ["relationships", "Relationships"]));
+    for (const r of rels) {
+      const rr = asObject(r);
+      if (!rr) continue;
+      const typeRaw =
+        readString(getField(rr, ["type", "Type", "relationshipType", "RelationshipType"])) ?? "";
+      const typeStr = typeRaw.toUpperCase();
+      if (typeStr && !typeStr.includes("VARIATION")) continue;
+      for (const p of asArray(getField(rr, ["parentAsins", "ParentAsins"]))) {
+        const asin = readString(p)?.toUpperCase();
+        if (asin && ASIN_REGEX.test(asin)) parents.add(asin);
+      }
+      for (const c of asArray(getField(rr, ["childAsins", "ChildAsins"]))) {
+        const asin = readString(c)?.toUpperCase();
+        if (asin && ASIN_REGEX.test(asin)) children.add(asin);
+      }
+    }
+  }
+  return { parentAsins: [...parents], childAsins: [...children] };
 }
 
 function readSpApiConfig(marketplaceIdOverride?: string): SpApiConfig {
@@ -617,8 +706,110 @@ export class SpApiClient {
     }
 
     const hasVariationFamily = extractCatalogVariationFamilyFlag(itemObj);
+    const rel = extractVariationRelationshipAsins(itemObj);
 
-    return { asin, title, brand, rank, imageUrl, hasVariationFamily };
+    return {
+      asin,
+      title,
+      brand,
+      rank,
+      imageUrl,
+      hasVariationFamily,
+      parentAsins: rel.parentAsins,
+      childAsins: rel.childAsins,
+    };
+  }
+
+  /**
+   * Resolve the Amazon variation family for a child/parent ASIN using Catalog relationships.
+   * Returns full child listing rows when the relationship graph is available.
+   */
+  async resolveVariationFamilyItems(
+    anchorAsin: string,
+    maxResults: number = 250,
+  ): Promise<{
+    anchor: CatalogItem | null;
+    parentAsins: string[];
+    childAsins: string[];
+    items: CatalogItem[];
+    resolved: boolean;
+  }> {
+    const anchor = await this.fetchCatalogItem(anchorAsin).catch(() => null);
+    if (!anchor?.asin) {
+      return { anchor: null, parentAsins: [], childAsins: [], items: [], resolved: false };
+    }
+
+    const parentSet = new Set<string>((anchor.parentAsins ?? []).map((x) => x.toUpperCase()));
+    const childSet = new Set<string>((anchor.childAsins ?? []).map((x) => x.toUpperCase()));
+
+    // If anchor is itself a parent with children, keep it as a family root too.
+    if ((anchor.childAsins ?? []).length > 0) {
+      parentSet.add(anchor.asin.toUpperCase());
+    }
+
+    for (const parentAsin of [...parentSet]) {
+      const parentItem = await this.fetchCatalogItem(parentAsin).catch(() => null);
+      if (!parentItem) continue;
+      for (const c of parentItem.childAsins ?? []) {
+        const asin = c.toUpperCase();
+        if (ASIN_REGEX.test(asin)) childSet.add(asin);
+      }
+    }
+
+    // Parentless relationship payloads sometimes only expose siblings on the child block.
+    if (childSet.size === 0 && (anchor.childAsins ?? []).length > 0) {
+      for (const c of anchor.childAsins ?? []) {
+        const asin = c.toUpperCase();
+        if (ASIN_REGEX.test(asin)) childSet.add(asin);
+      }
+    }
+
+    // Ensure the scanned/exact item is present.
+    childSet.add(anchor.asin.toUpperCase());
+
+    let childAsins = [...childSet].slice(0, Math.max(1, maxResults));
+    const rows = await Promise.all(childAsins.map((asin) => this.fetchCatalogItem(asin).catch(() => null)));
+    const items = rows.filter((x): x is CatalogItem => Boolean(x));
+    const seen = new Set<string>();
+    const uniqueItems: CatalogItem[] = [];
+    for (const row of items) {
+      const asin = row.asin.toUpperCase();
+      if (seen.has(asin)) continue;
+      seen.add(asin);
+      uniqueItems.push(row);
+    }
+
+    // Fallback expansion path:
+    // if relationships are missing/partial, query by anchor title and cluster same brand+family line.
+    if (items.length < Math.min(8, maxResults)) {
+      const keyword = anchor.title.slice(0, 84).trim();
+      if (keyword.length >= 6) {
+        const expanded = await this.searchCatalogByKeywordMultiple(keyword, Math.max(80, maxResults)).catch(() => []);
+        const anchorBrand = anchor.brand.trim().toLowerCase();
+        for (const it of expanded) {
+          if (!it.asin || seen.has(it.asin.toUpperCase())) continue;
+          const sameBrand =
+            !anchorBrand ||
+            (it.brand || "").trim().toLowerCase() === anchorBrand ||
+            (it.brand || "").trim().toLowerCase().includes(anchorBrand) ||
+            anchorBrand.includes((it.brand || "").trim().toLowerCase());
+          if (!sameBrand) continue;
+          if (!titleFamilyLooksCompatible(anchor.title, it.title)) continue;
+          seen.add(it.asin.toUpperCase());
+          uniqueItems.push(it);
+        }
+      }
+    }
+
+    childAsins = uniqueItems.map((x) => x.asin.toUpperCase()).slice(0, Math.max(1, maxResults));
+    const resolved = parentSet.size > 0 || childSet.size > 1;
+    return {
+      anchor,
+      parentAsins: [...parentSet],
+      childAsins,
+      items: uniqueItems,
+      resolved,
+    };
   }
 
   private extractPricing(data: unknown): CompetitivePricing {

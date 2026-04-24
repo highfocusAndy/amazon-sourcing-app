@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable @next/next/no-img-element */
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -293,9 +294,11 @@ function MobileMenuOpenButton({ onClick, menuOpen }: { onClick: () => void; menu
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+  const [mobileDrawerPathname, setMobileDrawerPathname] = useState(pathname);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [aiChatOpen, setAiChatOpen] = useState(false);
   const [openaiConfigured, setOpenaiConfigured] = useState<boolean | null>(null);
+  const mobileDrawerVisible = mobileDrawerOpen && mobileDrawerPathname === pathname;
 
   useEffect(() => {
     fetch("/api/config", { credentials: "same-origin" })
@@ -307,17 +310,13 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    setMobileDrawerOpen(false);
-  }, [pathname]);
-
-  useEffect(() => {
-    if (!mobileDrawerOpen) return;
+    if (!mobileDrawerVisible) return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
       document.body.style.overflow = prev;
     };
-  }, [mobileDrawerOpen]);
+  }, [mobileDrawerVisible]);
 
   return (
     <SavedProductsProvider>
@@ -329,7 +328,13 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             <header className="sticky top-0 z-40 shrink-0 border-b border-slate-700/80 bg-slate-900/95 px-3 py-2 backdrop-blur-md md:hidden">
               <div className="flex min-w-0 items-center gap-2 sm:gap-3">
                 <div className="flex shrink-0 flex-col items-center gap-1">
-                  <MobileMenuOpenButton onClick={() => setMobileDrawerOpen(true)} menuOpen={mobileDrawerOpen} />
+                  <MobileMenuOpenButton
+                    onClick={() => {
+                      setMobileDrawerPathname(pathname);
+                      setMobileDrawerOpen(true);
+                    }}
+                    menuOpen={mobileDrawerVisible}
+                  />
                   <span
                     className="max-w-[4.25rem] text-center text-[9px] font-semibold uppercase leading-tight tracking-wide text-slate-400"
                     title={mobilePageTitle(pathname)}
@@ -347,7 +352,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                 <MobileHeaderAmazon />
               </div>
             </header>
-            {mobileDrawerOpen ? (
+            {mobileDrawerVisible ? (
               <button
                 type="button"
                 className="fixed inset-0 z-[45] bg-slate-950/50 backdrop-blur-[1px] md:hidden"
@@ -356,13 +361,13 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               />
             ) : null}
             <LeftNavWithCategories
-              mobileDrawerOpen={mobileDrawerOpen}
+              mobileDrawerOpen={mobileDrawerVisible}
               onCloseMobileMenu={() => setMobileDrawerOpen(false)}
               onOpenSettings={() => setSettingsModalOpen(true)}
               onOpenAiChat={() => setAiChatOpen(true)}
             />
             <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">{children}</div>
-            {!mobileDrawerOpen && !pathname.startsWith("/analyzer") ? (
+            {!mobileDrawerVisible && !pathname.startsWith("/analyzer") ? (
               <button
                 type="button"
                 onClick={() => setSettingsModalOpen(true)}
@@ -373,7 +378,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                 <span aria-hidden>⚙</span>
               </button>
             ) : null}
-            {!mobileDrawerOpen ? (
+            {!mobileDrawerVisible ? (
               <button
                 type="button"
                 onClick={() => setAiChatOpen(true)}

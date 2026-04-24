@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable @next/next/no-img-element */
 
 import { HeaderAuth } from "@/app/components/HeaderAuth";
 import { useSavedProducts } from "@/app/context/SavedProductsContext";

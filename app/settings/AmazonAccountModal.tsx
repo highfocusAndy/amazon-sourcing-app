@@ -5,13 +5,11 @@ import { createPortal } from "react-dom";
 import { AmazonAccountForm } from "./AmazonAccountForm";
 
 export function AmazonAccountModal({ onClose }: { onClose: () => void }) {
-  const [mounted, setMounted] = useState(false);
   const [status, setStatus] = useState<{
     connected: boolean;
     emailMasked?: string;
     connectionLabel?: string;
   } | null>(null);
-  useEffect(() => setMounted(true), []);
 
   useEffect(() => {
     function handleEscape(e: KeyboardEvent) {
@@ -75,7 +73,7 @@ export function AmazonAccountModal({ onClose }: { onClose: () => void }) {
     </div>
   );
 
-  if (!mounted || typeof document === "undefined") return null;
+  if (typeof document === "undefined") return null;
   return createPortal(modal, document.body);
 }
 

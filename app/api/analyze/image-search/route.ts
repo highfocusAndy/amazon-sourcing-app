@@ -8,21 +8,21 @@ import {
 } from "@/lib/amazonAccount";
 import type { CatalogItem } from "@/lib/spApiClient";
 import { buildCatalogOnlyResult } from "@/lib/analysis";
-import type { ProductFormatKind } from "@/lib/imageSearchRanking";
 import {
-  catalogBrandCompatibleWithSeed,
-  catalogItemMatchesPackageBrand,
-  filterByFormatKeywords,
-  filterByProductFormat,
-  filterToSameProductLine,
-  formatKeywordsFallbackFromEnum,
-  inferProductFormatFromBlob,
-  parseProductFormField,
-  parseVisionProductJson,
-  rankCatalogItemsByImageHints,
-  scoreTitleAgainstHints,
-  titleMatchesFormatKeywords,
+  buildStableAmazonIdentityQuery,
+  buildVisionParseFromCatalogSeed,
+  catalogBrandsCompatibleForFamily,
+  catalogItemSameProductFamilyLine,
+  catalogTitleMatchesAuxProductType,
+  catalogTitleMatchesProductFamily,
+  classifyFamilyMatch,
+  detectCatalogCanonicalProductType,
+  detectMultipackInTitle,
+  familyTokens,
+  parseVisionProductFamilyJson,
+  sortByFamilyMatchGroup,
   strictPackageBrandFromVision,
+  type VisionProductFamilyParse,
 } from "@/lib/imageSearchRanking";
 import type { ProductAnalysis } from "@/lib/types";
 import { consumeMonthlyUsage } from "@/lib/usageQuota";
@@ -31,33 +31,222 @@ export const runtime = "nodejs";
 
 const MAX_BYTES = 4 * 1024 * 1024;
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
-/** After brand match, expand by catalog title (same pattern as variations API) to include pack/size ASINs. */
-const IMAGE_SEARCH_EXPAND_MAX = 100;
+/** Cap on rows we'll fetch from SP-API and consider for family matching. */
+const FAMILY_SEARCH_FETCH_CAP = 100;
+/** Product type must be explicitly identified with high confidence before family search. */
+const MIN_PRODUCT_TYPE_CONFIDENCE = 0.72;
+/** Extremely low vision confidence means the image is unusable. */
+const MIN_USABLE_IMAGE_CONFIDENCE = 0.12;
+const LOW_PRODUCT_TYPE_CONFIDENCE = 0.5;
 
-function firstLine(text: string): string {
-  return text
-    .trim()
-    .split(/\r?\n/)
-    .map((s) => s.trim())
-    .find(Boolean) ?? "";
+const NOTICE_UNCLEAR =
+  "Unable to confidently identify the product. Please rescan.";
+const NOTICE_NOT_ON_AMAZON =
+  "This product does not appear to be listed on Amazon yet.";
+
+const VISION_PROMPT = `You analyze one retail product photo. Your job is to extract a STABLE PRODUCT IDENTITY for Amazon catalog lookup — not loose keywords, not brand-only guesses.
+
+Return ONLY valid JSON (no markdown, no code fences, no commentary) with this exact shape:
+
+{
+  "barcode_detected": false,
+  "barcode_value": "",
+  "brand": "",
+  "package_form": "",
+  "product_type": "",
+  "product_type_confidence": 0,
+  "core_product_family": "",
+  "product_name": "",
+  "variant": "",
+  "size": "",
+  "count": "",
+  "flavor_scent_color": "",
+  "model_number": "",
+  "visible_text": [],
+  "confidence": 0
+}
+
+Rules — strict; do not invent; same photo must always yield the same JSON:
+
+- "barcode_detected" / "barcode_value": true ONLY when a UPC/EAN/GTIN is clearly readable. Digits only, 8–14 chars. Otherwise false and "".
+
+- "brand": Manufacturer name as printed (logo area, ®/™). NOT the biggest front word, NOT scent/material/generic nouns (shampoo, lotion, olive, lavender, silicone, case, …). If unsure, "".
+
+- "package_form": One of: "pump bottle", "tube", "tall bottle", "oil bottle", "jar", or "" if unclear.
+
+- "product_type" (REQUIRED for confident output): choose ONLY one canonical value:
+  - "lotion"
+  - "shampoo"
+  - "conditioner"
+  - "oil"
+  - "cream"
+  - "cleanser"
+  Use packaging shape + label structure first (not vague words like "olive", "care", "treatment").
+
+- "product_type_confidence": 0..1 confidence for product_type only. Keep low when uncertain, blurred, or conflicting cues.
+
+- "core_product_family" (required for a confident match): The specific product LINE name as printed, brand stripped — the words that distinguish this line from OTHER lines the same brand sells. Never only the brand. Never vague buckets like "olive hair care". Examples: "Daily Moisture Body Lotion", "Clinical Strength Antiperspirant", "Vitamin C 1000mg Tablets".
+
+- "product_name": Full front-of-pack marketing name if readable.
+
+- "variant", "size", "count", "flavor_scent_color", "model_number": Only when printed.
+
+- "visible_text": Up to 10 short phrases EXACTLY as printed on the package (for audit only — NOT a keyword list for search). No invented phrases.
+
+- "confidence": 0..1 overall product identity confidence. Use ≤ 0.15 when blurry/dark/partial/not a product. Use ≤ 0.35 when you cannot read both a credible brand OR a specific product line. Never output high confidence from guessing.
+
+If unusable, return empty strings, false barcode, "confidence": 0.`;
+
+/**
+ * Common scent / material / color / generic words that vision models sometimes pick up as the "brand"
+ * when a package puts that word in big front-of-box letters. We use this to scrub a clearly-wrong brand
+ * before running the catalog search.
+ */
+const VARIANT_LIKE_BRAND_WORDS = new Set([
+  "olive",
+  "lavender",
+  "mint",
+  "vanilla",
+  "rose",
+  "jasmine",
+  "cocoa",
+  "chocolate",
+  "almond",
+  "citrus",
+  "lemon",
+  "mango",
+  "ocean",
+  "fresh",
+  "natural",
+  "pure",
+  "original",
+  "classic",
+  "silicone",
+  "leather",
+  "cotton",
+  "wood",
+  "glass",
+  "shampoo",
+  "soap",
+  "lotion",
+  "oil",
+  "cream",
+  "gel",
+  "wipes",
+  "case",
+  "cable",
+  "spray",
+]);
+
+function brandLooksLikeVariantWord(brand: string): boolean {
+  const cleaned = brand.trim().toLowerCase().replace(/[^a-z0-9\s]/g, "").trim();
+  if (!cleaned) return false;
+  const words = cleaned.split(/\s+/);
+  if (words.length === 1) return VARIANT_LIKE_BRAND_WORDS.has(words[0]!);
+  return false; // multi-word brands are usually real (e.g. "Tropic Isle Living")
+}
+
+/**
+ * Strict brand match: when vision read a brand from the package, require the catalog row's
+ * `brand` field (NOT the title) to actually match. This is what stops "olive" appearing in a
+ * title from passing as if it were the brand.
+ *
+ * - Empty package brand → always pass (unbranded items, generic accessories).
+ * - Package brand vs catalog brand: case-insensitive exact OR one contains the other (handles
+ *   "ibi" vs "IBI", "Tropic Isle" vs "Tropic Isle Living").
+ */
+function strictCatalogBrandMatch(catalogBrand: string, packageBrand: string | null): boolean {
+  if (!packageBrand) return true;
+  const pb = packageBrand.trim().toLowerCase();
+  if (pb.length < 2) return true;
+  const cb = catalogBrand.trim().toLowerCase();
+  if (!cb) return false;
+  if (cb === pb) return true;
+  if (cb.includes(pb) || pb.includes(cb)) return true;
+  return false;
+}
+
+type ScanLogEntry = {
+  asin: string;
+  title: string;
+  status: "accepted" | "rejected";
+  reason: string;
+};
+
+type ProductTypeMode = "high" | "medium" | "low" | "unknown";
+
+function logScanResults(label: string, entries: ScanLogEntry[]): void {
+  if (entries.length === 0) return;
+  const accepted = entries.filter((e) => e.status === "accepted");
+  const rejected = entries.filter((e) => e.status === "rejected");
+  console.log(
+    `[image-search] ${label} → ${accepted.length} accepted, ${rejected.length} rejected`,
+  );
+  for (const e of entries.slice(0, 30)) {
+    console.log(
+      `[image-search]   ${e.status === "accepted" ? "✓" : "✗"} ${e.asin} :: ${e.reason} :: ${e.title.slice(0, 90)}`,
+    );
+  }
+}
+
+function normalizeFormBarcode(raw: unknown): string {
+  if (typeof raw !== "string") return "";
+  return raw.replace(/\D/g, "").trim();
+}
+
+function titleMatchesVisibleText(title: string, visibleText: string[]): boolean {
+  if (visibleText.length === 0) return false;
+  const t = title.toLowerCase();
+  const cues = visibleText
+    .map((x) => x.trim().toLowerCase())
+    .filter((x) => x.length >= 4)
+    .slice(0, 10);
+  if (cues.length === 0) return false;
+  let hits = 0;
+  for (const cue of cues) {
+    if (t.includes(cue)) hits++;
+  }
+  return hits >= 1;
+}
+
+function inferTypeMode(parse: VisionProductFamilyParse): ProductTypeMode {
+  if (!parse.product_type.trim()) return "unknown";
+  if (parse.product_type_confidence >= MIN_PRODUCT_TYPE_CONFIDENCE) return "high";
+  if (parse.product_type_confidence >= LOW_PRODUCT_TYPE_CONFIDENCE) return "medium";
+  return "low";
+}
+
+function imageIdentityIsUsable(parse: VisionProductFamilyParse): boolean {
+  if (parse.confidence >= MIN_USABLE_IMAGE_CONFIDENCE) return true;
+  const hasIdentitySignal = Boolean(
+    parse.brand.trim() ||
+      parse.product_name.trim() ||
+      parse.core_product_family.trim() ||
+      parse.visible_text.length > 0,
+  );
+  return hasIdentitySignal;
+}
+
+const PRODUCT_TYPE_TOKENS = ["lotion", "shampoo", "conditioner", "oil", "cream", "cleanser"] as const;
+
+function isLikelyCrossProductBundleTitle(title: string, parse: VisionProductFamilyParse): boolean {
+  const t = title.toLowerCase();
+  const hasBundleCue =
+    /\b(bundle|combo|kit|set|value\s*pack|gift\s*set|with)\b/.test(t) || /\s&\s/.test(t);
+  if (!hasBundleCue) return false;
+  const expected = parse.product_type.trim().toLowerCase();
+  const typesInTitle = PRODUCT_TYPE_TOKENS.filter((tok) => t.includes(tok));
+  if (typesInTitle.length >= 2) return true;
+  if (expected && typesInTitle.length >= 1 && !typesInTitle.includes(expected as (typeof PRODUCT_TYPE_TOKENS)[number])) {
+    return true;
+  }
+  const family = parse.core_product_family.trim().toLowerCase();
+  if (family && !t.includes(family) && /\bwith\b/.test(t)) return true;
+  return false;
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
-    const apiKey = process.env.OPENAI_API_KEY?.trim();
-    if (!apiKey) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error:
-            "Photo-based product search is not enabled on this server. Set OPENAI_API_KEY, or use a barcode/keyword.",
-          code: "VISION_UNAVAILABLE",
-          results: [] as ProductAnalysis[],
-        },
-        { status: 503 },
-      );
-    }
-
     const gate = await requireAppAccess();
     if (!gate.ok) return gate.response;
 
@@ -69,6 +258,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     const form = await request.formData();
+    const formBarcodeDigits = normalizeFormBarcode(form.get("barcode"));
+    const formBarcodeOk = formBarcodeDigits.length >= 8 && formBarcodeDigits.length <= 14;
+
     const image = form.get("image");
     if (!(image instanceof Blob)) {
       return NextResponse.json({ ok: false, error: "Missing image file.", results: [] }, { status: 400 });
@@ -86,6 +278,79 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json(
         { ok: false, error: "Image too large (max 4 MB).", results: [] },
         { status: 413 },
+      );
+    }
+
+    const client = await getSpApiClientForUserOrGlobal(gate.userId);
+    if (!client) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: SP_API_UNAVAILABLE_USER_MESSAGE,
+          results: [],
+        },
+        { status: 503 },
+      );
+    }
+
+    const pageSize = Math.min(30, Math.max(1, parseInt(form.get("pageSize")?.toString() ?? "20", 10) || 20));
+
+    // -----------------------------------------------------------------
+    // Client / hardware barcode first (before vision — no LLM cost).
+    // -----------------------------------------------------------------
+    if (formBarcodeOk) {
+      const seedFromForm = await client.resolveCatalogItem(formBarcodeDigits).catch(() => null);
+      if (seedFromForm) {
+        const usageEarly = await consumeMonthlyUsage(gate.userId, "keyword_search");
+        if (!usageEarly.ok) {
+          return NextResponse.json(
+            {
+              ok: false,
+              error: "Monthly keyword-search limit reached for your plan.",
+              errorDetail: {
+                code: "USAGE_LIMIT",
+                metric: usageEarly.metric,
+                period: usageEarly.periodKey,
+                used: usageEarly.used,
+                limit: usageEarly.limit,
+              },
+              results: [],
+            },
+            { status: 429 },
+          );
+        }
+        const parseFromBarcode = buildVisionParseFromCatalogSeed(seedFromForm);
+        console.log(
+          `[image-search] form barcode ${formBarcodeDigits} resolved → ${seedFromForm.asin} :: ${seedFromForm.title.slice(0, 90)}`,
+        );
+        const grouped = await collectFamilyResults({
+          client,
+          parse: parseFromBarcode,
+          seed: seedFromForm,
+          seedReason: "exact barcode match",
+        });
+        return NextResponse.json({
+          ok: true,
+          results: grouped.results.slice(0, Math.max(pageSize, grouped.results.length)),
+          derivedQuery: formBarcodeDigits,
+          matchPath: "barcode",
+          visionParse: null,
+        });
+      }
+      console.log(`[image-search] form barcode ${formBarcodeDigits} → not in catalog; continuing with vision`);
+    }
+
+    const apiKey = process.env.OPENAI_API_KEY?.trim();
+    if (!apiKey) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            "Photo-based product search is not enabled on this server. Set OPENAI_API_KEY, or use a barcode/keyword.",
+          code: "VISION_UNAVAILABLE",
+          results: [] as ProductAnalysis[],
+        },
+        { status: 503 },
       );
     }
 
@@ -123,40 +388,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       },
       body: JSON.stringify({
         model: visionModel,
-        max_tokens: 720,
+        max_tokens: 700,
+        /** Deterministic so the same photo gives the same JSON every time the user re-scans. */
+        temperature: 0,
+        response_format: { type: "json_object" },
         messages: [
           {
             role: "user",
             content: [
-              {
-                type: "text",
-                text: `You analyze product photos for Amazon FBA catalog search. Images may show:
-- Retail packaging (box, label, hang tag)
-- A loose or unboxed product (phone case, cable, accessory on a desk, in hand)
-- Close-ups with little or no branding
-
-Return ONLY valid JSON (no markdown, no code fences, no commentary) with this exact shape:
-{"query":"...","match_hints":["..."],"brand":"...","upc_ean":"","product_form":"","format_keywords":[]}
-
-Rules:
-- "brand": The brand or trademark exactly as printed on the product or package. Use "" if there is no readable brand, if the item looks generic/unbranded, or only a store/private label with no name visible.
-- "upc_ean": If a UPC, EAN, or GTIN barcode number is clearly visible, digits only (8–14), no spaces. Otherwise "".
-- "query": English Amazon keyword search (max 22 words). Must read like the **specific product** in the photo — full product line name, flavor/scent, size, model #, or pack count as shown — **not** brand name alone.
-  - When a brand is visible: brand + **exact line/product name on the package** (e.g. product series, variant name, SKU words) + size/count/volume/color so a search would not return unrelated SKUs from that brand.
-  - When NO brand is visible (common for phone cases, cables, generic accessories): build a **specific** search from what you see — product type (e.g. phone case, screen protector, USB cable), color/pattern, material (silicone, TPU, leather, clear), compatibility clues (e.g. iPhone 15 Pro Max, Samsung Galaxy, Pixel, USB-C, Lightning, MagSafe), and features (wallet, kickstand, card slot, glitter, shockproof). Combine enough terms to narrow results; avoid a single generic word like "case" alone.
-  - Never return an empty "query" unless the image is unusable (not a product, totally blurry, or lens blocked).
-- "match_hints": 5–12 phrases (2–8 words) that **pin this exact SKU**: include the **printed product name/line**, flavor, scent, net weight/volume with units, pack count (single vs 2-pack), color, model compatibility, and any distinctive words from the label. At least half the hints should be phrases that would **not** match a different product from the same brand. When unbranded, use descriptive hints only — do not invent a brand.
-- **Flavor / scent / color variant is mandatory when visible:** If the package shows Vanilla, Cocoa, Chocolate, Strawberry, Lavender, Mint, a specific color name, etc., you MUST copy that exact word into both "query" and several match_hints. A different flavor (e.g. Cocoa vs Vanilla) is a **different ASIN** — missing the visible variant causes wrong results.
-- **Product line vs brand:** The search query and hints must identify the **specific product name/line** on the package (e.g. exact collection or product family), not only the brand — otherwise unrelated SKUs from the same brand will appear.
-- **product_form (required):** Coarse bucket — **not** the scent. One of: spray | hanging_tree | vent_clip | wipes | unknown. Use **unknown** if none fit.
-- **format_keywords (required):** 3–8 short phrases (1–4 words each) describing **only** the physical product type and packaging — same for **every** category (food, electronics, beauty, automotive, toys, etc.). What you would type to distinguish this from a **different** SKU from the same brand: e.g. "spray bottle", "pump dispenser", "squeeze tube", "glass jar", "blister pack", "folding carton", "pod capsule", "hanging paper tree", "wireless earbuds case", "usb-c cable", "roll-on", "stick deodorant", "resealable pouch", "trigger spray". Do **not** put brand names here; put scent/flavor here **only** if it is the main label distinction. This keeps catalog results on the **same kind of product** as the photo.
-
-Use {"query":"","match_hints":[],"brand":"","upc_ean":"","product_form":"","format_keywords":[]} only when the photo shows no recognizable product or is unreadable.`,
-              },
-              {
-                type: "image_url",
-                image_url: { url: dataUrl, detail: visionDetail },
-              },
+              { type: "text", text: VISION_PROMPT },
+              { type: "image_url", image_url: { url: dataUrl, detail: visionDetail } },
             ],
           },
         ],
@@ -180,168 +421,275 @@ Use {"query":"","match_hints":[],"brand":"","upc_ean":"","product_form":"","form
       choices?: Array<{ message?: { content?: string | null } }>;
     };
     const rawContent = completion.choices?.[0]?.message?.content?.trim() ?? "";
+    const parseRaw = parseVisionProductFamilyJson(rawContent);
 
-    const parsed = parseVisionProductJson(rawContent);
-    let derivedQuery: string;
-    let matchHints: string[];
-
-    let visionBrand: string | undefined;
-    let upcDigits: string | undefined;
-    let productFormat: ProductFormatKind | null = null;
-    let formatKeywords: string[] = [];
-
-    if (parsed) {
-      derivedQuery = parsed.query;
-      matchHints = parsed.match_hints;
-      visionBrand = parsed.brand;
-      upcDigits = parsed.upc_ean;
-      productFormat =
-        parseProductFormField(parsed.product_form) ?? inferProductFormatFromBlob(derivedQuery, matchHints);
-      formatKeywords = parsed.format_keywords?.length ? parsed.format_keywords : [];
-      if (formatKeywords.length === 0 && productFormat) {
-        formatKeywords = formatKeywordsFallbackFromEnum(productFormat);
-      }
-    } else {
-      const line = firstLine(rawContent).replace(/^["']|["']$/g, "").trim();
-      if (!line || /^UNKNOWN$/i.test(line)) {
-        return NextResponse.json({
-          ok: true,
-          results: [] as ProductAnalysis[],
-          derivedQuery: null,
-        });
-      }
-      derivedQuery = line;
-      matchHints = [];
-      productFormat = inferProductFormatFromBlob(derivedQuery, []);
-      if (productFormat) formatKeywords = formatKeywordsFallbackFromEnum(productFormat);
+    /**
+     * Scrub a clearly-wrong "brand": when a single word like "olive" or "shampoo" is returned,
+     * vision almost certainly picked the largest word on the package (which is the variant, not
+     * the brand). Drop it to "" so the search doesn't get poisoned by every olive-themed product.
+     */
+    let parse = parseRaw;
+    if (parse && parse.brand && brandLooksLikeVariantWord(parse.brand)) {
+      const scrubbedBrand = parse.brand;
+      console.log(`[image-search] dropping suspect brand "${scrubbedBrand}" (looks like variant word)`);
+      parse = {
+        ...parse,
+        brand: "",
+        variant: parse.variant ? parse.variant : scrubbedBrand,
+      };
     }
 
-    if (!derivedQuery) {
+    const derivedQuery = parse ? buildStableAmazonIdentityQuery(parse) : "";
+    console.log(
+      "[image-search] vision parse →",
+      parse
+        ? {
+            barcode: parse.barcode_value || null,
+            brand: parse.brand || null,
+            package_form: parse.package_form || null,
+            family: parse.core_product_family || null,
+            product_type: parse.product_type || null,
+            product_type_confidence: parse.product_type_confidence,
+            product_name: parse.product_name || null,
+            variant: parse.variant || null,
+            size: parse.size || null,
+            count: parse.count || null,
+            confidence: parse.confidence,
+          }
+        : "INVALID_JSON",
+    );
+
+    if (!parse) {
       return NextResponse.json({
         ok: true,
         results: [] as ProductAnalysis[],
         derivedQuery: null,
+        imageUnclear: true,
+        notice: NOTICE_UNCLEAR,
       });
     }
 
-    const client = await getSpApiClientForUserOrGlobal(gate.userId);
-    if (!client) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: SP_API_UNAVAILABLE_USER_MESSAGE,
-          results: [],
-        },
-        { status: 503 },
+    // ---------------------------------------------------------------
+    // Vision-read barcode (only when explicitly detected — no false positives)
+    // ---------------------------------------------------------------
+    if (parse.barcode_detected && parse.barcode_value) {
+      const seed = await client.resolveCatalogItem(parse.barcode_value).catch(() => null);
+      if (seed) {
+        console.log(
+          `[image-search] vision barcode ${parse.barcode_value} resolved → ${seed.asin} :: ${seed.title.slice(0, 90)}`,
+        );
+        const parseFromBarcode = buildVisionParseFromCatalogSeed(seed);
+        const grouped = await collectFamilyResults({
+          client,
+          parse: parseFromBarcode,
+          seed,
+          seedReason: "exact barcode match",
+        });
+        return NextResponse.json({
+          ok: true,
+          results: grouped.results.slice(0, Math.max(pageSize, grouped.results.length)),
+          derivedQuery: parse.barcode_value,
+          matchPath: "barcode",
+          visionParse: parse,
+        });
+      }
+      console.log(
+        `[image-search] vision barcode ${parse.barcode_value} → not in catalog; falling back to packaging identity`,
       );
     }
 
-    const pageSize = Math.min(30, Math.max(1, parseInt(form.get("pageSize")?.toString() ?? "20", 10) || 20));
-    /** Fetch extra catalog rows so we can re-rank toward brand + pack matches, then trim. */
-    const fetchCap = Math.min(60, Math.max(pageSize * 2, 36));
-
-    let fromIdentifier: CatalogItem | null = null;
-    if (upcDigits) {
-      fromIdentifier = await client.resolveCatalogItem(upcDigits).catch(() => null);
+    // ---------------------------------------------------------------
+    // Image / packaging identity (strict — no broad search)
+    // ---------------------------------------------------------------
+    if (!imageIdentityIsUsable(parse)) {
+      console.log(
+        `[image-search] image unusable (confidence=${parse.confidence}) with insufficient identity signals`,
+      );
+      return NextResponse.json({
+        ok: true,
+        results: [] as ProductAnalysis[],
+        derivedQuery: derivedQuery || null,
+        imageUnclear: true,
+        notice: NOTICE_UNCLEAR,
+        visionParse: parse,
+      });
     }
 
-    const rawItems = await client.searchCatalogByKeywordMultiple(derivedQuery, fetchCap);
-    const seenAsin = new Set<string>();
-    const merged: typeof rawItems = [];
-    if (fromIdentifier) {
-      merged.push(fromIdentifier);
-      seenAsin.add(fromIdentifier.asin);
+    const typeMode = inferTypeMode(parse);
+
+    if (!parse.core_product_family.trim()) {
+      console.log("[image-search] vision returned no core_product_family → not listed");
+      return NextResponse.json({
+        ok: true,
+        results: [] as ProductAnalysis[],
+        derivedQuery: derivedQuery || null,
+        notFoundOnAmazon: true,
+        notice: NOTICE_NOT_ON_AMAZON,
+        visionParse: parse,
+      });
     }
-    for (const it of rawItems) {
-      if (!seenAsin.has(it.asin)) {
-        seenAsin.add(it.asin);
-        merged.push(it);
+
+    /**
+     * Without a brand anchor we need the product family to be specific enough on its own.
+     * Generic 1–2 token families like "Hair Care", "Lotion", "Soap" match thousands of
+     * unrelated SKUs — refuse to guess.
+     */
+    const familyTokenList = familyTokens(parse.core_product_family);
+    const typeTokenList = familyTokens(parse.product_type);
+    if (!parse.brand.trim() && familyTokenList.length < 2 && typeTokenList.length < 2) {
+      console.log(
+        `[image-search] no brand + generic family "${parse.core_product_family}" → unclear / not specific enough`,
+      );
+      return NextResponse.json({
+        ok: true,
+        results: [] as ProductAnalysis[],
+        derivedQuery: derivedQuery || null,
+        imageUnclear: true,
+        notice: NOTICE_UNCLEAR,
+        visionParse: parse,
+      });
+    }
+
+    const keyword =
+      derivedQuery.trim() ||
+      [parse.brand, parse.core_product_family, parse.product_type].filter(Boolean).join(" ").trim();
+    if (!keyword) {
+      return NextResponse.json({
+        ok: true,
+        results: [] as ProductAnalysis[],
+        derivedQuery: null,
+        imageUnclear: true,
+        notice: NOTICE_UNCLEAR,
+        visionParse: parse,
+      });
+    }
+
+    const rawItems = await client.searchCatalogByKeywordMultiple(keyword, FAMILY_SEARCH_FETCH_CAP);
+    console.log(`[image-search] identity "${keyword}" → ${rawItems.length} catalog hits`);
+
+    const packageBrand = strictPackageBrandFromVision(parse.brand);
+    const log: ScanLogEntry[] = [];
+
+    const strictCandidates: CatalogItem[] = [];
+    const relaxedCandidates: CatalogItem[] = [];
+    const softFamilyRequired = parse.core_product_family.trim().length > 0;
+    for (const item of rawItems) {
+      if (!item.asin) continue;
+      if (!strictCatalogBrandMatch(item.brand, packageBrand)) {
+        log.push({
+          asin: item.asin,
+          title: item.title,
+          status: "rejected",
+          reason: `brand mismatch (catalog="${item.brand}" vs package="${packageBrand}")`,
+        });
+        continue;
       }
+      const familyMatch = softFamilyRequired
+        ? catalogTitleMatchesProductFamily(item.title, parse.core_product_family)
+        : false;
+      const visibleCueMatch = titleMatchesVisibleText(item.title, parse.visible_text);
+      const productNameCue = parse.product_name.trim()
+        ? item.title.toLowerCase().includes(parse.product_name.trim().toLowerCase())
+        : false;
+      const familyOrCue = familyMatch || visibleCueMatch || productNameCue;
+      if (!familyOrCue) {
+        log.push({
+          asin: item.asin,
+          title: item.title,
+          status: "rejected",
+          reason: "same brand, different product line",
+        });
+        continue;
+      }
+      if (isLikelyCrossProductBundleTitle(item.title, parse)) {
+        log.push({
+          asin: item.asin,
+          title: item.title,
+          status: "rejected",
+          reason: "bundle/combo listing does not match standalone scanned product",
+        });
+        continue;
+      }
+
+      const strictTypeMatch = parse.product_type.trim()
+        ? catalogTitleMatchesAuxProductType(item.title, parse.product_type)
+        : true;
+      const titleType = detectCatalogCanonicalProductType(item.title);
+      const clearlyWrongType =
+        Boolean(parse.product_type.trim()) &&
+        Boolean(titleType) &&
+        titleType !== parse.product_type;
+
+      // Strict set (preferred): full family + type lock when confidence is high/medium.
+      const strictByType =
+        typeMode === "high" ? strictTypeMatch : typeMode === "medium" ? !clearlyWrongType : true;
+      if (familyMatch && strictByType) {
+        strictCandidates.push(item);
+      }
+
+      // Relaxed set (fallback): keep family/cue + brand, only reject clearly wrong type at high confidence.
+      if (typeMode === "high" && clearlyWrongType) {
+        log.push({
+          asin: item.asin,
+          title: item.title,
+          status: "rejected",
+          reason: "clearly wrong product type",
+        });
+        continue;
+      }
+      relaxedCandidates.push(item);
     }
 
-    /** Only narrow the catalog pool when the model actually read a brand — avoids empty results for generic items. */
-    const packageBrandStrict = strictPackageBrandFromVision(visionBrand);
-    let pool = merged;
-    if (packageBrandStrict) {
-      let narrowed = merged.filter((it) => catalogItemMatchesPackageBrand(it, packageBrandStrict));
-      if (narrowed.length === 0) {
-        const retryItems = await client.searchCatalogByKeywordMultiple(packageBrandStrict, fetchCap);
-        const seen = new Set(merged.map((x) => x.asin));
-        const combined = [...merged];
-        for (const it of retryItems) {
-          if (!seen.has(it.asin)) {
-            seen.add(it.asin);
-            combined.push(it);
-          }
-        }
-        narrowed = combined.filter((it) => catalogItemMatchesPackageBrand(it, packageBrandStrict));
-      }
-      if (narrowed.length > 0) {
-        pool = narrowed;
-      } else {
-        // Avoid showing unrelated brands when the package brand is known but not in catalog hits.
-        pool = [];
-      }
+    const candidates = strictCandidates.length > 0 ? strictCandidates : relaxedCandidates;
+    const usedRelaxedFilter = strictCandidates.length === 0 && relaxedCandidates.length > 0;
+    if (candidates.length === 0) {
+      logScanResults("family filter (no matches)", log);
+      return NextResponse.json({
+        ok: true,
+        results: [] as ProductAnalysis[],
+        derivedQuery,
+        notFoundOnAmazon: true,
+        notice: NOTICE_NOT_ON_AMAZON,
+        visionParse: parse,
+      });
+    }
+    if (usedRelaxedFilter) {
+      console.log("[image-search] strict filter empty; using relaxed fallback constraints");
     }
 
-    let ranked = rankCatalogItemsByImageHints(
-      pool,
-      matchHints,
-      derivedQuery,
-      packageBrandStrict,
-      productFormat,
-      formatKeywords,
+    // Pick the seed: the candidate whose title best matches family + variant.
+    const seed = pickFamilySeed(candidates, parse);
+    const lineFiltered = candidates.filter(
+      (it) => it.asin === seed.asin || catalogItemSameProductFamilyLine(seed, it),
     );
-
-    /** Pull pack/size/count variants of the same product line — only if hints still match (not random same-brand ASINs). */
-    const MIN_HINT_FOR_EXPAND = 4;
-    if (packageBrandStrict && ranked.length > 0 && matchHints.length > 0) {
-      const seed = ranked[0]!;
-      if (scoreTitleAgainstHints(seed.title, matchHints) >= MIN_HINT_FOR_EXPAND) {
-        const expandKeyword = seed.title.slice(0, 72).trim();
-        if (expandKeyword.length >= 10) {
-          const expanded = await client.searchCatalogByKeywordMultiple(expandKeyword, IMAGE_SEARCH_EXPAND_MAX);
-          const seen = new Set(ranked.map((x) => x.asin));
-          const combined: CatalogItem[] = [...ranked];
-          for (const it of expanded) {
-            if (!it.asin || seen.has(it.asin)) continue;
-            if (!catalogItemMatchesPackageBrand(it, packageBrandStrict)) continue;
-            if (!catalogBrandCompatibleWithSeed(seed, it)) continue;
-            if (scoreTitleAgainstHints(it.title, matchHints) < MIN_HINT_FOR_EXPAND) continue;
-            if (formatKeywords.length > 0 && !titleMatchesFormatKeywords(it.title, formatKeywords)) continue;
-            seen.add(it.asin);
-            combined.push(it);
-          }
-          ranked = rankCatalogItemsByImageHints(
-            combined,
-            matchHints,
-            derivedQuery,
-            packageBrandStrict,
-            productFormat,
-            formatKeywords,
-          );
-        }
-      }
+    for (const it of candidates) {
+      if (lineFiltered.some((x) => x.asin === it.asin)) continue;
+      log.push({
+        asin: it.asin,
+        title: it.title,
+        status: "rejected",
+        reason: "different product line vs best seed",
+      });
     }
 
-    /** Same physical product type as the photo (any category — uses vision format_keywords, or coarse product_form). */
-    if (formatKeywords.length > 0) {
-      ranked = filterByFormatKeywords(ranked, formatKeywords);
-    } else {
-      ranked = filterByProductFormat(ranked, productFormat);
-    }
+    const grouped = await collectFamilyResults({
+      client,
+      parse,
+      seed,
+      seedReason: "same product family - exact",
+      candidatePool: lineFiltered,
+      log,
+    });
 
-    /** Same product line as #1 match (allow vanilla/cocoa/lemon etc.); drop different products that share a brand. */
-    ranked = filterToSameProductLine(ranked);
-
-    const maxRows = Math.min(IMAGE_SEARCH_EXPAND_MAX, Math.max(pageSize, ranked.length));
-    const items = ranked.slice(0, maxRows);
-    const results: ProductAnalysis[] = items.map((catalog) => buildCatalogOnlyResult(catalog, derivedQuery));
-
+    logScanResults("family filter", log);
     return NextResponse.json({
       ok: true,
-      results,
+      results: grouped.results.slice(0, Math.max(pageSize, grouped.results.length)),
       derivedQuery,
+      matchPath: "family",
+      lowConfidenceType: typeMode !== "high",
+      usedRelaxedFilter,
+      visionParse: parse,
     });
   } catch (error) {
     return NextResponse.json(
@@ -353,4 +701,186 @@ Use {"query":"","match_hints":[],"brand":"","upc_ean":"","product_form":"","form
       { status: 500 },
     );
   }
+}
+
+/**
+ * Pick the catalog row that best represents the EXACT product from the photo:
+ * variant / size / scent in title takes precedence over generic family-only matches.
+ */
+function pickFamilySeed(items: CatalogItem[], parse: VisionProductFamilyParse): CatalogItem {
+  const scoreFor = (title: string): number => {
+    const t = title.toLowerCase();
+    let s = 0;
+    const bits = [parse.variant, parse.flavor_scent_color, parse.size, parse.product_name].filter(Boolean);
+    for (const bit of bits) {
+      const tokens = familyTokens(bit);
+      if (tokens.length === 0) continue;
+      const hits = tokens.filter((tok) => t.includes(tok)).length;
+      if (hits > 0) s += hits;
+      if (tokens.length > 0 && hits === tokens.length) s += 2; // full phrase match
+    }
+    if (parse.model_number && t.includes(parse.model_number.toLowerCase())) s += 5;
+    // Prefer non-multipack as the seed when photo shows a single unit.
+    if (!detectMultipackInTitle(title) && (!parse.count || parse.count.trim() === "1")) s += 1;
+    if (isLikelyCrossProductBundleTitle(title, parse)) s -= 8;
+    if (/\b(single|1\s*count|1ct|one\s*pack)\b/.test(t)) s += 2;
+    const familyTokensStrict = familyTokens(parse.core_product_family);
+    if (familyTokensStrict.length > 0) {
+      const familyHits = familyTokensStrict.filter((tok) => t.includes(tok)).length;
+      if (familyHits === familyTokensStrict.length) s += 3;
+    }
+    return s;
+  };
+  let best = items[0]!;
+  let bestScore = -1;
+  for (const it of items) {
+    const s = scoreFor(it.title);
+    if (s > bestScore) {
+      bestScore = s;
+      best = it;
+    }
+  }
+  return best;
+}
+
+/**
+ * Build the final, grouped result set for a given seed product:
+ * - the seed (exact)
+ * - other rows that match the same product family (variations / multipacks)
+ *
+ * If `candidatePool` is provided, that pool is used directly. Otherwise we fetch
+ * additional rows by the seed's title prefix (used by the barcode path so we still
+ * surface variations).
+ */
+async function collectFamilyResults(opts: {
+  client: Awaited<ReturnType<typeof getSpApiClientForUserOrGlobal>>;
+  parse: VisionProductFamilyParse;
+  seed: CatalogItem;
+  seedReason: string;
+  candidatePool?: CatalogItem[];
+  log?: ScanLogEntry[];
+}): Promise<{ results: ProductAnalysis[]; usedAmazonVariationFamily: boolean }> {
+  const { client, parse, seed, seedReason } = opts;
+  if (!client) return { results: [], usedAmazonVariationFamily: false };
+
+  const log = opts.log ?? [];
+  const packageBrand = strictPackageBrandFromVision(parse.brand);
+
+  let pool: CatalogItem[];
+  let usedAmazonVariationFamily = false;
+  const relationFamily = await client.resolveVariationFamilyItems(seed.asin, FAMILY_SEARCH_FETCH_CAP).catch(() => null);
+  if (relationFamily && relationFamily.items.length > 0) {
+    pool = relationFamily.items;
+    usedAmazonVariationFamily = relationFamily.resolved;
+    console.log(
+      `[image-search] expanded family for ${seed.asin} → ${pool.length} related rows (${relationFamily.resolved ? "relationship graph" : "heuristic expansion"})`,
+    );
+  } else if (opts.candidatePool && opts.candidatePool.length > 0) {
+    pool = opts.candidatePool;
+  } else {
+    const expandKeyword = seed.title.slice(0, 72).trim();
+    const expanded = expandKeyword.length >= 6
+      ? await client.searchCatalogByKeywordMultiple(expandKeyword, FAMILY_SEARCH_FETCH_CAP)
+      : [];
+    const unique = new Map<string, CatalogItem>();
+    unique.set(seed.asin, seed);
+    /** When expanding by seed title, anchor to the seed's own brand if the package brand wasn't readable. */
+    const expandBrandAnchor = packageBrand ?? (seed.brand ? seed.brand : null);
+    for (const it of expanded) {
+      if (!it.asin || unique.has(it.asin)) continue;
+      if (!strictCatalogBrandMatch(it.brand, expandBrandAnchor)) {
+        log.push({
+          asin: it.asin,
+          title: it.title,
+          status: "rejected",
+          reason: `brand mismatch (catalog="${it.brand}" vs anchor="${expandBrandAnchor ?? ""}")`,
+        });
+        continue;
+      }
+      const familyForExpand = parse.core_product_family || seed.title;
+      const familyStrOk = catalogTitleMatchesProductFamily(it.title, familyForExpand);
+      const lineOk = catalogItemSameProductFamilyLine(seed, it);
+      if (!familyStrOk && !lineOk) {
+        log.push({
+          asin: it.asin,
+          title: it.title,
+          status: "rejected",
+          reason: "same brand, different product line",
+        });
+        continue;
+      }
+      unique.set(it.asin, it);
+    }
+    pool = [...unique.values()];
+  }
+
+  /** Final guard: same manufacturer line as resolved seed (drops same-brand catalog noise). */
+  const anchored = new Map<string, CatalogItem>();
+  anchored.set(seed.asin, seed);
+  for (const it of pool) {
+    if (!it.asin || it.asin === seed.asin) continue;
+    if (!catalogBrandsCompatibleForFamily(seed.brand ?? "", it.brand ?? "")) {
+      log.push({
+        asin: it.asin,
+        title: it.title,
+        status: "rejected",
+        reason: "brand mismatch vs seed catalog row",
+      });
+      continue;
+    }
+    if (!catalogItemSameProductFamilyLine(seed, it)) {
+      log.push({
+        asin: it.asin,
+        title: it.title,
+        status: "rejected",
+        reason: "different product line vs seed",
+      });
+      continue;
+    }
+    if (parse.product_type.trim() && !catalogTitleMatchesAuxProductType(it.title, parse.product_type)) {
+      log.push({
+        asin: it.asin,
+        title: it.title,
+        status: "rejected",
+        reason: "different product type vs seed line",
+      });
+      continue;
+    }
+    anchored.set(it.asin, it);
+  }
+  pool = [...anchored.values()];
+
+  const seen = new Set<string>();
+  const seedAsin = seed.asin;
+  const ordered: Array<{
+    item: CatalogItem;
+    group: "exact" | "variation" | "multipack" | "possible_related";
+    reason: string;
+  }> = [];
+
+  const exactReason = seedReason === "exact barcode match" ? "Exact scanned product" : seedReason;
+  ordered.push({ item: seed, group: "exact", reason: exactReason });
+  seen.add(seedAsin);
+  log.push({ asin: seedAsin, title: seed.title, status: "accepted", reason: exactReason });
+
+  for (const item of pool) {
+    if (!item.asin || seen.has(item.asin)) continue;
+    const cls = classifyFamilyMatch(item, parse);
+    const group = usedAmazonVariationFamily ? cls.group : "possible_related";
+    const reason = usedAmazonVariationFamily
+      ? cls.reason
+      : `possible related listing (family graph unavailable) - ${cls.reason}`;
+    seen.add(item.asin);
+    ordered.push({ item, group, reason });
+    log.push({ asin: item.asin, title: item.title, status: "accepted", reason });
+  }
+
+  const sorted = sortByFamilyMatchGroup(ordered);
+  const results = sorted.map(({ item, group, reason }) =>
+    buildCatalogOnlyResult(item, parse.product_name || parse.core_product_family || seed.title, {
+      group,
+      reason,
+    }),
+  );
+  return { results, usedAmazonVariationFamily };
 }

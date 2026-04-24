@@ -59,24 +59,6 @@ function isPermissionError(message: string): boolean {
   return /unauthorized|access to requested resource is denied|403/i.test(message);
 }
 
-function uniqueNonEmpty(values: string[]): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const raw of values) {
-    const value = raw.trim();
-    if (!value) {
-      continue;
-    }
-    const key = value.toLowerCase();
-    if (seen.has(key)) {
-      continue;
-    }
-    seen.add(key);
-    out.push(value);
-  }
-  return out;
-}
-
 function estimateReferralFee(buyBoxPrice: number): number {
   return toCurrency(buyBoxPrice * ESTIMATED_REFERRAL_RATE) ?? 0;
 }
@@ -250,6 +232,7 @@ function evaluateDecision(result: ProductAnalysis, projectedMonthlyUnits: number
 export function buildCatalogOnlyResult(
   catalog: CatalogItem,
   inputIdentifier: string,
+  match?: { reason: string; group: "exact" | "variation" | "multipack" | "possible_related" } | null,
 ): ProductAnalysis {
   const offerLabel = getListingTypeFromTitle(catalog.title);
   return {
@@ -294,6 +277,8 @@ export function buildCatalogOnlyResult(
     reasons: [],
     createdAt: new Date().toISOString(),
     offerLabel,
+    matchReason: match?.reason ?? null,
+    matchGroup: match?.group ?? null,
   };
 }
 

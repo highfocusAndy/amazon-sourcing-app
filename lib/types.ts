@@ -86,6 +86,14 @@ export interface ProductAnalysis {
   createdAt: string;
   /** Short label for this listing when from "all offers" (e.g. "New · FBA · $12.99", "Single", "3-Pack"). */
   offerLabel?: string | null;
+  /**
+   * Why this row was returned by the scan/photo flow.
+   * Examples: "exact barcode match", "same product family - exact",
+   * "same product family - different scent", "same product family - multipack".
+   */
+  matchReason?: string | null;
+  /** Bucket for grouping scan results in the UI. Only set by the scan/photo flow. */
+  matchGroup?: "exact" | "variation" | "multipack" | "possible_related" | null;
 }
 
 export interface ParsedUploadRow {

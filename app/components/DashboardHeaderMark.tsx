@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element */
 /**
  * Full lockup asset with wordmark cropped off — only the HF mark stays visible.
  * Use `compact` in the mobile top bar; `default` in Explorer / Analyzer headers (md+).

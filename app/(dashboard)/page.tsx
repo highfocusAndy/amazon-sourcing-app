@@ -1,8 +1,8 @@
 "use client";
+/* eslint-disable @next/next/no-img-element */
 
 import { useSavedProducts } from "@/app/context/SavedProductsContext";
 import { useExplorerCategory } from "@/app/context/ExplorerCategoryContext";
-import { getSubcategoriesForCategory } from "@/lib/catalogCategories";
 import { DashboardHeaderAccount } from "@/app/components/DashboardHeaderAccount";
 import { DashboardHeaderMark } from "@/app/components/DashboardHeaderMark";
 import { AmazonAccountModal } from "@/app/settings/AmazonAccountModal";
@@ -87,9 +87,7 @@ export default function ExplorerPage() {
   const { addProduct, getByAsin } = useSavedProducts();
   const {
     selectedCategory,
-    setSelectedCategory,
     selectedSubcategory,
-    setSelectedSubcategory,
     clearCategorySelection,
   } = useExplorerCategory();
   const [error, setError] = useState<string | null>(null);
@@ -208,7 +206,7 @@ export default function ExplorerPage() {
         setCatalogLoading(false);
       }
     }
-  }, [catalogFetchSize, ungatedOnly]);
+  }, [catalogFetchSize]);
 
   const searchProducts = useCallback(async () => {
     setLoadingPaused(false);
@@ -257,7 +255,7 @@ export default function ExplorerPage() {
         setCatalogLoading(false);
       }
     }
-  }, [selectedCategory, selectedSubcategory, keyword, catalogFetchSize, ungatedOnly]);
+  }, [selectedCategory, selectedSubcategory, keyword, catalogFetchSize]);
 
   const loadMoreProducts = useCallback(async () => {
     setLoadingPaused(false);
@@ -300,7 +298,7 @@ export default function ExplorerPage() {
         setLoadMoreLoading(false);
       }
     }
-  }, [selectedCategory, selectedSubcategory, keyword, catalogNextPageToken, catalogFetchSize, ungatedOnly]);
+  }, [selectedCategory, selectedSubcategory, keyword, catalogNextPageToken, catalogFetchSize]);
 
   const eligibilityByAsinRef = useRef(eligibilityByAsin);
   eligibilityByAsinRef.current = eligibilityByAsin;
@@ -355,7 +353,7 @@ export default function ExplorerPage() {
             await new Promise((r) => setTimeout(r, DELAY_MS));
           }
         }
-      } catch (_err) {
+      } catch {
         if (signal?.aborted) return;
         // best-effort only; avoid unhandled rejection
       }
@@ -378,7 +376,7 @@ export default function ExplorerPage() {
         eligibilityAbortRef.current = null;
       }
     };
-  }, [ungatedOnly, catalogResults, loadingPaused]);
+  }, [ungatedOnly, catalogResults, loadingPaused, ensureEligibilityLoaded]);
 
   /** When "Ungated only" is on and no category is selected, auto-load a few more catalog pages (capped to limit SP-API GETs). */
   const ungatedAutoLoadCountRef = useRef(0);
@@ -588,8 +586,6 @@ export default function ExplorerPage() {
     },
     [getByAsin, addProduct, projectedMonthlyUnits, sellerType, shippingCost]
   );
-
-  const subcategories = selectedCategory ? getSubcategoriesForCategory(selectedCategory) : [];
 
   const showProductTable = true;
 
@@ -924,7 +920,7 @@ export default function ExplorerPage() {
                                 ) : (
                                   <>
                                     <Link href="/login" className="text-teal-400 hover:text-teal-300 underline">Sign in</Link>
-                                    {" "}to check eligibility, or uncheck \"Ungated only\" to see all products.
+                                    {" "}to check eligibility, or uncheck &quot;Ungated only&quot; to see all products.
                                   </>
                                 )}
                               </>
@@ -1401,16 +1397,6 @@ export default function ExplorerPage() {
                   const variationYes = fromCatalog === true || fromRestrictionCodes;
                   const variationNo = fromCatalog === false && !fromRestrictionCodes;
                   const variationLabel = variationYes ? "Yes" : variationNo ? "No" : "—";
-                  const variationNote =
-                    variationLabel === "Yes"
-                      ? fromCatalog === true && fromRestrictionCodes
-                        ? "Catalog reports a VARIATION parent/child link, and a restriction code also references variation."
-                        : fromCatalog === true
-                          ? "Based on Amazon catalog data: this ASIN has parent/child VARIATION relationships (other sizes/colors/flavors may exist)."
-                          : "Based on a listing restriction code (VARIATION / parent-child), not catalog relationships."
-                      : variationLabel === "No"
-                        ? "No VARIATION relationship in the catalog response we used, and no variation-related restriction code."
-                        : "Not determined — catalog may omit relationships, or this run did not load them.";
                   return (
                     <div className="grid grid-cols-1 gap-2">
                       <div className="rounded-lg border border-slate-600 bg-slate-700/30 px-3 py-2">
@@ -1432,7 +1418,6 @@ export default function ExplorerPage() {
                       <div className="rounded-lg border border-slate-600 bg-slate-700/30 px-3 py-2">
                         <p className="text-xs text-slate-500">Variation</p>
                         <p className="text-sm font-medium text-slate-100">{variationLabel}</p>
-                        <p className="mt-0.5 text-[10px] text-slate-500 leading-snug">{variationNote}</p>
                       </div>
                     </div>
                   );

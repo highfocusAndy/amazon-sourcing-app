@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { AccountSettingsPanels } from "./AccountSettingsPanels";
 
@@ -11,9 +11,6 @@ export function AccountSettingsModal({
   onClose: () => void;
   userEmail?: string | null;
 }) {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-
   useEffect(() => {
     function handleEscape(e: KeyboardEvent) {
       if (e.key === "Escape") onClose();
@@ -68,6 +65,6 @@ export function AccountSettingsModal({
     </div>
   );
 
-  if (!mounted || typeof document === "undefined") return null;
+  if (typeof document === "undefined") return null;
   return createPortal(modal, document.body);
 }

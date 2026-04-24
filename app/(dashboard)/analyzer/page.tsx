@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable @next/next/no-img-element */
 
 import {
   useCallback,
@@ -277,16 +278,6 @@ function parsePositiveInput(rawValue: string): number | null {
   return parsed;
 }
 
-function rowColorClasses(color: ProductAnalysis["rowColor"]): string {
-  if (color === "green") {
-    return "bg-emerald-900/30";
-  }
-  if (color === "yellow") {
-    return "bg-amber-900/30";
-  }
-  return "bg-rose-900/30";
-}
-
 function decisionDisplayLabel(decision: ProductAnalysis["decision"]): string {
   const labels: Record<ProductAnalysis["decision"], string> = {
     BUY: "Buy",
@@ -417,7 +408,7 @@ function AnalyzerPageContent() {
   const { data: session } = useSession();
   const [identifier, setIdentifier] = useState("");
   const [keyword, setKeyword] = useState("");
-  const [wholesalePrice, setWholesalePrice] = useState("0");
+  const [wholesalePrice] = useState("0");
   const [brand, setBrand] = useState("");
   const [sellerType, setSellerType] = useState<SellerType>("FBA");
   const [shippingCost, setShippingCost] = useState("0");
@@ -445,7 +436,6 @@ function AnalyzerPageContent() {
   const [photoSearchAvailable, setPhotoSearchAvailable] = useState<boolean | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<ProductAnalysis | null>(null);
   const [mobileDetailsOpen, setMobileDetailsOpen] = useState(false);
-  const [popupQuantity, setPopupQuantity] = useState("");
   /** Popover on lg+; full-height sheet from the right on smaller screens (mirrors left nav direction). */
   const [sellerModal, setSellerModal] = useState<
     | null
@@ -456,7 +446,6 @@ function AnalyzerPageContent() {
   const [panelAnalysisLoading, setPanelAnalysisLoading] = useState(false);
   const [detailPanelCost, setDetailPanelCost] = useState("");
   const [resultsPage, setResultsPage] = useState(1);
-  const [copiedAsin, setCopiedAsin] = useState<string | null>(null);
   const [showAmazonAccountModal, setShowAmazonAccountModal] = useState(false);
   const [amazonHeaderConnected, setAmazonHeaderConnected] = useState(false);
   const [amazonHeaderTitle, setAmazonHeaderTitle] = useState<string | null>(null);
@@ -689,9 +678,7 @@ function AnalyzerPageContent() {
   const runManualAnalysis = useCallback(
     async (
       selectedSellerType: SellerType,
-      isAutoRerun = false,
       identifierOverride?: string,
-      isScannerTriggered = false,
       lookupOnly = false,
     ): Promise<void> => {
       const effectiveIdentifier = normalizeLookupInput(identifierOverride ?? identifier);
@@ -1186,17 +1173,6 @@ function AnalyzerPageContent() {
     return { profitable, ungating, bad, ungated };
   }, [results]);
 
-  const detailProduct = selectedProduct;
-  const parsedUnitQuantity = parsePositiveInput(projectedMonthlyUnits);
-  const detailWholesalePrice =
-    detailProduct?.wholesalePrice ?? (parseNonNegativeInput(wholesalePrice) ?? 0);
-  const totalBuyCost =
-    parsedUnitQuantity !== null ? roundToTwo(detailWholesalePrice * parsedUnitQuantity) : null;
-  const projectedProfitForQuantity =
-    detailProduct?.netProfit != null && parsedUnitQuantity !== null
-      ? roundToTwo(detailProduct.netProfit * parsedUnitQuantity)
-      : null;
-
   function handleSort(column: SortColumn): void {
     if (sortColumn === column) {
       setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
@@ -1234,6 +1210,8 @@ function AnalyzerPageContent() {
           full.offerLabel = item.offerLabel ?? full.offerLabel;
           settledRow = { ...full, id: item.id, offerLabel: full.offerLabel };
           setSelectedProduct(settledRow);
+          // Keep the visible list stable while enriching a clicked row.
+          setResults((prev) => prev.map((row) => (row.id === item.id ? { ...settledRow, id: row.id } : row)));
         }
       } catch {
         // keep catalog-only selection
@@ -1308,16 +1286,6 @@ function AnalyzerPageContent() {
     lastAutoManualCalcKeyRef.current = "";
     setInfoMessage(null);
     setErrorMessage(null);
-  }
-
-  async function handleManualSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
-    event.preventDefault();
-    if (!manualIdentifierResolved) {
-      await runManualAnalysis(sellerType, false, undefined, false, true);
-      return;
-    }
-
-    await runManualAnalysis(sellerType, false);
   }
 
   async function runUploadAnalysis(selectedSellerType: SellerType, isAutoRerun = false): Promise<void> {
@@ -1426,7 +1394,11 @@ function AnalyzerPageContent() {
     }
   }
 
-  async function runImageProductSearchFromFile(imageFile: File, pageSize = 20): Promise<void> {
+  async function runImageProductSearchFromFile(
+    imageFile: File,
+    pageSize = 20,
+    decodedBarcode?: string | null,
+  ): Promise<void> {
     if (photoSearchAvailable !== true) {
       setErrorMessage(
         "Photo search is not enabled on this server (needs OPENAI_API_KEY). Use barcode, keyword, or ASIN.",
@@ -1440,6 +1412,10 @@ function AnalyzerPageContent() {
       const form = new FormData();
       form.append("image", imageFile);
       form.append("pageSize", String(pageSize));
+      const digits = decodedBarcode?.replace(/\D/g, "").trim() ?? "";
+      if (digits.length >= 8 && digits.length <= 14) {
+        form.append("barcode", digits);
+      }
       const res = await fetch("/api/analyze/image-search", { method: "POST", body: form });
       const json = (await res.json()) as {
         ok?: boolean;
@@ -1447,6 +1423,10 @@ function AnalyzerPageContent() {
         code?: string;
         results?: ProductAnalysis[];
         derivedQuery?: string | null;
+        notFoundOnAmazon?: boolean;
+        notice?: string;
+        imageUnclear?: boolean;
+        matchPath?: "barcode" | "family";
       };
       if (!res.ok || json.results === undefined) {
         throw new Error(json.error ?? "Photo search failed.");
@@ -1469,14 +1449,28 @@ function AnalyzerPageContent() {
       if (analysisResults.length > 0) {
         setSelectedProduct(null);
         setMobileDetailsOpen(false);
-        setInfoMessage(derived ? `Matches from photo search: ${derived}` : null);
+        const matchedLabel =
+          json.matchPath === "barcode"
+            ? "Matched by barcode on the package."
+            : derived
+              ? `Matched by product family: ${derived}`
+              : null;
+        setInfoMessage(matchedLabel);
       } else {
         setSelectedProduct(null);
-        setInfoMessage(
-          derived
-            ? `No listings for “${derived}”. Try a clearer photo or keyword.`
-            : "Could not read a product from this photo. Try better lighting, the barcode, or a keyword.",
-        );
+        if (json.notice) {
+          setInfoMessage(json.notice);
+        } else if (json.imageUnclear) {
+          setInfoMessage("Unable to confidently identify the product. Please rescan.");
+        } else if (json.notFoundOnAmazon) {
+          setInfoMessage("This product does not appear to be listed on Amazon yet.");
+        } else if (derived) {
+          setInfoMessage(
+            `No listings for “${derived}”. Try a clearer photo, the barcode, or a keyword.`,
+          );
+        } else {
+          setInfoMessage("Unable to confidently identify the product. Please rescan.");
+        }
       }
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : "Photo search failed.");
@@ -1544,10 +1538,10 @@ function AnalyzerPageContent() {
     setIsKeywordMode(false);
     setLastKeyword(null);
     if (!manualIdentifierResolved) {
-      await runManualAnalysis(sellerType, false, undefined, false, true);
+      await runManualAnalysis(sellerType, undefined, true);
       return;
     }
-    await runManualAnalysis(sellerType, false);
+    await runManualAnalysis(sellerType);
   }
 
   async function handleSellerTypeChange(nextSellerType: SellerType): Promise<void> {
@@ -1569,7 +1563,7 @@ function AnalyzerPageContent() {
       if (selectedProduct?.asin) {
         await refetchManualRowAnalysis(selectedProduct, true, nextSellerType);
       } else {
-        await runManualAnalysis(nextSellerType, true);
+        await runManualAnalysis(nextSellerType);
       }
       return;
     }
@@ -1647,8 +1641,13 @@ function AnalyzerPageContent() {
       if (decodedCode) {
         setIdentifier(decodedCode);
         setManualIdentifierResolved(false);
-        setInfoMessage(`Code from image: ${decodedCode}. Loading product...`);
-        void runManualAnalysis(sellerType, false, decodedCode, false, true);
+        if (photoSearchAvailable === true) {
+          setInfoMessage(`Code from image: ${decodedCode}. Looking up product and same-line variations…`);
+          await runImageProductSearchFromFile(file, 20, decodedCode);
+        } else {
+          setInfoMessage(`Code from image: ${decodedCode}. Loading product...`);
+          void runManualAnalysis(sellerType, decodedCode, true);
+        }
         return;
       }
       if (photoSearchAvailable === false) {
@@ -2048,16 +2047,6 @@ function AnalyzerPageContent() {
             const variationYes = fromCatalog === true || fromRestrictionCodes;
             const variationNo = fromCatalog === false && !fromRestrictionCodes;
             const variationLabel = variationYes ? "Yes" : variationNo ? "No" : "—";
-            const variationNote =
-              variationLabel === "Yes"
-                ? fromCatalog === true && fromRestrictionCodes
-                  ? "Catalog reports a VARIATION parent/child link, and a restriction code also references variation."
-                  : fromCatalog === true
-                    ? "Based on Amazon catalog data: this ASIN has parent/child VARIATION relationships (other sizes/colors/flavors may exist)."
-                    : "Based on a listing restriction code (VARIATION / parent-child), not catalog relationships."
-                : variationLabel === "No"
-                  ? "No VARIATION relationship in the catalog response we used, and no variation-related restriction code."
-                  : "Not determined — catalog may omit relationships, or this run did not load them.";
             return (
               <div className="grid grid-cols-1 gap-2">
                 <div className="rounded-lg border border-slate-600 bg-slate-700/30 px-3 py-2">
@@ -2079,7 +2068,11 @@ function AnalyzerPageContent() {
                 <div className="rounded-lg border border-slate-600 bg-slate-700/30 px-3 py-2">
                   <p className="text-xs text-slate-500">Variation</p>
                   <p className="text-sm font-medium text-slate-100">{variationLabel}</p>
-                  <p className="mt-0.5 text-[10px] text-slate-500 leading-snug">{variationNote}</p>
+                  {variationLabel === "—" ? (
+                    <p className="mt-0.5 text-[10px] text-slate-500">
+                      Shown when catalog lists parent/child ASINs or a restriction code mentions variations.
+                    </p>
+                  ) : null}
                 </div>
               </div>
             );
