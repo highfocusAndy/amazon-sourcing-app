@@ -1543,7 +1543,7 @@ function AnalyzerPageContent() {
     setIsKeywordMode(false);
     setLastKeyword(null);
     if (!manualIdentifierResolved) {
-      await runManualAnalysis(sellerType, undefined, true);
+      await runManualAnalysis(sellerType, false, undefined, false, true);
       return;
     }
     await runManualAnalysis(sellerType);
@@ -1651,7 +1651,7 @@ function AnalyzerPageContent() {
           await runImageProductSearchFromFile(file, 20, decodedCode);
         } else {
           setInfoMessage(`Code from image: ${decodedCode}. Loading product...`);
-          void runManualAnalysis(sellerType, decodedCode, true);
+          void runManualAnalysis(sellerType, false, decodedCode, false, true);
         }
         return;
       }
