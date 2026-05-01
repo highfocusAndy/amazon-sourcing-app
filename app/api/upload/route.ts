@@ -15,7 +15,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const gate = await requireAppAccess();
     if (!gate.ok) return gate.response;
 
-    if (!userUploadLimit(gate.userId)) {
+    if (!(await userUploadLimit(gate.userId))) {
       return NextResponse.json(
         { error: "Too many uploads. Wait a minute before running another batch." },
         { status: 429 },

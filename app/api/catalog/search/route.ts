@@ -29,7 +29,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const gate = await requireAppAccess();
   if (!gate.ok) return gate.response;
 
-  if (!userCatalogSearchLimit(gate.userId)) {
+  if (!(await userCatalogSearchLimit(gate.userId))) {
     return NextResponse.json(
       { error: "Too many catalog searches. Wait a minute and try again.", items: [], nextPageToken: null },
       { status: 429 },

@@ -29,7 +29,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const gate = await requireAppAccess();
     if (!gate.ok) return gate.response;
 
-    if (!userKeywordSearchLimit(gate.userId)) {
+    if (!(await userKeywordSearchLimit(gate.userId))) {
       return NextResponse.json(
         { ok: false, error: "Too many keyword searches. Wait a minute.", results: [] },
         { status: 429 },

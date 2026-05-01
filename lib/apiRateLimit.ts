@@ -1,7 +1,13 @@
 /**
- * In-memory sliding-window rate limits per user (per server instance).
- * For horizontal scale, replace with Redis / Upstash later.
+ * Rate limits per user.
+ *
+ * - Default: in-memory sliding window (one Node process only).
+ * - Production / multi-instance: set `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN`
+ *   (Upstash Redis REST) so limits are shared across all app instances.
  */
+
+import { Ratelimit } from "@upstash/ratelimit";
+import { Redis } from "@upstash/redis";
 
 type Timestamps = number[];
 
@@ -58,30 +64,107 @@ export function rateLimitOpenaiChatPerMinute(): number {
 
 const WINDOW_MS = 60_000;
 
-export function userCatalogSearchLimit(userId: string): boolean {
-  return rateLimitAllow(`catalog_search:${userId}`, rateLimitCatalogSearchPerMinute(), WINDOW_MS);
+/** True when Upstash env is present (shared limits across server instances). */
+export function useDistributedRateLimit(): boolean {
+  return Boolean(
+    process.env.UPSTASH_REDIS_REST_URL?.trim() && process.env.UPSTASH_REDIS_REST_TOKEN?.trim(),
+  );
 }
 
-export function userAnalyzeLimit(userId: string): boolean {
-  return rateLimitAllow(`analyze:${userId}`, rateLimitAnalyzePerMinute(), WINDOW_MS);
+let redisSingleton: Redis | null | undefined;
+
+function getRedis(): Redis | null {
+  if (redisSingleton !== undefined) return redisSingleton;
+  const url = process.env.UPSTASH_REDIS_REST_URL?.trim();
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
+  if (!url || !token) {
+    redisSingleton = null;
+    return null;
+  }
+  redisSingleton = new Redis({ url, token });
+  return redisSingleton;
 }
 
-export function userRestrictionsLimit(userId: string): boolean {
-  return rateLimitAllow(`restrictions:${userId}`, rateLimitRestrictionsPerMinute(), WINDOW_MS);
+const ratelimitByKey = new Map<string, Ratelimit>();
+
+function slidingRatelimit(cacheKey: string, maxPerMinute: number): Ratelimit | null {
+  const redis = getRedis();
+  if (!redis) return null;
+  const mapKey = `${cacheKey}:${maxPerMinute}`;
+  let rl = ratelimitByKey.get(mapKey);
+  if (rl) return rl;
+  rl = new Ratelimit({
+    redis,
+    limiter: Ratelimit.slidingWindow(maxPerMinute, "60 s"),
+    prefix: `@upstash/ratelimit/${cacheKey}`,
+  });
+  ratelimitByKey.set(mapKey, rl);
+  return rl;
 }
 
-export function userKeywordSearchLimit(userId: string): boolean {
-  return rateLimitAllow(`keyword_search:${userId}`, rateLimitKeywordSearchPerMinute(), WINDOW_MS);
+async function allowSlidingWindow(
+  cacheKey: string,
+  maxPerMinute: number,
+  memoryKey: string,
+  userId: string,
+): Promise<boolean> {
+  const rl = slidingRatelimit(cacheKey, maxPerMinute);
+  if (!rl) {
+    return rateLimitAllow(memoryKey, maxPerMinute, WINDOW_MS);
+  }
+  const { success } = await rl.limit(userId);
+  return success;
 }
 
-export function userUploadLimit(userId: string): boolean {
-  return rateLimitAllow(`upload:${userId}`, rateLimitUploadPerMinute(), WINDOW_MS);
+export async function userCatalogSearchLimit(userId: string): Promise<boolean> {
+  return allowSlidingWindow(
+    "catalog_search",
+    rateLimitCatalogSearchPerMinute(),
+    `catalog_search:${userId}`,
+    userId,
+  );
 }
 
-export function userOpenaiInsightLimit(userId: string): boolean {
-  return rateLimitAllow(`openai_insight:${userId}`, rateLimitOpenaiInsightPerMinute(), WINDOW_MS);
+export async function userAnalyzeLimit(userId: string): Promise<boolean> {
+  return allowSlidingWindow("analyze", rateLimitAnalyzePerMinute(), `analyze:${userId}`, userId);
 }
 
-export function userOpenaiChatLimit(userId: string): boolean {
-  return rateLimitAllow(`openai_chat:${userId}`, rateLimitOpenaiChatPerMinute(), WINDOW_MS);
+export async function userRestrictionsLimit(userId: string): Promise<boolean> {
+  return allowSlidingWindow(
+    "restrictions",
+    rateLimitRestrictionsPerMinute(),
+    `restrictions:${userId}`,
+    userId,
+  );
+}
+
+export async function userKeywordSearchLimit(userId: string): Promise<boolean> {
+  return allowSlidingWindow(
+    "keyword_search",
+    rateLimitKeywordSearchPerMinute(),
+    `keyword_search:${userId}`,
+    userId,
+  );
+}
+
+export async function userUploadLimit(userId: string): Promise<boolean> {
+  return allowSlidingWindow("upload", rateLimitUploadPerMinute(), `upload:${userId}`, userId);
+}
+
+export async function userOpenaiInsightLimit(userId: string): Promise<boolean> {
+  return allowSlidingWindow(
+    "openai_insight",
+    rateLimitOpenaiInsightPerMinute(),
+    `openai_insight:${userId}`,
+    userId,
+  );
+}
+
+export async function userOpenaiChatLimit(userId: string): Promise<boolean> {
+  return allowSlidingWindow(
+    "openai_chat",
+    rateLimitOpenaiChatPerMinute(),
+    `openai_chat:${userId}`,
+    userId,
+  );
 }

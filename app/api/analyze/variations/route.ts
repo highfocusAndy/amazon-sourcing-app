@@ -8,8 +8,10 @@ import {
 } from "@/lib/amazonAccount";
 import { buildCatalogOnlyResult } from "@/lib/analysis";
 import {
+  buildVisionParseFromCatalogSeed,
   catalogBrandsCompatibleForFamily,
   catalogItemSameProductFamilyLine,
+  classifyFamilyMatch,
   detectMultipackInTitle,
 } from "@/lib/imageSearchRanking";
 import type { ProductAnalysis } from "@/lib/types";
@@ -38,7 +40,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const gate = await requireAppAccess();
     if (!gate.ok) return gate.response;
 
-    if (!userAnalyzeLimit(gate.userId)) {
+    if (!(await userAnalyzeLimit(gate.userId))) {
       return NextResponse.json(
         {
           ok: false,
@@ -121,6 +123,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return aMulti - bMulti;
     });
 
+    const parseForMatch = buildVisionParseFromCatalogSeed(first);
     const results: ProductAnalysis[] = ordered.map((catalog) => {
       if (catalog.asin === first.asin) {
         return buildCatalogOnlyResult(catalog, identifier, {
@@ -136,9 +139,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             : "Confirmed variation family",
         });
       }
+      const cls = classifyFamilyMatch(catalog, parseForMatch);
       return buildCatalogOnlyResult(catalog, identifier, {
-        group: "possible_related",
-        reason: "Possible related listing (variation graph unavailable)",
+        group: cls.group,
+        reason: `${cls.reason} (inferred — catalog variation links incomplete)`,
       });
     });
 

@@ -33,10 +33,10 @@ const MAX_BYTES = 4 * 1024 * 1024;
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 /** Cap on rows we'll fetch from SP-API and consider for family matching. */
 const FAMILY_SEARCH_FETCH_CAP = 100;
-/** Product type must be explicitly identified with high confidence before family search. */
+/** Product type must be explicitly identified with high confidence before strict type search. */
 const MIN_PRODUCT_TYPE_CONFIDENCE = 0.72;
 /** Extremely low vision confidence means the image is unusable. */
-const MIN_USABLE_IMAGE_CONFIDENCE = 0.12;
+const MIN_USABLE_IMAGE_CONFIDENCE = 0.05;
 const LOW_PRODUCT_TYPE_CONFIDENCE = 0.5;
 const FALLBACK_VISIBLE_TEXT_LIMIT = 4;
 
@@ -45,7 +45,7 @@ const NOTICE_UNCLEAR =
 const NOTICE_NOT_ON_AMAZON =
   "This product does not appear to be listed on Amazon yet.";
 
-const VISION_PROMPT = `You analyze one retail product photo. Your job is to extract a STABLE PRODUCT IDENTITY for Amazon catalog lookup — not loose keywords, not brand-only guesses.
+const VISION_PROMPT = `You analyze one retail product photo. Extract the most stable product identity for Amazon lookup (works for ANY category: electronics, home, grocery, beauty, tools, etc.).
 
 Return ONLY valid JSON (no markdown, no code fences, no commentary) with this exact shape:
 
@@ -73,20 +73,13 @@ Rules — strict; do not invent; same photo must always yield the same JSON:
 
 - "brand": Manufacturer name as printed (logo area, ®/™). NOT the biggest front word, NOT scent/material/generic nouns (shampoo, lotion, olive, lavender, silicone, case, …). If unsure, "".
 
-- "package_form": One of: "pump bottle", "tube", "tall bottle", "oil bottle", "jar", or "" if unclear.
+- "package_form": Best physical form if visible (examples: "keyboard", "mouse", "laptop", "monitor", "tube", "pump bottle", "jar", "box"), or "" if unclear.
 
-- "product_type" (REQUIRED for confident output): choose ONLY one canonical value:
-  - "lotion"
-  - "shampoo"
-  - "conditioner"
-  - "oil"
-  - "cream"
-  - "cleanser"
-  Use packaging shape + label structure first (not vague words like "olive", "care", "treatment").
+- "product_type": short product category/type noun (examples: "keyboard", "mouse", "laptop", "charger", "shampoo", "lotion", "headphones"). Keep concise and literal.
 
 - "product_type_confidence": 0..1 confidence for product_type only. Keep low when uncertain, blurred, or conflicting cues.
 
-- "core_product_family" (required for a confident match): The specific product LINE name as printed, brand stripped — the words that distinguish this line from OTHER lines the same brand sells. Never only the brand. Never vague buckets like "olive hair care". Examples: "Daily Moisture Body Lotion", "Clinical Strength Antiperspirant", "Vitamin C 1000mg Tablets".
+- "core_product_family": specific item/category identity from visible cues. Prefer concrete nouns (e.g. "wireless keyboard", "mechanical keyboard", "usb-c charger", "daily moisture lotion"). Never output only the brand.
 
 - "product_name": Full front-of-pack marketing name if readable.
 
@@ -97,6 +90,66 @@ Rules — strict; do not invent; same photo must always yield the same JSON:
 - "confidence": 0..1 overall product identity confidence. Use ≤ 0.15 when blurry/dark/partial/not a product. Use ≤ 0.35 when you cannot read both a credible brand OR a specific product line. Never output high confidence from guessing.
 
 If unusable, return empty strings, false barcode, "confidence": 0.`;
+
+const VISION_RESCUE_PROMPT = `You analyze one retail product photo and return a COARSE SHAPE/TYPE guess when full identity is unreadable.
+
+Return ONLY valid JSON (no markdown) with this exact shape:
+{
+  "barcode_detected": false,
+  "barcode_value": "",
+  "brand": "",
+  "package_form": "",
+  "product_type": "",
+  "product_type_confidence": 0,
+  "core_product_family": "",
+  "product_name": "",
+  "variant": "",
+  "size": "",
+  "count": "",
+  "flavor_scent_color": "",
+  "model_number": "",
+  "visible_text": [],
+  "confidence": 0
+}
+
+Rules:
+- Prioritize estimating only "package_form" and "product_type" from silhouette/container shape even when text is unreadable.
+- "package_form" one of: "pump bottle", "tube", "tall bottle", "oil bottle", "jar", or "".
+- "product_type" one of: "lotion","shampoo","conditioner","oil","cream","cleanser", or "" when impossible.
+- Keep confidence low unless clear.
+- Leave brand/family/name empty unless clearly readable.
+- If no product is visible, return empty fields with confidence 0.`;
+
+const VISION_BEST_GUESS_SHAPE_PROMPT = `You analyze one retail product photo and output your BEST-GUESS coarse packaging/type even when text is unreadable.
+
+Return ONLY valid JSON (no markdown) with this exact shape:
+{
+  "barcode_detected": false,
+  "barcode_value": "",
+  "brand": "",
+  "package_form": "",
+  "product_type": "",
+  "product_type_confidence": 0,
+  "core_product_family": "",
+  "product_name": "",
+  "variant": "",
+  "size": "",
+  "count": "",
+  "flavor_scent_color": "",
+  "model_number": "",
+  "visible_text": [],
+  "confidence": 0
+}
+
+Rules:
+- If a product container is visible, choose the closest "package_form" and "product_type" guess even at low confidence.
+- "package_form" must be one of: "pump bottle", "tube", "tall bottle", "oil bottle", "jar", or "".
+- "product_type" must be one of: "lotion","shampoo","conditioner","oil","cream","cleanser", or "".
+- Keep "product_type_confidence" and "confidence" low when uncertain (e.g. 0.15-0.4).
+- Set "core_product_family" to a coarse object/category noun when possible from silhouette/keys/layout/shape
+  (examples: "keyboard", "mouse", "laptop", "headphones", "webcam", "phone case", "charger", "monitor").
+- Keep brand/family/name empty unless clearly readable.
+- Only return all-empty fields when there is no visible product package at all.`;
 
 /**
  * Common scent / material / color / generic words that vision models sometimes pick up as the "brand"
@@ -250,7 +303,139 @@ function buildFallbackIdentityQuery(parse: VisionProductFamilyParse): string {
   return parts.join(" ").slice(0, 160).trim();
 }
 
+function isBrandOnlyFallbackQuery(query: string, brand: string): boolean {
+  const q = query.trim().toLowerCase();
+  const b = brand.trim().toLowerCase();
+  if (!q || !b) return false;
+  return q === b;
+}
+
+function nonBrandKeywordTokens(query: string, brand: string): string[] {
+  const brandTokens = new Set(familyTokens(brand));
+  return familyTokens(query).filter((tok) => !brandTokens.has(tok));
+}
+
+function isGenericIdentityParse(parse: VisionProductFamilyParse): boolean {
+  const familyCount = familyTokens(parse.core_product_family).length;
+  const hasStrongSignals = Boolean(
+    parse.brand.trim() ||
+      parse.product_name.trim() ||
+      parse.model_number.trim() ||
+      parse.visible_text.some((x) => x.trim().length >= 4),
+  );
+  return !hasStrongSignals && familyCount <= 2;
+}
+
+async function rerankSeedByVisualMatch(opts: {
+  apiKey: string;
+  model: string;
+  scanDataUrl: string;
+  candidates: CatalogItem[];
+}): Promise<string[]> {
+  const candidates = opts.candidates.filter((c) => c.asin && c.imageUrl).slice(0, 10);
+  if (candidates.length < 2) return [];
+  const lines = candidates.map((c, idx) => `${idx + 1}. ${c.asin} :: ${c.title.slice(0, 140)}`);
+  const content: Array<{ type: "text"; text: string } | { type: "image_url"; image_url: { url: string; detail: "low" } }> = [
+    {
+      type: "text",
+      text:
+        "Match the scanned product photo to the closest candidate Amazon listings by physical appearance. " +
+        "Return JSON: {\"best_asins\":[\"ASIN1\",\"ASIN2\",\"ASIN3\"]}. Include only ASINs from this list.\n" +
+        `Candidates:\n${lines.join("\n")}\n\n` +
+        "First image is the scanned product. Following images are candidates in the same numbered order.",
+    },
+    { type: "image_url", image_url: { url: opts.scanDataUrl, detail: "low" } },
+  ];
+  for (const c of candidates) {
+    content.push({ type: "image_url", image_url: { url: c.imageUrl!, detail: "low" } });
+  }
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${opts.apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: opts.model,
+      temperature: 0,
+      max_tokens: 220,
+      response_format: { type: "json_object" },
+      messages: [{ role: "user", content }],
+    }),
+  });
+  if (!res.ok) return [];
+  const payload = (await res.json()) as { choices?: Array<{ message?: { content?: string | null } }> };
+  const raw = payload.choices?.[0]?.message?.content?.trim() ?? "";
+  try {
+    const parsed = JSON.parse(raw) as { best_asins?: unknown };
+    if (!Array.isArray(parsed.best_asins)) return [];
+    const set = new Set(candidates.map((c) => c.asin));
+    return parsed.best_asins
+      .filter((x): x is string => typeof x === "string")
+      .map((x) => x.trim().toUpperCase())
+      .filter((x) => set.has(x));
+  } catch {
+    return [];
+  }
+}
+
 const PRODUCT_TYPE_TOKENS = ["lotion", "shampoo", "conditioner", "oil", "cream", "cleanser"] as const;
+
+function packageFormSearchTokens(packageForm: string): string[] {
+  const f = packageForm.trim().toLowerCase();
+  if (!f) return [];
+  if (f === "pump bottle") return ["pump", "bottle"];
+  if (f === "tube") return ["tube"];
+  if (f === "tall bottle") return ["bottle"];
+  if (f === "oil bottle") return ["oil", "bottle"];
+  if (f === "jar") return ["jar"];
+  return [];
+}
+
+function titleMatchesPackageForm(title: string, packageForm: string): boolean {
+  const tokens = packageFormSearchTokens(packageForm);
+  if (tokens.length === 0) return true;
+  const t = title.toLowerCase();
+  return tokens.every((tok) => t.includes(tok));
+}
+
+async function requestVisionParse(opts: {
+  apiKey: string;
+  dataUrl: string;
+  visionModel: string;
+  visionDetail: "low" | "high";
+  prompt: string;
+  maxTokens?: number;
+}): Promise<VisionProductFamilyParse | null> {
+  const oaiRes = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${opts.apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: opts.visionModel,
+      max_tokens: opts.maxTokens ?? 700,
+      temperature: 0,
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: opts.prompt },
+            { type: "image_url", image_url: { url: opts.dataUrl, detail: opts.visionDetail } },
+          ],
+        },
+      ],
+    }),
+  });
+  if (!oaiRes.ok) return null;
+  const completion = (await oaiRes.json()) as {
+    choices?: Array<{ message?: { content?: string | null } }>;
+  };
+  const raw = completion.choices?.[0]?.message?.content?.trim() ?? "";
+  return parseVisionProductFamilyJson(raw);
+}
 
 function isLikelyCrossProductBundleTitle(title: string, parse: VisionProductFamilyParse): boolean {
   const t = title.toLowerCase();
@@ -268,12 +453,38 @@ function isLikelyCrossProductBundleTitle(title: string, parse: VisionProductFami
   return false;
 }
 
+function hasStrongAirFreshenerAnchors(parse: VisionProductFamilyParse): boolean {
+  const brand = parse.brand.trim().toLowerCase();
+  const name = parse.product_name.trim().toLowerCase();
+  const cues = parse.visible_text.map((x) => x.trim().toLowerCase());
+  const blob = [brand, name, ...cues].join(" ");
+  if (!blob) return false;
+  if (/\b(air\s*wick|febreze|glade|freshmatic)\b/.test(blob)) return true;
+  if (/\b(air\s*freshener|automatic\s*spray|spray\s*refill|fragrance\s*diffuser|odor\s*eliminator)\b/.test(blob)) {
+    return true;
+  }
+  return false;
+}
+
+function looksLikeAirFreshenerParse(parse: VisionProductFamilyParse): boolean {
+  const fam = parse.core_product_family.trim().toLowerCase();
+  const type = parse.product_type.trim().toLowerCase();
+  const name = parse.product_name.trim().toLowerCase();
+  return (
+    /\bair\s*fresh/.test(fam) ||
+    /\bair\s*fresh/.test(type) ||
+    /\bair\s*fresh/.test(name) ||
+    /\bfreshmatic\b/.test(fam) ||
+    /\bfreshmatic\b/.test(name)
+  );
+}
+
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     const gate = await requireAppAccess();
     if (!gate.ok) return gate.response;
 
-    if (!userKeywordSearchLimit(gate.userId)) {
+    if (!(await userKeywordSearchLimit(gate.userId))) {
       return NextResponse.json(
         { ok: false, error: "Too many searches. Wait a minute.", results: [] },
         { status: 429 },
@@ -403,7 +614,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const visionModel = process.env.OPENAI_VISION_MODEL?.trim() || "gpt-4o-mini";
     const visionDetail = process.env.OPENAI_VISION_DETAIL?.trim().toLowerCase() === "low" ? "low" : "high";
 
-    const oaiRes = await fetch("https://api.openai.com/v1/chat/completions", {
+    const primaryRes = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -427,12 +638,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }),
     });
 
-    if (!oaiRes.ok) {
-      const detail = await oaiRes.text();
+    if (!primaryRes.ok) {
+      const detail = await primaryRes.text();
       return NextResponse.json(
         {
           ok: false,
-          error: `Image understanding request failed (${oaiRes.status}).`,
+          error: `Image understanding request failed (${primaryRes.status}).`,
           detail: detail.slice(0, 500),
           results: [],
         },
@@ -440,7 +651,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const completion = (await oaiRes.json()) as {
+    const completion = (await primaryRes.json()) as {
       choices?: Array<{ message?: { content?: string | null } }>;
     };
     const rawContent = completion.choices?.[0]?.message?.content?.trim() ?? "";
@@ -461,7 +672,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         variant: parse.variant ? parse.variant : scrubbedBrand,
       };
     }
-
     const derivedQuery = parse ? buildStableAmazonIdentityQuery(parse) : "";
     console.log(
       "[image-search] vision parse →",
@@ -525,25 +735,48 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // Image / packaging identity (strict — no broad search)
     // ---------------------------------------------------------------
     if (!imageIdentityIsUsable(parse)) {
-      console.log(
-        `[image-search] image unusable (confidence=${parse.confidence}) with insufficient identity signals`,
-      );
-      return NextResponse.json({
-        ok: true,
-        results: [] as ProductAnalysis[],
-        derivedQuery: derivedQuery || null,
-        imageUnclear: true,
-        notice: NOTICE_UNCLEAR,
-        visionParse: parse,
+      const rescueParse = await requestVisionParse({
+        apiKey,
+        dataUrl,
+        visionModel,
+        visionDetail: "high",
+        prompt: VISION_RESCUE_PROMPT,
+        maxTokens: 420,
       });
-    }
-
-    const typeMode = inferTypeMode(parse);
-
-    if (!parse.core_product_family.trim()) {
-      const fallbackKeyword = buildFallbackIdentityQuery(parse);
-      if (!fallbackKeyword) {
-        console.log("[image-search] vision returned no core_product_family and no fallback cues");
+      const guessParse =
+        rescueParse && (rescueParse.product_type.trim() || rescueParse.package_form.trim())
+          ? rescueParse
+          : await requestVisionParse({
+              apiKey,
+              dataUrl,
+              visionModel,
+              visionDetail: "high",
+              prompt: VISION_BEST_GUESS_SHAPE_PROMPT,
+              maxTokens: 420,
+            });
+      if (guessParse && (guessParse.product_type.trim() || guessParse.package_form.trim())) {
+        console.log("[image-search] rescue/guess parse produced coarse shape cues", {
+          package_form: guessParse.package_form || null,
+          product_type: guessParse.product_type || null,
+          product_type_confidence: guessParse.product_type_confidence,
+          confidence: guessParse.confidence,
+        });
+        console.log("[image-search] primary parse unusable; rescue pass produced shape/type cues");
+        parse = {
+          ...parse,
+          product_type: guessParse.product_type || parse.product_type,
+          product_type_confidence: Math.max(parse.product_type_confidence, guessParse.product_type_confidence),
+          package_form: guessParse.package_form || parse.package_form,
+          core_product_family: guessParse.core_product_family || parse.core_product_family,
+          product_name: guessParse.product_name || parse.product_name,
+          variant: guessParse.variant || parse.variant,
+          visible_text: guessParse.visible_text.length > 0 ? guessParse.visible_text : parse.visible_text,
+          confidence: Math.max(parse.confidence, guessParse.confidence),
+        };
+      } else {
+        console.log(
+          `[image-search] image unusable (confidence=${parse.confidence}) with insufficient identity signals`,
+        );
         return NextResponse.json({
           ok: true,
           results: [] as ProductAnalysis[],
@@ -553,84 +786,24 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           visionParse: parse,
         });
       }
-      console.log(
-        `[image-search] no core_product_family; attempting fallback identity search with "${fallbackKeyword}"`,
-      );
-      const rawFallbackItems = await client.searchCatalogByKeywordMultiple(
-        fallbackKeyword,
-        FAMILY_SEARCH_FETCH_CAP,
-      );
-      const packageBrand = strictPackageBrandFromVision(parse.brand);
-      const fallbackCandidates = rawFallbackItems.filter((item) => {
-        if (!item.asin) return false;
-        if (!strictCatalogBrandMatch(item.brand, packageBrand)) return false;
-        const productNameCue = parse.product_name.trim()
-          ? item.title.toLowerCase().includes(parse.product_name.trim().toLowerCase())
-          : false;
-        const visibleCue = titleMatchesVisibleText(item.title, parse.visible_text);
-        const typeCue = parse.product_type.trim()
-          ? catalogTitleMatchesAuxProductType(item.title, parse.product_type)
-          : false;
-        return productNameCue || visibleCue || typeCue;
-      });
-      if (fallbackCandidates.length === 0) {
-        console.log("[image-search] fallback identity search found no confident candidates");
-        return NextResponse.json({
-          ok: true,
-          results: [] as ProductAnalysis[],
-          derivedQuery: fallbackKeyword || derivedQuery || null,
-          imageUnclear: true,
-          notice: NOTICE_UNCLEAR,
-          visionParse: parse,
-        });
-      }
-      const seed = pickFamilySeed(fallbackCandidates, parse);
-      const grouped = await collectFamilyResults({
-        client,
-        parse: {
-          ...parse,
-          core_product_family: parse.product_name.trim() || seed.title.slice(0, 80).trim(),
-        },
-        seed,
-        seedReason: "fallback identity match",
-        candidatePool: fallbackCandidates,
-      });
-      return NextResponse.json({
-        ok: true,
-        results: grouped.results.slice(0, Math.max(pageSize, grouped.results.length)),
-        derivedQuery: fallbackKeyword || null,
-        matchPath: "family",
-        lowConfidenceType: true,
-        usedRelaxedFilter: true,
-        visionParse: parse,
-      });
     }
 
-    /**
-     * Without a brand anchor we need the product family to be specific enough on its own.
-     * Generic 1–2 token families like "Hair Care", "Lotion", "Soap" match thousands of
-     * unrelated SKUs — refuse to guess.
-     */
-    const familyTokenList = familyTokens(parse.core_product_family);
-    const typeTokenList = familyTokens(parse.product_type);
-    if (!parse.brand.trim() && familyTokenList.length < 2 && typeTokenList.length < 2) {
-      console.log(
-        `[image-search] no brand + generic family "${parse.core_product_family}" → unclear / not specific enough`,
-      );
-      return NextResponse.json({
-        ok: true,
-        results: [] as ProductAnalysis[],
-        derivedQuery: derivedQuery || null,
-        imageUnclear: true,
-        notice: NOTICE_UNCLEAR,
-        visionParse: parse,
-      });
-    }
-
-    const keyword =
-      derivedQuery.trim() ||
-      [parse.brand, parse.core_product_family, parse.product_type].filter(Boolean).join(" ").trim();
-    if (!keyword) {
+    const universalKeyword =
+      buildStableAmazonIdentityQuery(parse).trim() || buildFallbackIdentityQuery(parse).trim();
+    const brandOnlyUniversal = isBrandOnlyFallbackQuery(universalKeyword, parse.brand);
+    const universalKeywordParts = [
+      parse.core_product_family.trim(),
+      parse.product_name.trim(),
+      parse.product_type.trim(),
+      parse.variant.trim(),
+      parse.size.trim(),
+      ...parse.visible_text.slice(0, 3).map((x) => x.trim()),
+      ...packageFormSearchTokens(parse.package_form),
+    ].filter(Boolean);
+    const universalFallbackKeyword = universalKeywordParts.join(" ").trim();
+    const searchKeyword =
+      universalKeyword && !brandOnlyUniversal ? universalKeyword : universalFallbackKeyword;
+    if (!searchKeyword) {
       return NextResponse.json({
         ok: true,
         results: [] as ProductAnalysis[],
@@ -641,131 +814,78 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       });
     }
 
-    const rawItems = await client.searchCatalogByKeywordMultiple(keyword, FAMILY_SEARCH_FETCH_CAP);
-    console.log(`[image-search] identity "${keyword}" → ${rawItems.length} catalog hits`);
-
-    const packageBrand = strictPackageBrandFromVision(parse.brand);
-    const log: ScanLogEntry[] = [];
-
-    const strictCandidates: CatalogItem[] = [];
-    const relaxedCandidates: CatalogItem[] = [];
-    const softFamilyRequired = parse.core_product_family.trim().length > 0;
-    for (const item of rawItems) {
-      if (!item.asin) continue;
-      if (!strictCatalogBrandMatch(item.brand, packageBrand)) {
-        log.push({
-          asin: item.asin,
-          title: item.title,
-          status: "rejected",
-          reason: `brand mismatch (catalog="${item.brand}" vs package="${packageBrand}")`,
-        });
-        continue;
+    const rawUniversalItems = await client.searchCatalogByKeywordMultiple(searchKeyword, FAMILY_SEARCH_FETCH_CAP);
+    const semanticTokens = nonBrandKeywordTokens(searchKeyword, parse.brand);
+    const universalCandidates = rawUniversalItems.filter((item) => {
+      if (!item.asin) return false;
+      if (semanticTokens.length > 0) {
+        const titleLower = item.title.toLowerCase();
+        const semanticHit = semanticTokens.some((tok) => titleLower.includes(tok));
+        if (!semanticHit) return false;
       }
-      const familyMatch = softFamilyRequired
+      const familyCue = parse.core_product_family.trim()
         ? catalogTitleMatchesProductFamily(item.title, parse.core_product_family)
         : false;
-      const visibleCueMatch = titleMatchesVisibleText(item.title, parse.visible_text);
       const productNameCue = parse.product_name.trim()
         ? item.title.toLowerCase().includes(parse.product_name.trim().toLowerCase())
         : false;
-      const familyOrCue = familyMatch || visibleCueMatch || productNameCue;
-      if (!familyOrCue) {
-        log.push({
-          asin: item.asin,
-          title: item.title,
-          status: "rejected",
-          reason: "same brand, different product line",
-        });
-        continue;
-      }
-      if (isLikelyCrossProductBundleTitle(item.title, parse)) {
-        log.push({
-          asin: item.asin,
-          title: item.title,
-          status: "rejected",
-          reason: "bundle/combo listing does not match standalone scanned product",
-        });
-        continue;
-      }
-
-      const strictTypeMatch = parse.product_type.trim()
+      const visibleCue = titleMatchesVisibleText(item.title, parse.visible_text);
+      const typeCue = parse.product_type.trim()
         ? catalogTitleMatchesAuxProductType(item.title, parse.product_type)
-        : true;
-      const titleType = detectCatalogCanonicalProductType(item.title);
-      const clearlyWrongType =
-        Boolean(parse.product_type.trim()) &&
-        Boolean(titleType) &&
-        titleType !== parse.product_type;
-
-      // Strict set (preferred): full family + type lock when confidence is high/medium.
-      const strictByType =
-        typeMode === "high" ? strictTypeMatch : typeMode === "medium" ? !clearlyWrongType : true;
-      if (familyMatch && strictByType) {
-        strictCandidates.push(item);
-      }
-
-      // Relaxed set (fallback): keep family/cue + brand, only reject clearly wrong type at high confidence.
-      if (typeMode === "high" && clearlyWrongType) {
-        log.push({
-          asin: item.asin,
-          title: item.title,
-          status: "rejected",
-          reason: "clearly wrong product type",
-        });
-        continue;
-      }
-      relaxedCandidates.push(item);
-    }
-
-    const candidates = strictCandidates.length > 0 ? strictCandidates : relaxedCandidates;
-    const usedRelaxedFilter = strictCandidates.length === 0 && relaxedCandidates.length > 0;
-    if (candidates.length === 0) {
-      logScanResults("family filter (no matches)", log);
+        : false;
+      const formCue = parse.package_form.trim() ? titleMatchesPackageForm(item.title, parse.package_form) : false;
+      return familyCue || productNameCue || visibleCue || typeCue || formCue;
+    });
+    if (universalCandidates.length === 0) {
       return NextResponse.json({
         ok: true,
         results: [] as ProductAnalysis[],
-        derivedQuery,
-        notFoundOnAmazon: true,
-        notice: NOTICE_NOT_ON_AMAZON,
+        derivedQuery: searchKeyword,
+        imageUnclear: true,
+        notice: NOTICE_UNCLEAR,
         visionParse: parse,
       });
     }
-    if (usedRelaxedFilter) {
-      console.log("[image-search] strict filter empty; using relaxed fallback constraints");
-    }
 
-    // Pick the seed: the candidate whose title best matches family + variant.
-    const seed = pickFamilySeed(candidates, parse);
-    const lineFiltered = candidates.filter(
-      (it) => it.asin === seed.asin || catalogItemSameProductFamilyLine(seed, it),
-    );
-    for (const it of candidates) {
-      if (lineFiltered.some((x) => x.asin === it.asin)) continue;
-      log.push({
-        asin: it.asin,
-        title: it.title,
-        status: "rejected",
-        reason: "different product line vs best seed",
+    let rankedPool = universalCandidates;
+    const visualRankedAsins = await rerankSeedByVisualMatch({
+      apiKey,
+      model: visionModel,
+      scanDataUrl: dataUrl,
+      candidates: universalCandidates,
+    });
+    if (visualRankedAsins.length > 0) {
+      const order = new Map(visualRankedAsins.map((asin, idx) => [asin, idx]));
+      rankedPool = [...universalCandidates].sort((a, b) => {
+        const ai = order.get(a.asin);
+        const bi = order.get(b.asin);
+        if (ai === undefined && bi === undefined) return 0;
+        if (ai === undefined) return 1;
+        if (bi === undefined) return -1;
+        return ai - bi;
       });
+      console.log("[image-search] universal visual rerank applied", visualRankedAsins.slice(0, 3));
     }
 
+    const seed = rankedPool[0] ?? pickFamilySeed(rankedPool, parse);
     const grouped = await collectFamilyResults({
       client,
-      parse,
+      parse: {
+        ...parse,
+        core_product_family:
+          parse.core_product_family.trim() || parse.product_name.trim() || seed.title.slice(0, 80).trim(),
+      },
       seed,
-      seedReason: "same product family - exact",
-      candidatePool: lineFiltered,
-      log,
+      seedReason: "visual exact match",
+      candidatePool: rankedPool,
     });
-
-    logScanResults("family filter", log);
     return NextResponse.json({
       ok: true,
       results: grouped.results.slice(0, Math.max(pageSize, grouped.results.length)),
-      derivedQuery,
+      derivedQuery: searchKeyword,
       matchPath: "family",
-      lowConfidenceType: typeMode !== "high",
-      usedRelaxedFilter,
+      lowConfidenceType: true,
+      usedRelaxedFilter: true,
       visionParse: parse,
     });
   } catch (error) {
@@ -847,7 +967,32 @@ async function collectFamilyResults(opts: {
   let usedAmazonVariationFamily = false;
   const relationFamily = await client.resolveVariationFamilyItems(seed.asin, FAMILY_SEARCH_FETCH_CAP).catch(() => null);
   if (relationFamily && relationFamily.items.length > 0) {
-    pool = relationFamily.items;
+    const unique = new Map<string, CatalogItem>();
+    for (const it of relationFamily.items) {
+      if (!it.asin) continue;
+      unique.set(it.asin, it);
+    }
+    // Heuristic/small family responses often miss valid pack/bundle/size variations.
+    // Merge in candidate pool + keyword expansion and let same-line filters trim noise.
+    const shouldAugment =
+      !relationFamily.resolved || relationFamily.items.length < 4 || unique.size < 4;
+    if (shouldAugment) {
+      if (opts.candidatePool && opts.candidatePool.length > 0) {
+        for (const it of opts.candidatePool) {
+          if (!it.asin) continue;
+          unique.set(it.asin, it);
+        }
+      }
+      const expandKeyword = seed.title.slice(0, 72).trim();
+      if (expandKeyword.length >= 6) {
+        const expanded = await client.searchCatalogByKeywordMultiple(expandKeyword, FAMILY_SEARCH_FETCH_CAP);
+        for (const it of expanded) {
+          if (!it.asin) continue;
+          unique.set(it.asin, it);
+        }
+      }
+    }
+    pool = [...unique.values()];
     usedAmazonVariationFamily = relationFamily.resolved;
     console.log(
       `[image-search] expanded family for ${seed.asin} → ${pool.length} related rows (${relationFamily.resolved ? "relationship graph" : "heuristic expansion"})`,
@@ -943,10 +1088,11 @@ async function collectFamilyResults(opts: {
   for (const item of pool) {
     if (!item.asin || seen.has(item.asin)) continue;
     const cls = classifyFamilyMatch(item, parse);
-    const group = usedAmazonVariationFamily ? cls.group : "possible_related";
+    /** Same-line items are already vetted; `classifyFamilyMatch` ranks exact vs pack vs scent. */
+    const group = cls.group;
     const reason = usedAmazonVariationFamily
       ? cls.reason
-      : `possible related listing (family graph unavailable) - ${cls.reason}`;
+      : `${cls.reason} (inferred — catalog variation links incomplete)`;
     seen.add(item.asin);
     ordered.push({ item, group, reason });
     log.push({ asin: item.asin, title: item.title, status: "accepted", reason });

@@ -1444,7 +1444,6 @@ function AnalyzerPageContent() {
       setIsKeywordMode(true);
       if (derived) {
         setLastKeyword(derived);
-        setKeyword(derived);
       } else {
         setLastKeyword(null);
       }

@@ -47,5 +47,7 @@ export function amazonOfferListingUrl(marketplaceDomain: string, asin: string): 
 export function amazonProductDetailUrl(marketplaceDomain: string, asin: string): string {
   const host = marketplaceDomain.replace(/^www\./i, "").trim() || "amazon.com";
   const id = normalizeRetailAsin(asin);
-  return `https://www.${host}/dp/${encodeURIComponent(id)}`;
+  const tag = process.env.NEXT_PUBLIC_AMAZON_ASSOCIATE_TAG?.trim();
+  const tagParam = tag ? `?tag=${encodeURIComponent(tag)}` : "";
+  return `https://www.${host}/dp/${encodeURIComponent(id)}${tagParam}`;
 }

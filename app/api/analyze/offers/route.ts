@@ -39,7 +39,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const gate = await requireAppAccess();
     if (!gate.ok) return gate.response;
 
-    if (!userAnalyzeLimit(gate.userId)) {
+    if (!(await userAnalyzeLimit(gate.userId))) {
       return NextResponse.json(
         {
           ok: false,

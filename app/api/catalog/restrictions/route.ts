@@ -32,7 +32,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const gate = await requireAppAccess();
     if (!gate.ok) return gate.response;
 
-    if (!userRestrictionsLimit(gate.userId)) {
+    if (!(await userRestrictionsLimit(gate.userId))) {
       return NextResponse.json(
         { error: "Too many restriction checks. Wait a moment.", asin, gated: null },
         { status: 429 },

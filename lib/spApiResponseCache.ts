@@ -9,24 +9,29 @@ function numEnv(name: string, fallback: number): number {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
+/** Catalog search pages: 6 hours (product listings don't change by the minute). */
 export function catalogSearchTtlSec(): number {
-  return numEnv("SP_API_CACHE_CATALOG_SEARCH_TTL_SEC", 600);
+  return numEnv("SP_API_CACHE_CATALOG_SEARCH_TTL_SEC", 21_600);
 }
 
+/** Individual catalog items (title, image, BSR): 24 hours. */
 export function catalogItemTtlSec(): number {
-  return numEnv("SP_API_CACHE_CATALOG_ITEM_TTL_SEC", 3600);
+  return numEnv("SP_API_CACHE_CATALOG_ITEM_TTL_SEC", 86_400);
 }
 
+/** Keyword / image search result pages: 6 hours. */
 export function keywordSearchTtlSec(): number {
-  return numEnv("SP_API_CACHE_KEYWORD_SEARCH_TTL_SEC", 600);
+  return numEnv("SP_API_CACHE_KEYWORD_SEARCH_TTL_SEC", 21_600);
 }
 
+/** Full analysis result (includes price): 1 hour — shorter because buy-box price fluctuates. */
 export function analysisResultTtlSec(): number {
-  return numEnv("SP_API_CACHE_ANALYSIS_TTL_SEC", 600);
+  return numEnv("SP_API_CACHE_ANALYSIS_TTL_SEC", 3_600);
 }
 
+/** Listing restrictions per seller: 4 hours — approval status rarely changes mid-day. */
 export function listingRestrictionsTtlSec(): number {
-  return numEnv("SP_API_CACHE_RESTRICTIONS_TTL_SEC", 900);
+  return numEnv("SP_API_CACHE_RESTRICTIONS_TTL_SEC", 14_400);
 }
 
 export function catalogSearchCacheKey(

@@ -11,6 +11,17 @@ import { getOAuthAuthSecret } from "@/lib/amazonOAuth";
 export const SP_API_UNAVAILABLE_USER_MESSAGE =
   "Amazon SP-API is not available. Connect your seller account in settings (Connect Amazon) or set SP_API_* and AWS credentials in the server environment.";
 
+const GLOBAL_SP_API_FALLBACK_ENV = "REQUIRE_AMAZON_OAUTH_FOR_SP_API";
+
+/**
+ * When true, users without Connect Amazon OAuth do not use shared env SP_API_REFRESH_TOKEN / SELLER_ID.
+ * Enable in production so each customer consumes their own seller’s Amazon quota instead of one shared pool.
+ */
+export function isGlobalSpApiFallbackDisabled(): boolean {
+  const v = process.env[GLOBAL_SP_API_FALLBACK_ENV]?.trim().toLowerCase();
+  return v === "1" || v === "true" || v === "yes";
+}
+
 function readAwsEnvSlice():
   | {
       awsAccessKeyId: string;
@@ -141,6 +152,9 @@ export async function getSpApiClientForUserOrGlobal(
   if (userId) {
     const oauthClient = await tryCreateSpApiClientForOAuthUser(userId);
     if (oauthClient) return oauthClient;
+    if (isGlobalSpApiFallbackDisabled()) return null;
+  } else if (isGlobalSpApiFallbackDisabled()) {
+    return null;
   }
 
   let marketplaceIdOverride: string | null = null;

@@ -140,14 +140,14 @@ async function main(): Promise<void> {
         maxRedemptions: null,
         expiresAt: null,
         active: true,
-        allowRepeatRedemption: false,
+        allowRepeatRedemption: true,
       },
       update: {
         active: true,
         expiresAt: null,
         grantsDays: grantDays,
         maxRedemptions: null,
-        allowRepeatRedemption: false,
+        allowRepeatRedemption: true,
       },
     });
     console.log(

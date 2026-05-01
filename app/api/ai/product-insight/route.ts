@@ -29,7 +29,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     const gate = await requireAppAccess();
     if (!gate.ok) return gate.response;
 
-    if (!userOpenaiInsightLimit(gate.userId)) {
+    if (!(await userOpenaiInsightLimit(gate.userId))) {
       return NextResponse.json({ ok: false, error: "Too many AI requests. Wait a minute." }, { status: 429 });
     }
 

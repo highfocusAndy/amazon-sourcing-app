@@ -56,7 +56,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     const gate = await requireAppAccess();
     if (!gate.ok) return gate.response;
 
-    if (!userOpenaiChatLimit(gate.userId)) {
+    if (!(await userOpenaiChatLimit(gate.userId))) {
       return NextResponse.json({ ok: false, error: "Too many chat requests. Wait a minute." }, { status: 429 });
     }
 

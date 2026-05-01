@@ -129,12 +129,18 @@ export function parseVisionProductFamilyJson(content: string): VisionProductFami
             .filter(Boolean)
         : [];
     const barcodeRaw = str("barcode_value").replace(/\D/g, "");
-    const normalizedType = normalizeVisionProductType(str("product_type"));
+    const rawType = str("product_type");
+    const normalizedType = normalizeVisionProductType(rawType);
+    const genericType = sanitizeGenericProductType(rawType);
     return {
       barcode_detected: o.barcode_detected === true || (barcodeRaw.length >= 8 && barcodeRaw.length <= 14),
       barcode_value: barcodeRaw.length >= 8 && barcodeRaw.length <= 14 ? barcodeRaw : "",
       brand: str("brand"),
-      product_type: normalizedType ?? "",
+      /**
+       * Keep canonical type when available, otherwise preserve a sanitized generic type
+       * (e.g. "keyboard", "mouse", "charger") so non-beauty categories still match.
+       */
+      product_type: normalizedType ?? genericType,
       product_type_confidence: num("product_type_confidence"),
       package_form: str("package_form"),
       core_product_family: str("core_product_family"),
@@ -702,6 +708,19 @@ export function buildVisionParseFromCatalogSeed(seed: CatalogItem): VisionProduc
 const CANONICAL_TYPES = ["lotion", "shampoo", "conditioner", "oil", "cream", "cleanser"] as const;
 export type CanonicalProductType = (typeof CANONICAL_TYPES)[number];
 
+function sanitizeGenericProductType(raw: string | undefined | null): string {
+  const x = (raw ?? "").trim().toLowerCase();
+  if (!x) return "";
+  const cleaned = x
+    .replace(/[^a-z0-9\s\-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 40);
+  if (!cleaned) return "";
+  const tokens = cleaned.split(" ").filter((tok) => tok.length >= 2).slice(0, 4);
+  return tokens.join(" ").trim();
+}
+
 export function normalizeVisionProductType(raw: string | undefined | null): CanonicalProductType | null {
   const x = (raw ?? "").trim().toLowerCase();
   if (!x) return null;
@@ -760,12 +779,20 @@ export function buildStableAmazonIdentityQuery(parse: VisionProductFamilyParse):
 /** When vision extracted a product_type, titles must also match that coarse type (stops shampoo vs lotion drift). */
 export function catalogTitleMatchesAuxProductType(title: string, productType: string): boolean {
   const expected = normalizeVisionProductType(productType);
-  if (!expected) return false;
+  const genericExpected = sanitizeGenericProductType(productType);
+  if (!expected && !genericExpected) return false;
   const detected = detectCatalogCanonicalProductType(title);
   if (!detected) {
-    // If title doesn't clearly expose type, require expected keyword anyway.
-    return title.toLowerCase().includes(expected);
+    // If title doesn't clearly expose canonical type, use expected keyword tokens.
+    const t = title.toLowerCase();
+    const needle = expected ?? genericExpected;
+    const tokens = familyTokens(needle);
+    if (tokens.length === 0) return false;
+    if (tokens.length <= 2) return tokens.every((tok) => t.includes(tok));
+    const hits = tokens.filter((tok) => t.includes(tok)).length;
+    return hits >= Math.ceil(tokens.length * 0.67);
   }
+  if (!expected) return true;
   return detected === expected;
 }
 

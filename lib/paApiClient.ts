@@ -7,6 +7,7 @@
 import aws4 from "aws4";
 
 const PA_API_GET_ITEMS_TARGET = "com.amazon.paapi5.v1.ProductAdvertisingAPIv1.GetItems";
+const PA_API_SEARCH_TARGET = "com.amazon.paapi5.v1.ProductAdvertisingAPIv1.SearchItems";
 
 const MARKETPLACE_TO_PA_HOST_REGION: Record<string, { host: string; region: string }> = {
   ATVPDKIKX0DER: { host: "webservices.amazon.com", region: "us-east-1" },
@@ -33,6 +34,23 @@ const MARKETPLACE_TO_PA_HOST_REGION: Record<string, { host: string; region: stri
 export interface PaApiMainBsrResult {
   salesRank: number;
   categoryName: string | null;
+}
+
+/** Public catalog data for a known ASIN — returned from PA-API so no SP-API seller quota used. */
+export interface PaApiCatalogItem {
+  asin: string;
+  title: string;
+  brand: string;
+  imageUrl: string | null;
+  /** Current lowest price (Buy Box / listing price) if available. */
+  price: number | null;
+  salesRank: number | null;
+  salesRankCategory: string | null;
+}
+
+/** Lightweight result set from a PA-API keyword search. */
+export interface PaApiSearchResult {
+  items: PaApiCatalogItem[];
 }
 
 function readNumber(value: unknown): number | null {
@@ -106,6 +124,104 @@ function parseGetItemsResponse(json: unknown): PaApiMainBsrResult | null {
   };
 }
 
+/** Resources needed to populate PaApiCatalogItem. */
+const CATALOG_ITEM_RESOURCES = [
+  "ItemInfo.Title",
+  "ItemInfo.ByLineInfo",
+  "Images.Primary.Medium",
+  "Offers.Listings.Price",
+  "BrowseNodeInfo.WebsiteSalesRank",
+];
+
+function parseCatalogItems(json: unknown): PaApiCatalogItem[] {
+  const root = asObject(json);
+  const itemsResult = asObject(root?.ItemsResult);
+  const rawItems = Array.isArray(itemsResult?.Items) ? itemsResult.Items : [];
+  const results: PaApiCatalogItem[] = [];
+
+  for (const raw of rawItems) {
+    const item = asObject(raw);
+    if (!item) continue;
+    const asin = readString(item.ASIN);
+    if (!asin) continue;
+
+    const itemInfo = asObject(item.ItemInfo);
+    const titleObj = asObject(itemInfo?.Title);
+    const title = readString(titleObj?.DisplayValue) ?? "";
+
+    const byLineInfo = asObject(itemInfo?.ByLineInfo);
+    const brandArr = Array.isArray(byLineInfo?.Brand) ? byLineInfo.Brand : [];
+    const brandObj = asObject(brandArr[0] ?? byLineInfo?.Brand);
+    const brand = readString(brandObj?.DisplayValue) ?? "";
+
+    const imagesObj = asObject(item.Images);
+    const primaryObj = asObject(imagesObj?.Primary);
+    const mediumObj = asObject(primaryObj?.Medium);
+    const imageUrl = readString(mediumObj?.URL);
+
+    const offersObj = asObject(item.Offers);
+    const listings = Array.isArray(offersObj?.Listings) ? offersObj.Listings : [];
+    let price: number | null = null;
+    for (const listing of listings) {
+      const l = asObject(listing);
+      const priceObj = asObject(l?.Price);
+      const amount = readNumber(priceObj?.Amount);
+      if (amount !== null && amount > 0) {
+        price = amount;
+        break;
+      }
+    }
+
+    const browseNodeInfo = asObject(item.BrowseNodeInfo);
+    const websiteSalesRank = asObject(browseNodeInfo?.WebsiteSalesRank);
+    const salesRank = readNumber(websiteSalesRank?.SalesRank);
+    const salesRankCategory =
+      readString(websiteSalesRank?.DisplayName) ?? readString(websiteSalesRank?.ContextFreeName);
+
+    results.push({ asin, title, brand, imageUrl, price, salesRank, salesRankCategory });
+  }
+  return results;
+}
+
+async function paApiPost(
+  target: string,
+  body: Record<string, unknown>,
+): Promise<unknown | null> {
+  if (!isPaApiConfigured()) return null;
+  const { accessKey, secretKey, partnerTag, host, region } = getPaApiConfig();
+  const bodyStr = JSON.stringify({ ...body, PartnerTag: partnerTag, PartnerType: "Associates" });
+  const signed = aws4.sign(
+    {
+      service: "ProductAdvertisingAPIv1",
+      region,
+      host,
+      method: "POST",
+      path: "/",
+      headers: {
+        host,
+        "content-type": "application/json; charset=utf-8",
+        "content-encoding": "amz-1.0",
+        "x-amz-target": target,
+      },
+      body: bodyStr,
+    },
+    { accessKeyId: accessKey, secretAccessKey: secretKey },
+  );
+  const response = await fetch(`https://${host}/`, {
+    method: "POST",
+    headers: signed.headers as Record<string, string>,
+    body: bodyStr,
+    cache: "no-store",
+  });
+  const raw = await response.text();
+  let json: unknown = {};
+  try { json = raw ? JSON.parse(raw) : {}; } catch { return null; }
+  if (!response.ok) return null;
+  const errors = (json as Record<string, unknown>).Errors;
+  if (Array.isArray(errors) && errors.length > 0) return null;
+  return json;
+}
+
 /**
  * Fetch the main product-page BSR (WebsiteSalesRank) and its category for an ASIN.
  * Returns null if PA-API is not configured, or the request fails, or the item has no WebsiteSalesRank.
@@ -114,57 +230,64 @@ export async function fetchMainBsr(asin: string): Promise<PaApiMainBsrResult | n
   if (!isPaApiConfigured()) return null;
   const normalizedAsin = asin.trim().toUpperCase();
   if (!normalizedAsin || normalizedAsin.length !== 10) return null;
-
-  const { accessKey, secretKey, partnerTag, host, region } = getPaApiConfig();
-  const body = JSON.stringify({
+  const { host } = getPaApiConfig();
+  const json = await paApiPost(PA_API_GET_ITEMS_TARGET, {
     ItemIds: [normalizedAsin],
     ItemIdType: "ASIN",
     Marketplace: host === "webservices.amazon.com" ? "www.amazon.com" : undefined,
-    PartnerTag: partnerTag,
-    PartnerType: "Associates",
     Resources: ["BrowseNodeInfo.WebsiteSalesRank", "BrowseNodeInfo.BrowseNodes.SalesRank"],
   });
-
-  const path = "/";
-  const signed = aws4.sign(
-    {
-      service: "ProductAdvertisingAPIv1",
-      region,
-      host,
-      method: "POST",
-      path,
-      headers: {
-        host,
-        "content-type": "application/json; charset=utf-8",
-        "content-encoding": "amz-1.0",
-        "x-amz-target": PA_API_GET_ITEMS_TARGET,
-      },
-      body,
-    },
-    {
-      accessKeyId: accessKey,
-      secretAccessKey: secretKey,
-    }
-  );
-
-  const response = await fetch(`https://${host}${path}`, {
-    method: "POST",
-    headers: signed.headers as Record<string, string>,
-    body,
-    cache: "no-store",
-  });
-
-  const raw = await response.text();
-  let json: unknown = {};
-  try {
-    json = raw ? JSON.parse(raw) : {};
-  } catch {
-    return null;
-  }
-
-  if (!response.ok) return null;
-  const errors = (json as Record<string, unknown>).Errors;
-  if (Array.isArray(errors) && errors.length > 0) return null;
-
+  if (!json) return null;
   return parseGetItemsResponse(json);
+}
+
+/**
+ * Fetch public catalog data (title, brand, image, price, BSR) for up to 10 ASINs via PA-API.
+ * Uses no seller quota — safe to call for any signed-in user regardless of Connect Amazon status.
+ * Returns null if PA-API is not configured.
+ */
+export async function fetchCatalogItemsFromPaApi(
+  asins: string[],
+): Promise<PaApiCatalogItem[] | null> {
+  if (!isPaApiConfigured()) return null;
+  const normalizedAsins = asins
+    .map((a) => a.trim().toUpperCase())
+    .filter((a) => a.length === 10)
+    .slice(0, 10);
+  if (normalizedAsins.length === 0) return null;
+  const { host } = getPaApiConfig();
+  const json = await paApiPost(PA_API_GET_ITEMS_TARGET, {
+    ItemIds: normalizedAsins,
+    ItemIdType: "ASIN",
+    Marketplace: host === "webservices.amazon.com" ? "www.amazon.com" : undefined,
+    Resources: CATALOG_ITEM_RESOURCES,
+  });
+  if (!json) return null;
+  return parseCatalogItems(json);
+}
+
+/**
+ * Search Amazon catalog by keyword via PA-API (no seller quota).
+ * Returns lightweight results (ASIN, title, brand, image, price, BSR).
+ * Returns null when PA-API is not configured.
+ */
+export async function searchCatalogByKeywordPaApi(
+  keyword: string,
+  maxResults = 10,
+): Promise<PaApiSearchResult | null> {
+  if (!isPaApiConfigured()) return null;
+  const { host } = getPaApiConfig();
+  const json = await paApiPost(PA_API_SEARCH_TARGET, {
+    Keywords: keyword.trim().slice(0, 250),
+    SearchIndex: "All",
+    ItemCount: Math.min(10, Math.max(1, maxResults)),
+    Marketplace: host === "webservices.amazon.com" ? "www.amazon.com" : undefined,
+    Resources: CATALOG_ITEM_RESOURCES,
+  });
+  if (!json) return null;
+  const root = asObject(json);
+  const searchResult = asObject(root?.SearchResult);
+  const rawItems = Array.isArray(searchResult?.Items) ? searchResult.Items : [];
+  const fakeGetItems = { ItemsResult: { Items: rawItems } };
+  return { items: parseCatalogItems(fakeGetItems) };
 }
