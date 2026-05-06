@@ -860,6 +860,10 @@ function AnalyzerPageContent() {
         }
         const full = json.result as ProductAnalysis;
         full.offerLabel = row.offerLabel ?? full.offerLabel;
+        // Preserve scan-flow fields that the deep analysis endpoint does not return.
+        if (row.matchGroup) full.matchGroup = row.matchGroup;
+        if (row.matchReason) full.matchReason = row.matchReason;
+        if (row.hasCatalogVariationFamily === true) full.hasCatalogVariationFamily = true;
 
         setResults((prev) =>
           prev.map((p) =>
