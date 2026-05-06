@@ -2069,25 +2069,26 @@ function AnalyzerPageContent() {
             const fromCatalog = selectedProduct.hasCatalogVariationFamily;
             const mg = selectedProduct.matchGroup;
             const reason = (selectedProduct.matchReason ?? "").toLowerCase();
-            const offer = (selectedProduct.offerLabel ?? "").toLowerCase();
 
-            // Yes if ANY signal confirms a variation family
+            // For scan results (mg is set), trust matchGroup + catalog data.
+            // Never show "No" for scan results — we may just lack data. Only manual lookups get "No".
             const isVariationYes =
               mg === "variation" ||
               mg === "multipack" ||
               fromCatalog === true ||
               fromRestrictionCodes;
-            const isVariationNo = !isVariationYes && fromCatalog === false && mg !== null;
+            // "No" only for manual ASIN lookups (mg === null) with explicit negative catalog data
+            const isVariationNo = mg === null && !isVariationYes && fromCatalog === false && !fromRestrictionCodes;
             const variationLabel = isVariationYes ? "Yes" : isVariationNo ? "No" : "—";
 
-            // Derive variation type from matchReason, matchGroup, or offerLabel
+            // Variation type: only for true product variations (different size/scent/color).
+            // Multipacks (same product, different quantity) are shown as "Yes" but without a type label.
             let variationType: string | null = null;
-            if (isVariationYes) {
+            if (mg === "variation") {
               if (/scent|fragrance|flavor|flavour/.test(reason)) variationType = "Scent / Flavor";
               else if (/color|colour/.test(reason)) variationType = "Color";
               else if (/size/.test(reason)) variationType = "Size";
-              else if (/pack|multipack/.test(reason) || mg === "multipack" || /pack of \d/.test(offer)) variationType = "Pack quantity";
-              else if (mg === "variation") variationType = "Variant";
+              else variationType = "Variant";
             }
 
             return (
