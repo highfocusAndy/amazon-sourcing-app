@@ -2048,9 +2048,24 @@ function AnalyzerPageContent() {
             const hasHazmat = codes.some((c) => /HAZMAT|HAZARD|DANGEROUS/i.test(c));
             const fromRestrictionCodes = codes.some((c) => /VARIATION|VAR\b|PARENT_CHILD/i.test(c));
             const fromCatalog = selectedProduct.hasCatalogVariationFamily;
-            const variationYes = fromCatalog === true || fromRestrictionCodes;
-            const variationNo = fromCatalog === false && !fromRestrictionCodes;
+            const fromMatchGroup =
+              selectedProduct.matchGroup === "variation" || selectedProduct.matchGroup === "multipack";
+            const variationYes = fromCatalog === true || fromRestrictionCodes || fromMatchGroup;
+            const variationNo = fromCatalog === false && !fromRestrictionCodes && !fromMatchGroup;
             const variationLabel = variationYes ? "Yes" : variationNo ? "No" : "—";
+
+            // Derive variation type from matchReason
+            const reason = (selectedProduct.matchReason ?? "").toLowerCase();
+            let variationType: string | null = null;
+            if (selectedProduct.matchGroup === "variation" || selectedProduct.matchGroup === "multipack") {
+              if (/scent|fragrance|flavor|flavour/.test(reason)) variationType = "Scent / Flavor";
+              else if (/color|colour/.test(reason)) variationType = "Color";
+              else if (/size/.test(reason)) variationType = "Size";
+              else if (/pack|multipack/.test(reason)) variationType = "Pack quantity";
+              else if (selectedProduct.matchGroup === "multipack") variationType = "Pack quantity";
+              else variationType = "Variant";
+            }
+
             return (
               <div className="grid grid-cols-1 gap-2">
                 <div className="rounded-lg border border-slate-600 bg-slate-700/30 px-3 py-2">
@@ -2072,7 +2087,9 @@ function AnalyzerPageContent() {
                 <div className="rounded-lg border border-slate-600 bg-slate-700/30 px-3 py-2">
                   <p className="text-xs text-slate-500">Variation</p>
                   <p className="text-sm font-medium text-slate-100">{variationLabel}</p>
-                  {variationLabel === "—" ? (
+                  {variationType ? (
+                    <p className="mt-0.5 text-[11px] text-teal-400">{variationType}</p>
+                  ) : variationLabel === "—" ? (
                     <p className="mt-0.5 text-[10px] text-slate-500">
                       Shown when catalog lists parent/child ASINs or a restriction code mentions variations.
                     </p>
