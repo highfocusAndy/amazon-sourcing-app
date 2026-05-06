@@ -2048,22 +2048,28 @@ function AnalyzerPageContent() {
             const hasHazmat = codes.some((c) => /HAZMAT|HAZARD|DANGEROUS/i.test(c));
             const fromRestrictionCodes = codes.some((c) => /VARIATION|VAR\b|PARENT_CHILD/i.test(c));
             const fromCatalog = selectedProduct.hasCatalogVariationFamily;
-            const fromMatchGroup =
-              selectedProduct.matchGroup === "variation" || selectedProduct.matchGroup === "multipack";
-            const variationYes = fromCatalog === true || fromRestrictionCodes || fromMatchGroup;
-            const variationNo = fromCatalog === false && !fromRestrictionCodes && !fromMatchGroup;
-            const variationLabel = variationYes ? "Yes" : variationNo ? "No" : "—";
-
-            // Derive variation type from matchReason
-            const reason = (selectedProduct.matchReason ?? "").toLowerCase();
+            // For scan results, matchGroup is the reliable source of truth.
+            // "exact" = this is the main scanned product; "variation"/"multipack" = it IS a variant.
+            const mg = selectedProduct.matchGroup;
+            let variationLabel: string;
             let variationType: string | null = null;
-            if (selectedProduct.matchGroup === "variation" || selectedProduct.matchGroup === "multipack") {
+
+            if (mg === "exact") {
+              // The exact scanned product — check if it HAS a variation family
+              variationLabel = fromCatalog === true || fromRestrictionCodes ? "Yes" : fromCatalog === false ? "No" : "—";
+            } else if (mg === "variation" || mg === "multipack") {
+              variationLabel = "Yes";
+              const reason = (selectedProduct.matchReason ?? "").toLowerCase();
               if (/scent|fragrance|flavor|flavour/.test(reason)) variationType = "Scent / Flavor";
               else if (/color|colour/.test(reason)) variationType = "Color";
               else if (/size/.test(reason)) variationType = "Size";
-              else if (/pack|multipack/.test(reason)) variationType = "Pack quantity";
-              else if (selectedProduct.matchGroup === "multipack") variationType = "Pack quantity";
+              else if (/pack|multipack/.test(reason) || mg === "multipack") variationType = "Pack quantity";
               else variationType = "Variant";
+            } else {
+              // No matchGroup (manual ASIN lookup) — use catalog + restriction data
+              const variationYes = fromCatalog === true || fromRestrictionCodes;
+              const variationNo = fromCatalog === false && !fromRestrictionCodes;
+              variationLabel = variationYes ? "Yes" : variationNo ? "No" : "—";
             }
 
             return (
