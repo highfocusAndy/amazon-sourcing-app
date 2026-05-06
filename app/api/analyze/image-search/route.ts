@@ -1050,7 +1050,8 @@ async function collectFamilyResults(opts: {
   }
 
   const sorted = sortByFamilyMatchGroup(ordered);
-  // If we found any variations/multipacks, mark the seed as having a variation family too.
+  // If the scan found any variations/multipacks, every item in this scan is part of a variation
+  // family — mark them all as such so the UI shows "Yes" consistently.
   const foundVariations = sorted.some((r) => r.group === "variation" || r.group === "multipack");
   const inputLabel = parse.product_name || parse.core_product_family || seed.title;
   const results = sorted.map(({ item, group, reason }) =>
@@ -1058,7 +1059,7 @@ async function collectFamilyResults(opts: {
       item,
       inputLabel,
       { group, reason },
-      group === "exact" ? { hasVariations: foundVariations } : undefined,
+      foundVariations ? { hasVariations: true } : undefined,
     ),
   );
   return { results, usedAmazonVariationFamily };

@@ -131,7 +131,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           catalog,
           identifier,
           { group: "exact", reason: "Exact scanned product" },
-          { hasVariations },
+          hasVariations ? { hasVariations: true } : undefined,
         );
       }
       if (usedAmazonFamily) {
