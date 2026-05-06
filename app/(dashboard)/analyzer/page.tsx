@@ -338,12 +338,27 @@ function decisionExplanation(item: ProductAnalysis): string | null {
   return item.reasons[0] ?? null;
 }
 
+const MATCH_GROUP_ORDER: Record<string, number> = {
+  exact: 0,
+  variation: 1,
+  multipack: 2,
+  possible_related: 3,
+};
+
 function compareValues(
   a: ProductAnalysis,
   b: ProductAnalysis,
   sortColumn: SortColumn,
   sortDirection: SortDirection,
 ): number {
+  // When results have matchGroup (scan/photo flow), always sort by group first:
+  // exact → variation → multipack → possible_related. User sort applies within each group.
+  const aGroup = a.matchGroup ? (MATCH_GROUP_ORDER[a.matchGroup] ?? 9) : null;
+  const bGroup = b.matchGroup ? (MATCH_GROUP_ORDER[b.matchGroup] ?? 9) : null;
+  if (aGroup !== null && bGroup !== null && aGroup !== bGroup) {
+    return aGroup - bGroup;
+  }
+
   const directionFactor = sortDirection === "asc" ? 1 : -1;
 
   if (numberColumns.has(sortColumn)) {
