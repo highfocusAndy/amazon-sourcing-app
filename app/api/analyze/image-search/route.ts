@@ -877,7 +877,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       },
       seed,
       seedReason: "visual exact match",
-      candidatePool: rankedPool,
     });
     return NextResponse.json({
       ok: true,
@@ -943,18 +942,18 @@ function pickFamilySeed(items: CatalogItem[], parse: VisionProductFamilyParse): 
 /**
  * Build the final, grouped result set for a given seed product:
  * - the seed (exact)
- * - other rows that match the same product family (variations / multipacks)
+ * - only the true variations of that product (size, color, scent, pack count)
  *
- * If `candidatePool` is provided, that pool is used directly. Otherwise we fetch
- * additional rows by the seed's title prefix (used by the barcode path so we still
- * surface variations).
+ * Strategy:
+ * 1. Use Amazon's official variation family exclusively when available — no augmentation.
+ * 2. When no variation family is returned, fall back to a narrow title-based search
+ *    with a strict same-line filter (0.68 Jaccard) to avoid cross-product brand noise.
  */
 async function collectFamilyResults(opts: {
   client: Awaited<ReturnType<typeof getSpApiClientForUserOrGlobal>>;
   parse: VisionProductFamilyParse;
   seed: CatalogItem;
   seedReason: string;
-  candidatePool?: CatalogItem[];
   log?: ScanLogEntry[];
 }): Promise<{ results: ProductAnalysis[]; usedAmazonVariationFamily: boolean }> {
   const { client, parse, seed, seedReason } = opts;
@@ -966,107 +965,67 @@ async function collectFamilyResults(opts: {
   let pool: CatalogItem[];
   let usedAmazonVariationFamily = false;
   const relationFamily = await client.resolveVariationFamilyItems(seed.asin, FAMILY_SEARCH_FETCH_CAP).catch(() => null);
+
   if (relationFamily && relationFamily.items.length > 0) {
+    // Use Amazon's variation family exclusively — it is the ground truth for "what variations exist".
+    // Never augment with keyword search results; that would reintroduce cross-product brand noise.
     const unique = new Map<string, CatalogItem>();
     for (const it of relationFamily.items) {
       if (!it.asin) continue;
       unique.set(it.asin, it);
     }
-    // Heuristic/small family responses often miss valid pack/bundle/size variations.
-    // Merge in candidate pool + keyword expansion and let same-line filters trim noise.
-    const shouldAugment =
-      !relationFamily.resolved || relationFamily.items.length < 4 || unique.size < 4;
-    if (shouldAugment) {
-      if (opts.candidatePool && opts.candidatePool.length > 0) {
-        for (const it of opts.candidatePool) {
-          if (!it.asin) continue;
-          unique.set(it.asin, it);
-        }
-      }
-      const expandKeyword = seed.title.slice(0, 72).trim();
-      if (expandKeyword.length >= 6) {
-        const expanded = await client.searchCatalogByKeywordMultiple(expandKeyword, FAMILY_SEARCH_FETCH_CAP);
-        for (const it of expanded) {
-          if (!it.asin) continue;
-          unique.set(it.asin, it);
-        }
-      }
-    }
     pool = [...unique.values()];
     usedAmazonVariationFamily = relationFamily.resolved;
     console.log(
-      `[image-search] expanded family for ${seed.asin} → ${pool.length} related rows (${relationFamily.resolved ? "relationship graph" : "heuristic expansion"})`,
+      `[image-search] variation family for ${seed.asin} → ${pool.length} items (${relationFamily.resolved ? "relationship graph" : "heuristic"})`,
     );
-  } else if (opts.candidatePool && opts.candidatePool.length > 0) {
-    pool = opts.candidatePool;
   } else {
-    const expandKeyword = seed.title.slice(0, 72).trim();
-    const expanded = expandKeyword.length >= 6
-      ? await client.searchCatalogByKeywordMultiple(expandKeyword, FAMILY_SEARCH_FETCH_CAP)
-      : [];
+    // Amazon returned no variation family — do a narrow title-based search with strict filtering.
+    const expandKeyword = seed.title.slice(0, 60).trim();
     const unique = new Map<string, CatalogItem>();
     unique.set(seed.asin, seed);
-    /** When expanding by seed title, anchor to the seed's own brand if the package brand wasn't readable. */
-    const expandBrandAnchor = packageBrand ?? (seed.brand ? seed.brand : null);
-    for (const it of expanded) {
-      if (!it.asin || unique.has(it.asin)) continue;
-      if (!strictCatalogBrandMatch(it.brand, expandBrandAnchor)) {
-        log.push({
-          asin: it.asin,
-          title: it.title,
-          status: "rejected",
-          reason: `brand mismatch (catalog="${it.brand}" vs anchor="${expandBrandAnchor ?? ""}")`,
-        });
-        continue;
+    if (expandKeyword.length >= 6) {
+      const expanded = await client.searchCatalogByKeywordMultiple(expandKeyword, FAMILY_SEARCH_FETCH_CAP);
+      const expandBrandAnchor = packageBrand ?? (seed.brand ? seed.brand : null);
+      for (const it of expanded) {
+        if (!it.asin || unique.has(it.asin)) continue;
+        if (!strictCatalogBrandMatch(it.brand, expandBrandAnchor)) {
+          log.push({ asin: it.asin, title: it.title, status: "rejected", reason: `brand mismatch` });
+          continue;
+        }
+        if (!catalogItemSameProductFamilyLine(seed, it, 0.68)) {
+          log.push({ asin: it.asin, title: it.title, status: "rejected", reason: "different product line" });
+          continue;
+        }
+        unique.set(it.asin, it);
       }
-      const familyForExpand = parse.core_product_family || seed.title;
-      const familyStrOk = catalogTitleMatchesProductFamily(it.title, familyForExpand);
-      const lineOk = catalogItemSameProductFamilyLine(seed, it);
-      if (!familyStrOk && !lineOk) {
-        log.push({
-          asin: it.asin,
-          title: it.title,
-          status: "rejected",
-          reason: "same brand, different product line",
-        });
-        continue;
-      }
-      unique.set(it.asin, it);
     }
     pool = [...unique.values()];
+    console.log(
+      `[image-search] no variation family for ${seed.asin} — keyword fallback found ${pool.length} items`,
+    );
   }
 
-  /** Final guard: same manufacturer line as resolved seed (drops same-brand catalog noise). */
+  /** Final guard: brand match + strict same-line check for non-confirmed items. */
   const anchored = new Map<string, CatalogItem>();
   anchored.set(seed.asin, seed);
   for (const it of pool) {
     if (!it.asin || it.asin === seed.asin) continue;
     if (!catalogBrandsCompatibleForFamily(seed.brand ?? "", it.brand ?? "")) {
-      log.push({
-        asin: it.asin,
-        title: it.title,
-        status: "rejected",
-        reason: "brand mismatch vs seed catalog row",
-      });
+      log.push({ asin: it.asin, title: it.title, status: "rejected", reason: "brand mismatch vs seed" });
       continue;
     }
-    if (!catalogItemSameProductFamilyLine(seed, it)) {
-      log.push({
-        asin: it.asin,
-        title: it.title,
-        status: "rejected",
-        reason: "different product line vs seed",
-      });
-      continue;
-    }
-    if (parse.product_type.trim() && !catalogTitleMatchesAuxProductType(it.title, parse.product_type)) {
-      log.push({
-        asin: it.asin,
-        title: it.title,
-        status: "rejected",
-        reason: "different product type vs seed line",
-      });
-      continue;
+    // Items from Amazon's confirmed variation graph are trusted without extra filtering.
+    // Items from the keyword fallback path require the strict same-line check.
+    if (!usedAmazonVariationFamily) {
+      if (!catalogItemSameProductFamilyLine(seed, it, 0.68)) {
+        log.push({ asin: it.asin, title: it.title, status: "rejected", reason: "different product line vs seed" });
+        continue;
+      }
+      if (parse.product_type.trim() && !catalogTitleMatchesAuxProductType(it.title, parse.product_type)) {
+        log.push({ asin: it.asin, title: it.title, status: "rejected", reason: "different product type vs seed" });
+        continue;
+      }
     }
     anchored.set(it.asin, it);
   }
