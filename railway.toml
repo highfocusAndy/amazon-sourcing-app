@@ -4,4 +4,4 @@ builder = "NIXPACKS"
 
 [deploy]
 # Ensure volume mount path exists before Prisma writes SQLite (see DEPLOY.md).
-startCommand = "mkdir -p /data && npm run start:deploy"
+startCommand = "mkdir -p /data && node prisma/fix-owner-promo.mjs && npm run start:deploy"
