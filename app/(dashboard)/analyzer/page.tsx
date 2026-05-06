@@ -443,6 +443,7 @@ function AnalyzerPageContent() {
   const [lastKeyword, setLastKeyword] = useState<string | null>(null);
   const [keywordPageSize, setKeywordPageSize] = useState(20);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [scanPhase, setScanPhase] = useState<"idle" | "scanning" | "capturing" | "analyzing">("idle");
   const [mobileBulkOpen, setMobileBulkOpen] = useState(false);
   const [scannerError, setScannerError] = useState<string | null>(null);
   const [manualIdentifierResolved, setManualIdentifierResolved] = useState(false);
@@ -924,6 +925,7 @@ function AnalyzerPageContent() {
   useEffect(() => {
     if (!isScannerOpen) {
       disposeScannerMedia();
+      if (scanPhase === "scanning") setScanPhase("idle");
       return;
     }
 
@@ -1515,12 +1517,14 @@ function AnalyzerPageContent() {
       return;
     }
     setScannerError(null);
+    setScanPhase("capturing");
     const canvas = document.createElement("canvas");
     canvas.width = w;
     canvas.height = h;
     const ctx = canvas.getContext("2d");
     if (!ctx) {
       setScannerError("Could not capture frame.");
+      setScanPhase("idle");
       return;
     }
     ctx.drawImage(video, 0, 0);
@@ -1529,12 +1533,15 @@ function AnalyzerPageContent() {
     });
     if (!blob) {
       setScannerError("Could not capture frame.");
+      setScanPhase("idle");
       return;
     }
     const imageFile = new File([blob], "camera-product.jpg", { type: "image/jpeg" });
     setIsScannerOpen(false);
     stopScanner();
+    setScanPhase("analyzing");
     await runImageProductSearchFromFile(imageFile);
+    setScanPhase("idle");
   }
 
   captureScannerFrameAndSearchRef.current = captureScannerFrameAndSearch;
@@ -1611,9 +1618,12 @@ function AnalyzerPageContent() {
 
   async function handleOpenScanner(): Promise<void> {
     setScannerError(null);
+    setScanPhase("scanning");
     const ok = await acquireScannerStream();
     if (ok) {
       setIsScannerOpen(true);
+    } else {
+      setScanPhase("idle");
     }
   }
 
@@ -1693,9 +1703,15 @@ function AnalyzerPageContent() {
   ];
 
   const rightPanelContent = panelAnalysisLoading ? (
-    <div className="flex flex-col items-center justify-center gap-3 py-8 text-slate-400">
-      <p className="font-medium">Loading…</p>
-      <p className="text-xs">Fetching product data and eligibility.</p>
+    <div className="flex flex-col items-center justify-center gap-4 py-12 text-slate-400">
+      <div className="relative flex h-14 w-14 items-center justify-center">
+        <div className="absolute h-14 w-14 animate-spin rounded-full border-2 border-teal-400 border-t-transparent" />
+        <div className="absolute h-8 w-8 animate-spin rounded-full border-2 border-teal-400/30 border-t-teal-400" style={{ animationDirection: "reverse", animationDuration: "0.9s" }} />
+      </div>
+      <div className="text-center">
+        <p className="text-sm font-semibold text-slate-200">Loading product details…</p>
+        <p className="mt-1 text-xs text-slate-500">Fetching pricing and eligibility</p>
+      </div>
     </div>
   ) : !selectedProduct ? (
     <div className="flex flex-col gap-4 text-sm text-slate-400">
@@ -2231,7 +2247,29 @@ function AnalyzerPageContent() {
         playsInline
         aria-hidden
       />
-      {(isManualLoading || isUploadLoading || panelAnalysisLoading) && (
+      {/* Scan phase overlay — shown while capturing or analyzing a product image */}
+      {(scanPhase === "capturing" || scanPhase === "analyzing") && (
+        <div className="pointer-events-none fixed inset-0 z-40 flex flex-col items-center justify-center gap-4 bg-slate-900/70 backdrop-blur-sm">
+          <div className="relative flex h-20 w-20 items-center justify-center">
+            <div className="absolute h-20 w-20 animate-ping rounded-full border-2 border-teal-400 opacity-30" />
+            <div className="absolute h-20 w-20 animate-spin rounded-full border-2 border-teal-400 border-t-transparent" />
+            <svg className="h-8 w-8 text-teal-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 013.75 9.375v-4.5zM3.75 14.625c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5a1.125 1.125 0 01-1.125-1.125v-4.5zM13.5 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0113.5 9.375v-4.5z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 6.75h.75v.75h-.75v-.75zM6.75 16.5h.75v.75h-.75v-.75zM16.5 6.75h.75v.75h-.75v-.75z" />
+            </svg>
+          </div>
+          <div className="text-center">
+            <p className="text-base font-semibold text-teal-300">
+              {scanPhase === "capturing" ? "Capturing product…" : "Identifying product…"}
+            </p>
+            <p className="mt-1 text-sm text-slate-400">
+              {scanPhase === "capturing" ? "Taking photo" : "Searching Amazon catalog"}
+            </p>
+          </div>
+        </div>
+      )}
+      {/* Regular loading spinner for non-scan loads */}
+      {(isManualLoading && scanPhase === "idle" || isUploadLoading || panelAnalysisLoading) && (
         <div className="pointer-events-none fixed inset-0 z-40 flex items-center justify-center bg-slate-900/40">
           <div className="h-10 w-10 animate-spin rounded-full border-2 border-teal-400 border-t-transparent" />
         </div>
@@ -2549,7 +2587,7 @@ function AnalyzerPageContent() {
                   <tr
                     key={item.id}
                     onClick={() => void handleSelectProduct(item)}
-                    className={`cursor-pointer border-t border-slate-700 transition hover:bg-slate-700/30 ${selectedProduct?.id === item.id || pendingProductId === item.id ? "ring-2 ring-inset ring-teal-400" : ""}`}
+                    className={`cursor-pointer border-t border-slate-700 transition hover:bg-slate-700/30 ${selectedProduct?.id === item.id ? "bg-slate-700/50 ring-2 ring-inset ring-teal-400" : pendingProductId === item.id ? "animate-pulse bg-teal-950/30 ring-2 ring-inset ring-teal-400/60" : ""}`}
                   >
                     <td className="px-3 py-1.5">
                       {item.imageUrl ? (
@@ -2662,29 +2700,54 @@ function AnalyzerPageContent() {
       ) : null}
 
       {isScannerOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-4">
-          <div className="w-full max-w-2xl rounded-xl border border-slate-200 bg-white shadow-lg">
-            <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-              <h3 className="text-base font-semibold text-slate-900">Scan product</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-2xl rounded-xl border border-slate-600 bg-slate-900 shadow-2xl shadow-black/50">
+            <div className="flex items-center justify-between border-b border-slate-700 px-4 py-3">
+              <div className="flex items-center gap-2.5">
+                <div className="h-2 w-2 animate-pulse rounded-full bg-teal-400" />
+                <h3 className="text-base font-semibold text-slate-100">Scanning product</h3>
+              </div>
               <button
                 type="button"
                 onClick={() => setIsScannerOpen(false)}
-                className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                className="rounded-md border border-slate-600 px-2 py-1 text-xs font-semibold text-slate-300 hover:bg-slate-700"
               >
                 Close
               </button>
             </div>
             <div className="space-y-3 p-4">
-              <video ref={videoRef} className="aspect-video w-full rounded-lg bg-black" muted playsInline />
+              {/* Camera feed with animated scan line */}
+              <div className="relative overflow-hidden rounded-lg bg-black">
+                <video ref={videoRef} className="aspect-video w-full rounded-lg bg-black" muted playsInline />
+                {/* Sweeping green scan line */}
+                <div
+                  className="pointer-events-none absolute inset-x-3 h-px bg-teal-400"
+                  style={{ boxShadow: "0 0 8px 2px rgba(45,212,191,0.7)", animation: "scanLine 2s ease-in-out infinite" }}
+                />
+                {/* Corner bracket markers */}
+                <div className="pointer-events-none absolute inset-0">
+                  <div className="absolute left-4 top-4 h-6 w-6 rounded-tl border-l-2 border-t-2 border-teal-400" />
+                  <div className="absolute right-4 top-4 h-6 w-6 rounded-tr border-r-2 border-t-2 border-teal-400" />
+                  <div className="absolute bottom-4 left-4 h-6 w-6 rounded-bl border-b-2 border-l-2 border-teal-400" />
+                  <div className="absolute bottom-4 right-4 h-6 w-6 rounded-br border-b-2 border-r-2 border-teal-400" />
+                </div>
+                {/* Live status badge */}
+                <div className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2">
+                  <span className="flex items-center gap-1.5 rounded-full bg-slate-900/75 px-3 py-1 text-xs font-medium text-teal-300 backdrop-blur-sm">
+                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-teal-400" />
+                    {photoSearchAvailable === true ? "Looking for barcode · photo scan ready" : "Looking for barcode…"}
+                  </span>
+                </div>
+              </div>
               {scannerError ? (
-                <p className="text-sm text-rose-700">{scannerError}</p>
+                <p className="text-sm text-rose-400">{scannerError}</p>
               ) : (
-                <p className="text-sm text-slate-600">
+                <p className="text-sm text-slate-400">
                   Point at a barcode or QR for an instant match.
                   {photoSearchAvailable === false
-                    ? " Photo fallback is off (server missing OPENAI_API_KEY) — use barcode only, or keyword / ASIN."
+                    ? " Photo fallback is off (server missing OPENAI_API_KEY) — use barcode only."
                     : photoSearchAvailable === true
-                      ? " If no code is read, we’ll snap the frame and search by product photo automatically."
+                      ? " If no barcode is detected, the app automatically captures the frame and identifies the product."
                       : " To enable photo fallback, set OPENAI_API_KEY on the server."}
                 </p>
               )}
@@ -2692,7 +2755,7 @@ function AnalyzerPageContent() {
                 <button
                   type="button"
                   onClick={() => setIsScannerOpen(false)}
-                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                  className="rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-700"
                 >
                   Stop Scanner
                 </button>
@@ -2718,6 +2781,16 @@ function AnalyzerPageContent() {
           </div>
         </div>
       ) : null}
+      <style>{`
+        @keyframes scanLine {
+          0%   { top: 8%;  opacity: 1; }
+          48%  { top: 88%; opacity: 1; }
+          50%  { top: 88%; opacity: 0; }
+          52%  { top: 8%;  opacity: 0; }
+          54%  { top: 8%;  opacity: 1; }
+          100% { top: 8%;  opacity: 1; }
+        }
+      `}</style>
     </main>
 
       {mobileDetailsOpen ? (
