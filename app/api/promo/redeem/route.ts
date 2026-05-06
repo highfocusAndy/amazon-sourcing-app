@@ -28,13 +28,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   try {
     const result = await prisma.$transaction(async (tx) => {
-      const priorRedemption = await tx.promoRedemption.findFirst({
-        where: { userId },
-        select: { id: true },
-      });
-      if (priorRedemption) {
-        return { ok: false as const, message: "Promo access can only be redeemed once per account." };
-      }
       await ensurePromoRowsFromEnv(tx, code);
       const promo = await tx.promoCode.findUnique({
         where: { code },
@@ -47,6 +40,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }
       if (promo.maxRedemptions != null && promo.redemptionCount >= promo.maxRedemptions) {
         return { ok: false as const, message: "This promo code has reached its redemption limit." };
+      }
+
+      if (!promo.allowRepeatRedemption) {
+        const priorRedemption = await tx.promoRedemption.findFirst({
+          where: { userId },
+          select: { id: true },
+        });
+        if (priorRedemption) {
+          return { ok: false as const, message: "Promo access can only be redeemed once per account." };
+        }
       }
 
       const user = await tx.user.findUnique({
