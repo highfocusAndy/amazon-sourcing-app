@@ -23,14 +23,14 @@ export async function ensureEnvOwnerPromoRow(
       maxRedemptions: null,
       expiresAt: null,
       active: true,
-      allowRepeatRedemption: false,
+      allowRepeatRedemption: true,
     },
     update: {
       active: true,
       expiresAt: null,
       grantsDays,
       maxRedemptions: null,
-      allowRepeatRedemption: false,
+      allowRepeatRedemption: true,
     },
   });
 }
