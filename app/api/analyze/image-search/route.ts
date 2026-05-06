@@ -966,50 +966,38 @@ async function collectFamilyResults(opts: {
   let usedAmazonVariationFamily = false;
   const relationFamily = await client.resolveVariationFamilyItems(seed.asin, FAMILY_SEARCH_FETCH_CAP).catch(() => null);
 
+  // Build the candidate pool:
+  // 1. Start with Amazon's official variation graph (trusted, no filtering needed).
+  // 2. Always augment with a seed-title keyword search to catch variations Amazon's graph missed.
+  //    We search by the seed TITLE, not the broad vision query, so results stay product-specific.
+  const variationFamilyAsins = new Set<string>();
+  const unique = new Map<string, CatalogItem>();
+  unique.set(seed.asin, seed);
+
   if (relationFamily && relationFamily.items.length > 0) {
-    const unique = new Map<string, CatalogItem>();
     for (const it of relationFamily.items) {
+      if (!it.asin) continue;
+      variationFamilyAsins.add(it.asin);
+      unique.set(it.asin, it);
+    }
+    usedAmazonVariationFamily = relationFamily.resolved;
+  }
+
+  const expandKeyword = seed.title.slice(0, 60).trim();
+  if (expandKeyword.length >= 6) {
+    const expanded = await client.searchCatalogByKeywordMultiple(expandKeyword, FAMILY_SEARCH_FETCH_CAP);
+    for (const it of expanded) {
       if (!it.asin) continue;
       unique.set(it.asin, it);
     }
-    // When Amazon's graph is confirmed and large, trust it exclusively.
-    // When small or unresolved, augment with a seed-title search to catch missing variations.
-    // We use the seed TITLE (not the broad vision query) so results stay specific to this product.
-    const shouldAugment = !relationFamily.resolved || unique.size < 8;
-    if (shouldAugment) {
-      const expandKeyword = seed.title.slice(0, 60).trim();
-      if (expandKeyword.length >= 6) {
-        const expanded = await client.searchCatalogByKeywordMultiple(expandKeyword, FAMILY_SEARCH_FETCH_CAP);
-        for (const it of expanded) {
-          if (!it.asin) continue;
-          unique.set(it.asin, it);
-        }
-      }
-    }
-    pool = [...unique.values()];
-    usedAmazonVariationFamily = relationFamily.resolved;
-    console.log(
-      `[image-search] variation family for ${seed.asin} → ${pool.length} items (${relationFamily.resolved ? "relationship graph" : "heuristic"}${shouldAugment ? ", augmented" : ""})`,
-    );
-  } else {
-    // Amazon returned no variation family — fall back to a seed-title search.
-    const expandKeyword = seed.title.slice(0, 60).trim();
-    const unique = new Map<string, CatalogItem>();
-    unique.set(seed.asin, seed);
-    if (expandKeyword.length >= 6) {
-      const expanded = await client.searchCatalogByKeywordMultiple(expandKeyword, FAMILY_SEARCH_FETCH_CAP);
-      for (const it of expanded) {
-        if (!it.asin) continue;
-        unique.set(it.asin, it);
-      }
-    }
-    pool = [...unique.values()];
-    console.log(
-      `[image-search] no variation family for ${seed.asin} — seed-title fallback found ${pool.length} items`,
-    );
   }
 
-  /** Final guard: brand match + same-line check for non-confirmed items. */
+  pool = [...unique.values()];
+  console.log(
+    `[image-search] pool for ${seed.asin} → ${pool.length} candidates (variation graph: ${variationFamilyAsins.size}, seed-title expansion)`,
+  );
+
+  /** Final guard: brand match required for all; same-line check for keyword-added items. */
   const anchored = new Map<string, CatalogItem>();
   anchored.set(seed.asin, seed);
   for (const it of pool) {
@@ -1018,16 +1006,19 @@ async function collectFamilyResults(opts: {
       log.push({ asin: it.asin, title: it.title, status: "rejected", reason: "brand mismatch vs seed" });
       continue;
     }
-    // Confirmed Amazon variation graph items are trusted; augmented/fallback items need filtering.
-    if (!usedAmazonVariationFamily) {
-      if (!catalogItemSameProductFamilyLine(seed, it)) {
-        log.push({ asin: it.asin, title: it.title, status: "rejected", reason: "different product line vs seed" });
-        continue;
-      }
-      if (parse.product_type.trim() && !catalogTitleMatchesAuxProductType(it.title, parse.product_type)) {
-        log.push({ asin: it.asin, title: it.title, status: "rejected", reason: "different product type vs seed" });
-        continue;
-      }
+    // Items from Amazon's confirmed variation graph are trusted as-is.
+    if (variationFamilyAsins.has(it.asin)) {
+      anchored.set(it.asin, it);
+      continue;
+    }
+    // Items added via keyword search need same-line filtering to block other product lines.
+    if (!catalogItemSameProductFamilyLine(seed, it)) {
+      log.push({ asin: it.asin, title: it.title, status: "rejected", reason: "different product line vs seed" });
+      continue;
+    }
+    if (parse.product_type.trim() && !catalogTitleMatchesAuxProductType(it.title, parse.product_type)) {
+      log.push({ asin: it.asin, title: it.title, status: "rejected", reason: "different product type vs seed" });
+      continue;
     }
     anchored.set(it.asin, it);
   }
