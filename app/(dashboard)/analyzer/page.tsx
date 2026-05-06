@@ -2070,19 +2070,19 @@ function AnalyzerPageContent() {
             const mg = selectedProduct.matchGroup;
             const reason = (selectedProduct.matchReason ?? "").toLowerCase();
 
-            // For scan results (mg is set), trust matchGroup + catalog data.
-            // Never show "No" for scan results — we may just lack data. Only manual lookups get "No".
+            // Variation = true product attribute differences (size, scent, color, flavor).
+            // Multipacks (same product, different quantity) are NOT variations.
             const isVariationYes =
-              mg === "variation" ||
+              mg === "variation" ||       // scan identified a true product variant
+              fromCatalog === true ||     // Amazon catalog confirms variation family
+              fromRestrictionCodes;       // restriction codes mention variations
+            // "No" for multipacks OR confirmed-no from catalog (manual lookups)
+            const isVariationNo =
               mg === "multipack" ||
-              fromCatalog === true ||
-              fromRestrictionCodes;
-            // "No" only for manual ASIN lookups (mg === null) with explicit negative catalog data
-            const isVariationNo = mg === null && !isVariationYes && fromCatalog === false && !fromRestrictionCodes;
+              (mg === null && !isVariationYes && fromCatalog === false && !fromRestrictionCodes);
             const variationLabel = isVariationYes ? "Yes" : isVariationNo ? "No" : "—";
 
-            // Variation type: only for true product variations (different size/scent/color).
-            // Multipacks (same product, different quantity) are shown as "Yes" but without a type label.
+            // Show variation type only for confirmed product attribute variations
             let variationType: string | null = null;
             if (mg === "variation") {
               if (/scent|fragrance|flavor|flavour/.test(reason)) variationType = "Scent / Flavor";
