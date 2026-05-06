@@ -9,9 +9,17 @@ export function getListingTypeFromTitle(title: string): string {
   const pack = (n: number | string) => `Pack of ${n}`;
 
   // Explicit single-unit markers
-  if (/\bsingle\b|\b1\s*[-]?pack\b|\(\s*1\s*pack\s*\)/i.test(lower)) return "Single";
+  if (/\bsingle\b|\b1\s*[-]?pack\b|\(\s*1\s*pack\s*\)|\bpack\s+of\s+1\b/i.test(lower)) return "Single";
 
-  // Multi-pack patterns (order matters: match longer numbers first)
+  // "Pack of N" style — e.g. "(Pack of 2)", "Pack of 4"
+  const packOfMatch = lower.match(/pack\s+of\s+(\d{1,3})/);
+  if (packOfMatch) {
+    const n = parseInt(packOfMatch[1], 10);
+    if (n === 1) return "Single";
+    if (n >= 2) return pack(n);
+  }
+
+  // "N-pack" / "N pack" style — e.g. "2-Pack", "4 Pack"
   const packMatch = lower.match(/\b(\d{1,3})\s*[-]?pack\b/);
   if (packMatch) {
     const n = parseInt(packMatch[1], 10);
