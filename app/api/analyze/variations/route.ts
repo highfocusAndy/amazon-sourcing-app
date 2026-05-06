@@ -124,12 +124,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     });
 
     const parseForMatch = buildVisionParseFromCatalogSeed(first);
+    const hasVariations = ordered.length > 1;
     const results: ProductAnalysis[] = ordered.map((catalog) => {
       if (catalog.asin === first.asin) {
-        return buildCatalogOnlyResult(catalog, identifier, {
-          group: "exact",
-          reason: "Exact scanned product",
-        });
+        return buildCatalogOnlyResult(
+          catalog,
+          identifier,
+          { group: "exact", reason: "Exact scanned product" },
+          { hasVariations },
+        );
       }
       if (usedAmazonFamily) {
         return buildCatalogOnlyResult(catalog, identifier, {

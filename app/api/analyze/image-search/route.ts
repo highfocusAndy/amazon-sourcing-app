@@ -1040,7 +1040,6 @@ async function collectFamilyResults(opts: {
   for (const item of pool) {
     if (!item.asin || seen.has(item.asin)) continue;
     const cls = classifyFamilyMatch(item, parse);
-    /** Same-line items are already vetted; `classifyFamilyMatch` ranks exact vs pack vs scent. */
     const group = cls.group;
     const reason = usedAmazonVariationFamily
       ? cls.reason
@@ -1051,11 +1050,16 @@ async function collectFamilyResults(opts: {
   }
 
   const sorted = sortByFamilyMatchGroup(ordered);
+  // If we found any variations/multipacks, mark the seed as having a variation family too.
+  const foundVariations = sorted.some((r) => r.group === "variation" || r.group === "multipack");
+  const inputLabel = parse.product_name || parse.core_product_family || seed.title;
   const results = sorted.map(({ item, group, reason }) =>
-    buildCatalogOnlyResult(item, parse.product_name || parse.core_product_family || seed.title, {
-      group,
-      reason,
-    }),
+    buildCatalogOnlyResult(
+      item,
+      inputLabel,
+      { group, reason },
+      group === "exact" ? { hasVariations: foundVariations } : undefined,
+    ),
   );
   return { results, usedAmazonVariationFamily };
 }

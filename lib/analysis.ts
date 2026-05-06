@@ -233,6 +233,7 @@ export function buildCatalogOnlyResult(
   catalog: CatalogItem,
   inputIdentifier: string,
   match?: { reason: string; group: "exact" | "variation" | "multipack" | "possible_related" } | null,
+  opts?: { hasVariations?: boolean },
 ): ProductAnalysis {
   const offerLabel = getListingTypeFromTitle(catalog.title);
   return {
@@ -261,7 +262,7 @@ export function buildCatalogOnlyResult(
     meltableRisk: null,
     privateLabelRisk: null,
     restrictionReasonCodes: [],
-    hasCatalogVariationFamily: catalog.hasVariationFamily ?? null,
+    hasCatalogVariationFamily: opts?.hasVariations === true ? true : (catalog.hasVariationFamily ?? null),
     referralFee: 0,
     fbaFee: 0,
     totalFees: 0,

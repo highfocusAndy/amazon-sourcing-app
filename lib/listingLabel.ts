@@ -35,6 +35,15 @@ export function getListingTypeFromTitle(title: string): string {
   }
 
   if (/\btwin\s*pack\b/i.test(lower)) return pack(2);
+
+  // "2pc" / "3pc" / "2-piece" / "2pcs" style
+  const pcMatch = lower.match(/\b(\d{1,3})\s*[-]?p(?:c|cs|iece|ieces)\b/);
+  if (pcMatch) {
+    const n = parseInt(pcMatch[1], 10);
+    if (n === 1) return "Single";
+    if (n >= 2) return pack(n);
+  }
+
   if (/\bbundle\b/i.test(lower)) return "Bundle";
 
   // Count / ct patterns: "6 count", "12ct"
