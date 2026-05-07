@@ -612,7 +612,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const dataUrl = `data:${mime};base64,${base64}`;
 
     const visionModel = process.env.OPENAI_VISION_MODEL?.trim() || "gpt-4o-mini";
-    const visionDetail = process.env.OPENAI_VISION_DETAIL?.trim().toLowerCase() === "low" ? "low" : "high";
+    // Default to "low" detail — significantly faster and cheaper; readable product labels
+    // still come through clearly. Set OPENAI_VISION_DETAIL=high to override when needed.
+    const visionDetail: "low" | "high" =
+      process.env.OPENAI_VISION_DETAIL?.trim().toLowerCase() === "high" ? "high" : "low";
 
     const primaryRes = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -622,7 +625,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       },
       body: JSON.stringify({
         model: visionModel,
-        max_tokens: 700,
+        max_tokens: 450,
         /** Deterministic so the same photo gives the same JSON every time the user re-scans. */
         temperature: 0,
         response_format: { type: "json_object" },
@@ -847,27 +850,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       });
     }
 
-    let rankedPool = universalCandidates;
-    const visualRankedAsins = await rerankSeedByVisualMatch({
-      apiKey,
-      model: visionModel,
-      scanDataUrl: dataUrl,
-      candidates: universalCandidates,
-    });
-    if (visualRankedAsins.length > 0) {
-      const order = new Map(visualRankedAsins.map((asin, idx) => [asin, idx]));
-      rankedPool = [...universalCandidates].sort((a, b) => {
-        const ai = order.get(a.asin);
-        const bi = order.get(b.asin);
-        if (ai === undefined && bi === undefined) return 0;
-        if (ai === undefined) return 1;
-        if (bi === undefined) return -1;
-        return ai - bi;
-      });
-      console.log("[image-search] universal visual rerank applied", visualRankedAsins.slice(0, 3));
-    }
-
-    const seed = rankedPool[0] ?? pickFamilySeed(rankedPool, parse);
+    const seed = pickFamilySeed(universalCandidates, parse);
     const grouped = await collectFamilyResults({
       client,
       parse: {
@@ -964,12 +947,19 @@ async function collectFamilyResults(opts: {
 
   let pool: CatalogItem[];
   let usedAmazonVariationFamily = false;
-  const relationFamily = await client.resolveVariationFamilyItems(seed.asin, FAMILY_SEARCH_FETCH_CAP).catch(() => null);
 
-  // Build the candidate pool:
-  // 1. Start with Amazon's official variation graph (trusted, no filtering needed).
-  // 2. Always augment with a seed-title keyword search to catch variations Amazon's graph missed.
+  // Build the candidate pool — both calls run in parallel for speed:
+  // 1. Amazon's official variation graph (trusted, no filtering needed).
+  // 2. Seed-title keyword search to catch variations Amazon's graph missed.
   //    We search by the seed TITLE, not the broad vision query, so results stay product-specific.
+  const expandKeyword = seed.title.slice(0, 60).trim();
+  const [relationFamily, expandedRaw] = await Promise.all([
+    client.resolveVariationFamilyItems(seed.asin, FAMILY_SEARCH_FETCH_CAP).catch(() => null),
+    expandKeyword.length >= 6
+      ? client.searchCatalogByKeywordMultiple(expandKeyword, FAMILY_SEARCH_FETCH_CAP).catch(() => [] as CatalogItem[])
+      : Promise.resolve([] as CatalogItem[]),
+  ]);
+
   const variationFamilyAsins = new Set<string>();
   const unique = new Map<string, CatalogItem>();
   unique.set(seed.asin, seed);
@@ -983,13 +973,9 @@ async function collectFamilyResults(opts: {
     usedAmazonVariationFamily = relationFamily.resolved;
   }
 
-  const expandKeyword = seed.title.slice(0, 60).trim();
-  if (expandKeyword.length >= 6) {
-    const expanded = await client.searchCatalogByKeywordMultiple(expandKeyword, FAMILY_SEARCH_FETCH_CAP);
-    for (const it of expanded) {
-      if (!it.asin) continue;
-      unique.set(it.asin, it);
-    }
+  for (const it of expandedRaw) {
+    if (!it.asin) continue;
+    unique.set(it.asin, it);
   }
 
   pool = [...unique.values()];

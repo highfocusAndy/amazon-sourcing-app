@@ -1549,7 +1549,7 @@ function AnalyzerPageContent() {
   /** Barcode is tried first; if nothing is decoded after a short window, capture runs photo search automatically. */
   useEffect(() => {
     if (!isScannerOpen || photoSearchAvailable !== true) return;
-    const barcodeFirstMs = 2800;
+    const barcodeFirstMs = 1400;
     const id = window.setTimeout(() => {
       if (hasScannedRef.current) return;
       void captureScannerFrameAndSearchRef.current();
