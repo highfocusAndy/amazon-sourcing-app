@@ -14,6 +14,29 @@ import type { Decision, ProductAnalysis, ProductInput, RowColor, SellerType } fr
 
 const BAD_SALES_RANK_THRESHOLD = 100_000;
 const MIN_HEALTHY_ROI_PERCENT = 10;
+
+/**
+ * Title-based heuristic for common Amazon hazmat product categories.
+ * Returns true when the title strongly suggests dangerous goods, false otherwise.
+ * Used as a supplement when catalog attributes or restriction codes are not available.
+ */
+function titleSuggestsHazmat(title: string): boolean {
+  const t = title.toLowerCase();
+  return (
+    // Flammable liquids / aerosols
+    /\baero(sol)?\b|\bspray\s*(paint|can)\b|\bflammable\b|\bnail\s*polish\b|\bacetone\b|\bisopropyl\b|\brushing\s*alcohol\b|\bpaint\s*thinner\b|\bmineral\s*spirits\b|\bturpentine\b|\blighter\s*fluid\b/.test(t) ||
+    // Lithium / loose batteries (FBA hazmat)
+    /\blithium\s*(ion|battery|batteries|pack)\b|\bli[-\s]?ion\s*battery\b|\bloose\s*batter/.test(t) ||
+    // Compressed gases
+    /\bpropane\b|\bco2\s*cartridge\b|\bcompressed\s*(gas|air)\b|\bbutane\b/.test(t) ||
+    // Corrosives / strong chemicals
+    /\bmuriatic\s*acid\b|\bsulfuric\s*acid\b|\bdrain\s*cleaner\b|\blye\b|\bsodium\s*hydroxide\b|\bcaustic\b/.test(t) ||
+    // Oxidizers / pool chemicals
+    /\bpool\s*shock\b|\bchlorine\s*tablet\b|\bhydrogen\s*peroxide\s*(3[5-9]|[4-9]\d)%/.test(t) ||
+    // Pesticides / regulated chemicals
+    /\bpesticide\b|\bherbicide\b|\binsecticide\b|\bweed\s*killer\b|\bfungicide\b|\brodenticide\b|\btermiticide\b/.test(t)
+  );
+}
 const HIGH_ABSOLUTE_PROFIT_THRESHOLD = 20;
 const ESTIMATED_REFERRAL_RATE = 0.15;
 const ASIN_REGEX = /^[A-Z0-9]{10}$/i;
@@ -97,6 +120,7 @@ function buildBaseResult(input: ProductInput): ProductAnalysis {
     ipComplaintRisk: null,
     meltableRisk: null,
     privateLabelRisk: null,
+    isHazmat: null,
     restrictionReasonCodes: [],
     hasCatalogVariationFamily: null,
     referralFee: 0,
@@ -261,6 +285,8 @@ export function buildCatalogOnlyResult(
     ipComplaintRisk: null,
     meltableRisk: null,
     privateLabelRisk: null,
+    // Seed from catalog attributes (deep fetch) or title heuristic
+    isHazmat: catalog.isHazmat ?? (titleSuggestsHazmat(catalog.title) ? true : null),
     restrictionReasonCodes: [],
     hasCatalogVariationFamily: opts?.hasVariations === true ? true : (catalog.hasVariationFamily ?? null),
     referralFee: 0,
@@ -455,6 +481,13 @@ export async function analyzeProduct(
       result.ipComplaintRisk = listingRestrictions.ipComplaintRisk;
       result.meltableRisk = listingRestrictions.meltableRisk ?? null;
       result.privateLabelRisk = listingRestrictions.privateLabelRisk ?? null;
+      // Combine all three hazmat signals: catalog attributes, restriction codes, title heuristic.
+      if (listingRestrictions.isHazmat) {
+        result.isHazmat = true;
+      } else if (result.isHazmat !== true) {
+        // Keep catalog/title heuristic value; only upgrade to true, never downgrade to false.
+        result.isHazmat = result.isHazmat ?? null;
+      }
       result.restrictionReasonCodes = listingRestrictions.reasonCodes;
       if (listingRestrictions.reasonCodes.length > 0) {
         addReasonUnique(result.reasons, `Restriction codes: ${listingRestrictions.reasonCodes.join(", ")}`);

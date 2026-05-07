@@ -2119,7 +2119,12 @@ function AnalyzerPageContent() {
                 </div>
                 <div className="rounded-lg border border-slate-600 bg-slate-700/30 px-3 py-2">
                   <p className="text-xs text-slate-500">Hazmat</p>
-                  <p className="text-sm font-medium text-slate-100">{hasHazmat ? "Yes" : "No"}</p>
+                  <p className={`text-sm font-medium ${selectedProduct.isHazmat === true ? "text-rose-400" : selectedProduct.isHazmat === false ? "text-slate-100" : "text-slate-500"}`}>
+                    {selectedProduct.isHazmat === true ? "Yes" : selectedProduct.isHazmat === false ? "No" : hasHazmat ? "Yes" : "—"}
+                  </p>
+                  {selectedProduct.isHazmat === null && !hasHazmat ? (
+                    <p className="mt-0.5 text-[10px] text-slate-500">Load product details to check</p>
+                  ) : null}
                 </div>
                 <div className="rounded-lg border border-amber-900/50 bg-amber-900/20 px-3 py-2">
                   <p className="text-xs text-slate-500">Private label (possible)</p>

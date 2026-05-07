@@ -63,6 +63,13 @@ export interface ProductAnalysis {
   meltableRisk: boolean | null;
   /** Likely private label / brand-gated. */
   privateLabelRisk: boolean | null;
+  /**
+   * Hazmat / dangerous goods flag.
+   * true = confirmed hazmat (from catalog attributes, restriction codes, or title heuristic).
+   * false = explicitly safe (catalog attributes say not_applicable and no other signals).
+   * null = unknown (catalog attributes not loaded, no restriction codes, no title signals).
+   */
+  isHazmat: boolean | null;
   restrictionReasonCodes: string[];
   /**
    * From Catalog Items API `relationships` (VARIATION parent/child). Independent of listing restriction codes.

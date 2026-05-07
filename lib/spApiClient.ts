@@ -89,6 +89,11 @@ export interface CatalogItem {
   parentAsins?: string[];
   /** Child ASINs from Catalog relationships for variation families. */
   childAsins?: string[];
+  /**
+   * From catalog `attributes` includedData: Amazon's hazmat classification.
+   * true = confirmed hazmat; false = explicitly not hazmat; null = not loaded (keyword search).
+   */
+  isHazmat?: boolean | null;
 }
 
 export interface CompetitivePricing {
@@ -135,6 +140,8 @@ export interface ListingRestrictionsAssessment {
   meltableRisk: boolean;
   /** Likely private label / brand-gated (approval + brand/IP signals). */
   privateLabelRisk: boolean;
+  /** Hazmat / dangerous goods flag from restriction codes or messages. */
+  isHazmat: boolean;
   reasonCodes: string[];
   reasonMessages: string[];
 }
@@ -253,6 +260,55 @@ function extractCatalogVariationFamilyFlag(itemObj: Record<string, unknown>): bo
       }
     }
   }
+  return false;
+}
+
+/**
+ * Parse Amazon's hazmat classification from catalog item attributes.
+ * Returns true when the product is classified as hazmat/dangerous goods,
+ * false when explicitly marked safe, null when attributes are absent (keyword search).
+ *
+ * Key signals:
+ * - hazmat_type: "not_applicable" → safe; anything else (e.g. "flammable_liquids") → hazmat
+ * - supplier_declared_dg_hz_regulation1..4: presence of any DG regulation code → hazmat
+ * - safety_data_sheet_url / supplier_declared_has_product_safety_data_sheet → likely hazmat
+ */
+function extractCatalogHazmatFlag(itemObj: Record<string, unknown>): boolean | null {
+  const attrs = asObject(itemObj.attributes);
+  if (!attrs) return null; // attributes not requested (keyword search path)
+
+  // hazmat_type is the clearest signal. "not_applicable" means safe.
+  const hazmatTypeArr = asArray(attrs.hazmat_type);
+  for (const entry of hazmatTypeArr) {
+    const val = readString(asObject(entry)?.value ?? entry)?.trim().toLowerCase();
+    if (!val) continue;
+    if (val === "not_applicable") return false;
+    return true; // any other value (flammable_liquids, corrosives, etc.)
+  }
+
+  // supplier_declared_dg_hz_regulation1..4: presence means DG/hazmat regulated
+  for (let i = 1; i <= 4; i++) {
+    const regArr = asArray((attrs as Record<string, unknown>)[`supplier_declared_dg_hz_regulation${i}`]);
+    for (const entry of regArr) {
+      const val = readString(asObject(entry)?.value ?? entry)?.trim().toLowerCase();
+      if (val && val !== "not_applicable") return true;
+    }
+  }
+
+  // SDS sheet URL or declaration → likely hazmat
+  const sdsArr = asArray(attrs.safety_data_sheet_url);
+  for (const entry of sdsArr) {
+    const val = readString(asObject(entry)?.value ?? entry)?.trim();
+    if (val && val.startsWith("http")) return true;
+  }
+
+  const hasSdsArr = asArray(attrs.supplier_declared_has_product_safety_data_sheet);
+  for (const entry of hasSdsArr) {
+    const val = asObject(entry)?.value ?? entry;
+    if (val === true || val === "true") return true;
+  }
+
+  // attributes were present but no hazmat signals found → safe
   return false;
 }
 
@@ -708,6 +764,11 @@ export class SpApiClient {
     const hasVariationFamily = extractCatalogVariationFamilyFlag(itemObj);
     const rel = extractVariationRelationshipAsins(itemObj);
 
+    // Parse hazmat classification from catalog attributes when present.
+    // Amazon returns hazmat_type = "not_applicable" for safe products, a named class for hazmat ones.
+    // supplier_declared_dg_hz_regulation1..4 indicate dangerous goods regulations (iata, dot, imdg, adr).
+    const isHazmat = extractCatalogHazmatFlag(itemObj);
+
     return {
       asin,
       title,
@@ -717,6 +778,7 @@ export class SpApiClient {
       hasVariationFamily,
       parentAsins: rel.parentAsins,
       childAsins: rel.childAsins,
+      isHazmat,
     };
   }
 
@@ -1133,6 +1195,11 @@ export class SpApiClient {
     const privateLabelRisk = Boolean(
       approvalRequired && (ipComplaintRisk || /BRAND\s*GAT|BRAND_GAT|REGISTRY|PRIVATE\s*LABEL/.test(allSignals)),
     );
+    // Broad hazmat detection: explicit HAZMAT codes + dangerous goods + battery/flammable regulation signals
+    const isHazmat =
+      /HAZMAT|HAZARD|DANGEROUS|DANGEROUS_GOOD|DG_REGULATION|FLAMMABLE|BATTERY|LITHIUM|AEROSOL|CORROSIVE|OXIDIZER|COMPRESSED_GAS|PESTICIDE|REGULATED_PRODUCT/.test(
+        allSignals,
+      );
     const restricted = restrictions.length > 0;
 
     return {
@@ -1141,6 +1208,7 @@ export class SpApiClient {
       ipComplaintRisk,
       meltableRisk,
       privateLabelRisk,
+      isHazmat,
       reasonCodes: unique(reasonCodes),
       reasonMessages: unique(reasonMessages),
     };
@@ -1160,7 +1228,7 @@ export class SpApiClient {
     const response = await this.request<unknown>("GET", `/catalog/2022-04-01/items/${normalized}`, {
       query: {
         marketplaceIds: this.config.marketplaceId,
-        includedData: "summaries,salesRanks,identifiers,images,relationships",
+        includedData: "summaries,salesRanks,identifiers,images,relationships,attributes",
       },
     });
 
