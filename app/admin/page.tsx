@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import { AdminOverviewClient } from "@/app/admin/AdminOverviewClient";
 
-export default function AdminPage() {
-  redirect("/admin/users");
+export default function AdminOperationsPage() {
+  return <AdminOverviewClient />;
 }

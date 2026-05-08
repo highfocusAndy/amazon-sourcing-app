@@ -1,5 +1,20 @@
 # Putting the app on the internet
 
+## Railway essentials (production)
+
+After your first deploy:
+
+1. **`NEXTAUTH_URL`** — Must be your public HTTPS origin (no trailing slash), e.g. `https://your-service.up.railway.app`.
+2. **Stripe** — Production **secret** key, correct **live** Price IDs, and a **Stripe webhook** pointing to  
+   `https://YOUR_ORIGIN/api/billing/webhook` with the signing secret in `STRIPE_WEBHOOK_SECRET`.
+3. **Health checks** — In Railway → your service → **Settings** → **Healthcheck**, set the path to **`/api/health`**  
+   so the platform probes database readiness (adjust timeout if cold starts need more time).
+4. **Legal policies** — The app ships **templates** at **`/terms`** and **`/privacy`**. Customize copy with your lawyer, then  
+   set `NEXT_PUBLIC_LEGAL_ENTITY` (and `SUPPORT_EMAIL` or `NEXT_PUBLIC_SUPPORT_EMAIL`). Links appear on login, get-access,
+   promo signup, and subscribe.
+5. **`RAILWAY_PUBLIC_DOMAIN`** (optional) — If set to your Railway hostname (`your-app.up.railway.app`), it helps canonical  
+   URLs in metadata when `NEXTAUTH_URL` is not available at build time.
+
 ## Option A — Railway (recommended for this repo: SQLite + volume)
 
 1. Push the project to GitHub (if it is not already).

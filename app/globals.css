@@ -2,27 +2,113 @@
 
 :root {
   color-scheme: dark;
-  /* Design system: deep slate base + teal/cyan accent */
-  --bg-base: 15 23 42;       /* slate-900 */
-  --bg-elevated: 30 41 59;  /* slate-800 */
-  --bg-card: 30 41 59;
-  --border-subtle: 51 65 85;
-  --border-accent: 20 184 166; /* teal-500 */
-  --accent: 20 184 166;
-  --accent-hover: 45 212 191;
-  --accent-muted: 20 184 166 / 0.15;
+  --hf-transition: 250ms cubic-bezier(0.22, 1, 0.36, 1);
+  --hf-transition-fast: 180ms cubic-bezier(0.22, 1, 0.36, 1);
+  /* ── Design tokens ─────────────────────────────────── */
+  --bg-base: 12 12 15;
+  --bg-elevated: 20 20 24;
+  --bg-card: 20 20 24;
+  --border-subtle: 255 255 255 / 0.08;
+
+  /* ── Accent (overridden by applyTheme() before first paint) ─
+     Defaults are neutral dark — if the blocking script fires even
+     1 frame late the flash is invisible charcoal, not bright teal. */
+  --accent: 60 60 70;
+  --accent-hover: 80 80 95;
+  --accent-2: 50 50 65;
+  --border-accent: 60 60 70;
+  --accent-muted: 60 60 70 / 0.15;
+
+  /* ── Row highlight (overridden by applyTheme()) ─────── */
+  --row-selected: 60 60 70;
+
+  /* ── Background palettes (overridden by applyTheme()) ─ */
+  --bg-sidebar-top: 14 14 18;
+  --bg-sidebar-mid: 16 16 20;
+  --bg-body-base: 12 12 15;
+  --bg-body-elevated: 16 16 20;
+
+  /* ── Text ──────────────────────────────────────────── */
   --text-primary: 248 250 252;
   --text-muted: 148 163 184;
-  --gradient-accent: linear-gradient(135deg, rgb(20 184 166) 0%, rgb(6 182 212) 100%);
-  --gradient-sidebar: linear-gradient(180deg, rgb(15 23 42) 0%, rgb(30 41 59) 100%);
+
+  /* ── Gradients / shadows ───────────────────────────── */
+  --gradient-accent: linear-gradient(135deg, rgb(60 60 70) 0%, rgb(50 50 65) 100%);
   --shadow-card: 0 4px 6px -1px rgb(0 0 0 / 0.2), 0 2px 4px -2px rgb(0 0 0 / 0.15);
-  --shadow-glow: 0 0 20px -5px rgb(20 184 166 / 0.25);
+  --shadow-glow: 0 0 20px -5px rgb(0 0 0 / 0.1);
 }
 
+/* ════════════════════════════════════════════════════
+   LIGHT MODE
+   ════════════════════════════════════════════════════
+   Only the main content area (#app-main-content) is
+   inverted. The sidebar stays dark (dark sidebar +
+   white content is the professional SaaS pattern used
+   by Linear, Figma, Airtable, etc.).
+
+   filter: invert(1) hue-rotate(180deg) maps:
+     hsl(H, S, L) → hsl(H, S, 100%−L)
+   so dark slate → clean white/light-gray, light text →
+   dark text, and all hues are perfectly preserved.
+   ════════════════════════════════════════════════════ */
+
+/* Page background becomes light in light mode */
+html[data-mode="light"] body {
+  background: linear-gradient(
+    165deg,
+    rgb(232 234 238) 0%,
+    rgb(240 241 244) 42%,
+    rgb(234 236 240) 100%
+  );
+}
+
+/* Remove the dark overlay from the root wrapper in both modes */
+#app-root {
+  background: transparent !important;
+}
+
+/* Invert ONLY the main content panel */
+html[data-mode="light"] #app-main-content {
+  filter: invert(1) hue-rotate(180deg) contrast(1.04);
+  transition: filter var(--hf-transition);
+}
+
+/* Counter-invert images / video — cancel parent filter (incl. contrast) */
+html[data-mode="light"] #app-main-content img,
+html[data-mode="light"] #app-main-content video,
+html[data-mode="light"] #app-main-content canvas {
+  filter: invert(1) hue-rotate(180deg) contrast(calc(1 / 1.04));
+}
+
+/* .invert-exempt — double-inverts an element inside the content area,
+   cancelling the parent filter so it renders in its original dark-mode
+   colours. Use on ghost/CTA buttons that lose contrast from the inversion. */
+html[data-mode="light"] #app-main-content .invert-exempt {
+  filter: invert(1) hue-rotate(180deg) contrast(calc(1 / 1.04));
+}
+
+/* Light mode: stronger card/panel edges (pre-invert = lighter lines → invert reads as crisp gray) */
+html[data-mode="light"] #app-main-content .border-slate-600\/80,
+html[data-mode="light"] #app-main-content .border-slate-600 {
+  border-color: rgba(255 255 255 / 0.14) !important;
+}
+html[data-mode="light"] #app-main-content .border-slate-700,
+html[data-mode="light"] #app-main-content .border-slate-700\/80,
+html[data-mode="light"] #app-main-content .border-slate-700\/50,
+html[data-mode="light"] #app-main-content .border-slate-700\/40 {
+  border-color: rgba(255 255 255 / 0.11) !important;
+}
+
+/* ── Page body — uses themed background variables ───── */
 body {
   margin: 0;
   min-height: 100vh;
-  background: linear-gradient(160deg, rgb(15 23 42) 0%, rgb(30 41 59) 50%, rgb(15 23 42) 100%);
+  background: linear-gradient(
+    160deg,
+    rgb(var(--bg-body-base)) 0%,
+    rgb(var(--bg-body-elevated)) 50%,
+    rgb(var(--bg-body-base)) 100%
+  );
   background-attachment: fixed;
   color: rgb(var(--text-primary));
   font-family:
@@ -36,7 +122,23 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Card surfaces */
+/* ── Sidebar background (dark mode — themed per accent) */
+#dashboard-sidebar-nav {
+  background: linear-gradient(
+    180deg,
+    rgb(var(--bg-sidebar-top)) 0%,
+    rgb(var(--bg-sidebar-mid)) 50%,
+    rgb(var(--bg-sidebar-top)) 100%
+  ) !important;
+}
+
+/* ── Smooth transition ONLY during explicit user theme switches ──────────── */
+html.theme-switching body,
+html.theme-switching #dashboard-sidebar-nav {
+  transition: background 0.4s ease;
+}
+
+/* ── Card surfaces ─────────────────────────────────── */
 .card {
   background: rgb(var(--bg-card) / 0.9);
   border: 1px solid rgb(var(--border-subtle) / 0.8);
@@ -50,7 +152,7 @@ body {
   box-shadow: var(--shadow-card), 0 -1px 0 0 rgb(var(--border-accent) / 0.3);
 }
 
-/* Buttons */
+/* ── Buttons ───────────────────────────────────────── */
 .btn-primary {
   background: var(--gradient-accent);
   color: white;
@@ -79,137 +181,668 @@ body {
   background: rgb(var(--accent-muted));
 }
 
-/* Inputs */
-input:focus, select:focus, textarea:focus {
+/* ── Inputs ────────────────────────────────────────── */
+input:focus,
+select:focus,
+textarea:focus {
   outline: none;
 }
 .ring-accent:focus-within {
   box-shadow: 0 0 0 2px rgb(var(--bg-base)), 0 0 0 4px rgb(var(--border-accent) / 0.5);
 }
 
-/* Scrollbar */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+/* ════════════════════════════════════════════════════
+   PER-ACCENT COLOUR OVERRIDES (dark mode)
+   ════════════════════════════════════════════════════
+   Maps hardcoded teal/cyan Tailwind classes inside
+   the nav + main content to the active --accent var.
+   Uses specific class selectors (NOT [class*=…]) so
+   hover-only variants like hover:text-teal-* are safe.
+   ════════════════════════════════════════════════════ */
+
+/* ── Text ─────────────────────────────────────────── */
+#dashboard-sidebar-nav .text-teal-200,
+#dashboard-sidebar-nav .text-teal-300,
+#dashboard-sidebar-nav .text-teal-400,
+#dashboard-sidebar-nav .text-teal-500,
+#dashboard-sidebar-nav .text-teal-600,
+#dashboard-sidebar-nav .text-cyan-400,
+#dashboard-sidebar-nav .text-cyan-500,
+#app-main-content .text-teal-200,
+#app-main-content .text-teal-300,
+#app-main-content .text-teal-400,
+#app-main-content .text-teal-500,
+#app-main-content .text-teal-600,
+#app-main-content .text-teal-700,
+#app-main-content .text-cyan-400,
+#app-main-content .text-cyan-500 {
+  color: rgb(var(--accent)) !important;
 }
+
+/* ── Borders ──────────────────────────────────────── */
+#dashboard-sidebar-nav .border-teal-400,
+#dashboard-sidebar-nav .border-teal-500,
+#dashboard-sidebar-nav .border-t-teal-500,
+#dashboard-sidebar-nav .border-teal-500\/30,
+#dashboard-sidebar-nav .border-teal-500\/40,
+#app-main-content .border-teal-400,
+#app-main-content .border-teal-500,
+#app-main-content .border-t-teal-500,
+#app-main-content .border-l-teal-400,
+#app-main-content .border-teal-400\/60,
+#app-main-content .border-teal-500\/30,
+#app-main-content .border-teal-500\/40,
+#app-main-content .border-teal-500\/50,
+#app-main-content .border-teal-500\/60,
+#app-main-content .border-teal-500\/70 {
+  border-color: rgb(var(--accent)) !important;
+}
+
+/* ── Solid backgrounds ────────────────────────────── */
+#dashboard-sidebar-nav .bg-teal-500,
+#dashboard-sidebar-nav .bg-teal-600,
+#app-main-content .bg-teal-500,
+#app-main-content .bg-teal-600 {
+  background-color: rgb(var(--accent)) !important;
+}
+
+/* ── Tinted backgrounds ───────────────────────────── */
+#dashboard-sidebar-nav .bg-teal-500\/15,
+#dashboard-sidebar-nav .bg-teal-500\/20,
+#app-main-content .bg-teal-400\/10,
+#app-main-content .bg-teal-500\/10,
+#app-main-content .bg-teal-500\/15,
+#app-main-content .bg-teal-500\/20 {
+  background-color: rgb(var(--accent) / 0.12) !important;
+}
+
+/* ── Gradient buttons ─────────────────────────────── */
+#dashboard-sidebar-nav .from-teal-500.bg-gradient-to-r,
+#dashboard-sidebar-nav .from-teal-500.bg-gradient-to-br,
+#dashboard-sidebar-nav .from-teal-400.bg-gradient-to-r,
+#dashboard-sidebar-nav .from-teal-400.bg-gradient-to-br,
+#app-main-content .from-teal-500.bg-gradient-to-r,
+#app-main-content .from-teal-500.bg-gradient-to-br,
+#app-main-content .from-teal-500.bg-gradient-to-b,
+#app-main-content .from-teal-400.bg-gradient-to-r,
+#app-main-content .from-teal-400.bg-gradient-to-br,
+#dashboard-sidebar-nav .hover\:from-teal-400:hover.bg-gradient-to-r,
+#app-main-content .hover\:from-teal-400:hover.bg-gradient-to-r,
+#app-main-content .hover\:from-teal-400:hover.bg-gradient-to-br {
+  background-image: var(--gradient-accent) !important;
+}
+
+/* ── Focus rings ──────────────────────────────────── */
+#dashboard-sidebar-nav .focus\:ring-teal-500:focus,
+#dashboard-sidebar-nav .focus\:ring-teal-400:focus,
+#dashboard-sidebar-nav .focus\:ring-teal-500\/50:focus,
+#app-main-content .focus\:ring-teal-500:focus,
+#app-main-content .focus\:ring-teal-400:focus,
+#app-main-content .focus\:ring-teal-500\/50:focus {
+  --tw-ring-color: rgb(var(--accent) / 0.5) !important;
+}
+#dashboard-sidebar-nav .focus\:border-teal-500:focus,
+#app-main-content .focus\:border-teal-500:focus {
+  border-color: rgb(var(--accent)) !important;
+}
+
+/* ── Ring utilities ───────────────────────────────── */
+#dashboard-sidebar-nav .ring-teal-400,
+#dashboard-sidebar-nav .ring-teal-500,
+#app-main-content .ring-teal-400,
+#app-main-content .ring-teal-500 {
+  --tw-ring-color: rgb(var(--accent) / 0.8) !important;
+}
+
+/* ── Spinner top-border colours ───────────────────── */
+#app-main-content .border-t-teal-400,
+#app-main-content .border-t-teal-500 {
+  border-top-color: rgb(var(--accent)) !important;
+}
+#app-main-content .border-teal-400\/30,
+#app-main-content .border-teal-500\/30 {
+  border-color: rgb(var(--accent) / 0.3) !important;
+}
+
+/* ── Table density ─────────────────────────────────── */
+[data-density="compact"] .tr-density td,
+[data-density="compact"] .tr-density th {
+  padding-top: 0.35rem !important;
+  padding-bottom: 0.35rem !important;
+}
+
+/* ════════════════════════════════════════════════════
+   NEUTRAL SURFACE OVERRIDES
+   Tailwind's slate-* carry a strong blue tint. Remap
+   to premium charcoal neutrals so panels, cards,
+   table, and the details panel look charcoal-gray.
+
+   Premium charcoal scale:
+     slate-900  → rgb(13 13 16)    near-black
+     slate-800  → rgb(20 20 24)    card surface
+     slate-700  → rgb(28 28 34)    elevated surface
+     slate-600  → rgb(40 40 48)    high surface / hover
+   Borders → rgba(white / 0.07–0.11) — modern glass style
+   ════════════════════════════════════════════════════ */
+
+/* ── Slate-800 surfaces (panels, cards, aside) ────── */
+#app-main-content .bg-slate-800,
+#dashboard-sidebar-nav .bg-slate-800 {
+  background-color: rgb(20 20 24) !important;
+}
+#app-main-content .bg-slate-800\/95,
+#dashboard-sidebar-nav .bg-slate-800\/95 {
+  background-color: rgb(20 20 24 / 0.97) !important;
+}
+#app-main-content .bg-slate-800\/90,
+#dashboard-sidebar-nav .bg-slate-800\/90 {
+  background-color: rgb(20 20 24 / 0.92) !important;
+}
+#app-main-content .bg-slate-800\/50,
+#dashboard-sidebar-nav .bg-slate-800\/50 {
+  background-color: rgb(20 20 24 / 0.50) !important;
+}
+#app-main-content .bg-slate-800\/40,
+#dashboard-sidebar-nav .bg-slate-800\/40 {
+  background-color: rgb(20 20 24 / 0.40) !important;
+}
+#app-main-content .bg-slate-800\/30,
+#dashboard-sidebar-nav .bg-slate-800\/30 {
+  background-color: rgb(20 20 24 / 0.30) !important;
+}
+
+/* ── Slate-900 surfaces (deep layer) ─────────────── */
+#app-main-content .bg-slate-900\/95,
+#dashboard-sidebar-nav .bg-slate-900\/95 {
+  background-color: rgb(13 13 16 / 0.97) !important;
+}
+#app-main-content .bg-slate-900\/50,
+#dashboard-sidebar-nav .bg-slate-900\/50 {
+  background-color: rgb(13 13 16 / 0.50) !important;
+}
+
+/* ── Slate-700 surfaces (table header, inputs) ────── */
+#app-main-content .bg-slate-700,
+#dashboard-sidebar-nav .bg-slate-700 {
+  background-color: rgb(28 28 34) !important;
+}
+#app-main-content .bg-slate-700\/95 {
+  background-color: rgb(28 28 34 / 0.97) !important;
+}
+#app-main-content .bg-slate-700\/80 {
+  background-color: rgb(28 28 34 / 0.80) !important;
+}
+#app-main-content .bg-slate-700\/60 {
+  background-color: rgb(28 28 34 / 0.60) !important;
+}
+#app-main-content .bg-slate-700\/50 {
+  background-color: rgb(28 28 34 / 0.50) !important;
+}
+#app-main-content .bg-slate-700\/30 {
+  background-color: rgb(28 28 34 / 0.30) !important;
+}
+
+/* ── Hover states ─────────────────────────────────── */
+#app-main-content .hover\:bg-slate-700\/60:hover,
+#dashboard-sidebar-nav .hover\:bg-slate-700\/60:hover {
+  background-color: rgba(255 255 255 / 0.05) !important;
+}
+#app-main-content .hover\:bg-slate-700\/80:hover,
+#dashboard-sidebar-nav .hover\:bg-slate-700\/80:hover {
+  background-color: rgba(255 255 255 / 0.07) !important;
+}
+#app-main-content .hover\:bg-slate-600:hover,
+#dashboard-sidebar-nav .hover\:bg-slate-600:hover {
+  background-color: rgb(40 40 48) !important;
+}
+
+/* ── Borders — glass/frosted style ───────────────── */
+#app-main-content .border-slate-600,
+#app-main-content .border-slate-600\/80 {
+  border-color: rgba(255 255 255 / 0.09) !important;
+}
+#app-main-content .border-slate-700,
+#app-main-content .border-slate-700\/80 {
+  border-color: rgba(255 255 255 / 0.07) !important;
+}
+#dashboard-sidebar-nav .border-slate-700,
+#dashboard-sidebar-nav .border-slate-700\/80,
+#dashboard-sidebar-nav .border-b {
+  border-color: rgba(255 255 255 / 0.07) !important;
+}
+
+/* ════════════════════════════════════════════════════
+   SKY-CLASS OVERRIDES
+   The product table uses sky-* for selected row and
+   the "Load more" button. Re-map them to the active
+   theme accent via --row-selected / --accent.
+   ════════════════════════════════════════════════════ */
+
+/* Selected table row — bg */
+#app-main-content .bg-sky-500\/20 {
+  background-color: rgb(var(--row-selected) / 0.18) !important;
+}
+/* Selected table row — ring */
+#app-main-content .ring-sky-400 {
+  --tw-ring-color: rgb(var(--row-selected) / 0.55) !important;
+}
+/* Load-more button */
+#app-main-content .bg-sky-600 {
+  background-color: rgb(var(--accent)) !important;
+}
+#app-main-content .hover\:bg-sky-500:hover {
+  background-color: rgb(var(--accent-hover)) !important;
+}
+
+/* ════════════════════════════════════════════════════
+   TABLE HEADER POLISH
+   Adds a subtle accent line under the sticky thead.
+   ════════════════════════════════════════════════════ */
+#app-main-content thead tr {
+  border-bottom: 2px solid rgb(var(--accent) / 0.25) !important;
+}
+
+/* ════════════════════════════════════════════════════
+   RIGHT DETAILS PANEL — SECTION LABELS
+   Upper-case section headings (e.g. "Gated / Eligible",
+   "Sourcing snapshot") get a faint accent left-bar.
+   ════════════════════════════════════════════════════ */
+#app-main-content .text-xs.uppercase.tracking-wide {
+  letter-spacing: 0.075em;
+}
+
+/* ════════════════════════════════════════════════════
+   BUTTON POLISH
+   Extra tactile weight on the primary gradient CTA.
+   ════════════════════════════════════════════════════ */
+#app-main-content button.rounded-lg.bg-gradient-to-r,
+#dashboard-sidebar-nav a.rounded-xl.bg-gradient-to-r {
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.25), 0 0 0 1px rgb(var(--accent) / 0.15);
+}
+
+/* ════════════════════════════════════════════════════
+   CARD / PANEL DEPTH
+   Adds a hairline accent top-border to the main header
+   card on the Explorer page so it has clear hierarchy.
+   ════════════════════════════════════════════════════ */
+#app-main-content .border-t-4 {
+  border-top-width: 3px !important;
+}
+
+/* ════════════════════════════════════════════════════
+   PREMIUM POLISH
+   Smooth transitions · focus glow · card depth ·
+   button lift · sidebar depth · light-mode surface
+   ════════════════════════════════════════════════════ */
+
+/* ── 1. Smooth transitions on all interactive elements */
+#app-main-content button,
+#app-main-content a[href],
+#app-main-content input,
+#app-main-content select,
+#app-main-content textarea,
+#dashboard-sidebar-nav a,
+#dashboard-sidebar-nav button {
+  transition:
+    color var(--hf-transition-fast),
+    background-color var(--hf-transition-fast),
+    border-color var(--hf-transition-fast),
+    box-shadow var(--hf-transition-fast),
+    opacity var(--hf-transition-fast),
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1) !important;
+}
+
+/* ── 2. Body font smoothing + feature settings ──────── */
+body,
+#app-main-content,
+#dashboard-sidebar-nav {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* ── 3. Premium input focus glow ─────────────────── */
+#app-main-content input:not([type="checkbox"]):not([type="radio"]),
+#app-main-content select,
+#app-main-content textarea {
+  transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
+}
+#app-main-content input:not([type="checkbox"]):not([type="radio"]):focus,
+#app-main-content select:focus,
+#app-main-content textarea:focus {
+  outline: none !important;
+  border-color: rgb(var(--accent) / 0.6) !important;
+  box-shadow:
+    0 0 0 3px rgb(var(--accent) / 0.10),
+    0 1px 3px rgb(0 0 0 / 0.25) !important;
+}
+
+/* ── 4. Primary gradient button — lift + glow ──────── */
+#app-main-content button.from-teal-500,
+#app-main-content button.from-teal-400,
+#dashboard-sidebar-nav a.from-teal-500 {
+  box-shadow:
+    0 1px 6px rgb(var(--accent) / 0.28),
+    0 1px 2px rgb(0 0 0 / 0.2) !important;
+}
+#app-main-content button.from-teal-500:hover:not(:disabled),
+#app-main-content button.from-teal-400:hover:not(:disabled),
+#dashboard-sidebar-nav a.from-teal-500:hover {
+  box-shadow:
+    0 3px 16px rgb(var(--accent) / 0.45),
+    0 1px 4px rgb(0 0 0 / 0.3) !important;
+  transform: translateY(-1px) !important;
+}
+#app-main-content button.from-teal-500:active:not(:disabled),
+#app-main-content button.from-teal-400:active:not(:disabled) {
+  transform: translateY(0) !important;
+  box-shadow: 0 1px 4px rgb(var(--accent) / 0.18) !important;
+}
+
+/* ── 5. Secondary / ghost buttons — subtle glass ──── */
+#app-main-content button.border.border-slate-600,
+#app-main-content a.border.border-slate-600 {
+  border-color: rgba(255 255 255 / 0.10) !important;
+  background-color: rgba(255 255 255 / 0.03) !important;
+}
+#app-main-content button.border.border-slate-600:hover:not(:disabled) {
+  border-color: rgba(255 255 255 / 0.18) !important;
+  background-color: rgba(255 255 255 / 0.07) !important;
+}
+
+/* ── 6. Card and panel depth shadows ─────────────── */
+/* Main header card (with accent top-border) */
+#app-main-content .rounded-xl.border-t-teal-500,
+#app-main-content .border-t-teal-500.rounded-xl {
+  box-shadow:
+    0 4px 24px -4px rgb(0 0 0 / 0.55),
+    0 0 0 1px rgb(var(--accent) / 0.08),
+    inset 0 1px 0 rgba(255 255 255 / 0.03) !important;
+}
+/* Product table section */
+#app-main-content section.rounded-xl.border {
+  box-shadow:
+    0 4px 20px -4px rgb(0 0 0 / 0.5),
+    inset 0 1px 0 rgba(255 255 255 / 0.025) !important;
+}
+/* Detail-panel mini cards (BSR, Buy box, etc.) */
+#app-main-content .rounded-lg.border.bg-slate-700\/30 {
+  border-color: rgba(255 255 255 / 0.09) !important;
+  box-shadow:
+    0 1px 0 rgba(255 255 255 / 0.04) inset,
+    0 2px 10px rgb(0 0 0 / 0.35) !important;
+  transition:
+    box-shadow var(--hf-transition-fast),
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color var(--hf-transition-fast),
+    background-color var(--hf-transition-fast) !important;
+}
+
+/* Product details column — brighter slab, clear separation from table */
+#app-main-content aside.product-details-panel {
+  background: linear-gradient(180deg, rgb(26 26 31) 0%, rgb(22 22 27) 48%, rgb(20 20 25) 100%) !important;
+  border-left-color: rgba(255 255 255 / 0.1) !important;
+  box-shadow:
+    -8px 0 36px -6px rgb(0 0 0 / 0.55),
+    inset 1px 0 0 rgba(255 255 255 / 0.05) !important;
+}
+#app-main-content aside.product-details-panel > div > div.overflow-y-auto {
+  background: linear-gradient(180deg, transparent 0%, rgb(0 0 0 / 0.12) 100%);
+  scrollbar-width: thin;
+  scrollbar-color: rgb(148 163 184 / 0.18) transparent;
+}
+
+#app-main-content aside.product-details-panel > div > div.overflow-y-auto::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+#app-main-content aside.product-details-panel > div > div.overflow-y-auto::-webkit-scrollbar-track {
+  margin: 4px 0;
+  background: transparent;
+}
+
+#app-main-content aside.product-details-panel > div > div.overflow-y-auto::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  background-color: rgb(148 163 184 / 0.16);
+}
+
+#app-main-content aside.product-details-panel > div > div.overflow-y-auto:hover::-webkit-scrollbar-thumb {
+  background-color: rgb(148 163 184 / 0.38);
+}
+
+#app-main-content aside.product-details-panel > div > div.overflow-y-auto::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(148 163 184 / 0.52);
+}
+
+#app-main-content aside.product-details-panel > div > div.overflow-y-auto:hover {
+  scrollbar-color: rgb(148 163 184 / 0.32) rgb(15 23 42 / 0.35);
+}
+#app-main-content aside.product-details-panel .sticky {
+  background: linear-gradient(180deg, rgb(26 26 31 / 0.98) 0%, rgb(24 24 29 / 0.95) 100%) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom-color: rgba(255 255 255 / 0.08) !important;
+  box-shadow: 0 12px 24px -12px rgb(0 0 0 / 0.45) !important;
+}
+#app-main-content aside.product-details-panel .text-\[11px\].uppercase {
+  letter-spacing: 0.12em;
+  color: rgb(186 198 214) !important;
+}
+
+/* ── 7. Sidebar depth + active item glow ─────────── */
+#dashboard-sidebar-nav {
+  box-shadow: 4px 0 32px rgb(0 0 0 / 0.55) !important;
+}
+/* Active nav link glow from accent left edge */
+#dashboard-sidebar-nav .bg-teal-500\/15 {
+  background-color: rgb(var(--accent) / 0.10) !important;
+  box-shadow: inset 3px 0 8px -4px rgb(var(--accent) / 0.3) !important;
+}
+/* Hover items — glass + soft edge */
+#dashboard-sidebar-nav a:not(.font-semibold):hover,
+#dashboard-sidebar-nav button[class*="hover:bg-slate-700"]:hover {
+  background-color: rgba(255 255 255 / 0.055) !important;
+  box-shadow: inset 0 0 0 1px rgba(255 255 255 / 0.04) !important;
+}
+#dashboard-sidebar-nav .hover\:text-teal-200\/90:hover {
+  text-shadow: 0 0 16px rgb(var(--accent) / 0.22) !important;
+}
+
+/* ── 8. Table row hover — smooth glass highlight ─── */
+#app-main-content .hover\:bg-slate-700\/30:hover {
+  background-color: rgba(255 255 255 / 0.04) !important;
+}
+
+/* ── 9. Details panel animations ─────────────────── */
+@keyframes hf-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.panel-loaded {
+  animation: hf-fade-up var(--hf-transition) both;
+}
+
+@keyframes hf-shimmer {
+  0% {
+    background-position: -200% center;
+  }
+  100% {
+    background-position: 200% center;
+  }
+}
+.skeleton-shimmer {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(255 255 255 / 0.05);
+  background: linear-gradient(
+    90deg,
+    rgb(28 28 34 / 0.95) 0%,
+    rgb(42 42 52 / 0.98) 38%,
+    rgb(50 50 62 / 1) 50%,
+    rgb(42 42 52 / 0.98) 62%,
+    rgb(28 28 34 / 0.95) 100%
+  );
+  background-size: 220% 100%;
+  animation: hf-shimmer 2s ease-in-out infinite;
+}
+
+@keyframes hf-analyzing-pulse {
+  0%,
+  100% {
+    opacity: 0.72;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+.hf-analyzing-caption {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgb(var(--accent));
+  animation: hf-analyzing-pulse 1.8s ease-in-out infinite;
+}
+.hf-analyzing-caption::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: rgb(var(--accent));
+  box-shadow: 0 0 10px rgb(var(--accent) / 0.6);
+}
+
+/* Stat-card micro-lift on hover */
+#app-main-content aside.product-details-panel .grid > div {
+  transition:
+    background-color var(--hf-transition-fast),
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow var(--hf-transition-fast),
+    border-color var(--hf-transition-fast) !important;
+}
+#app-main-content aside.product-details-panel .grid > div:hover {
+  transform: translateY(-2px) !important;
+  box-shadow:
+    0 8px 22px -8px rgb(0 0 0 / 0.45),
+    0 0 0 1px rgb(var(--accent) / 0.12) !important;
+  border-color: rgba(255 255 255 / 0.12) !important;
+}
+
+/* ── 9. Scrollbar thin + accent themed ───────────── */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+/* Light mode outer frame — body gradient set above near invert block */
+
+/* ── Scrollbar track / thumb ───────────────────────── */
 ::-webkit-scrollbar-track {
   background: rgb(var(--bg-base) / 0.5);
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, rgb(var(--accent) / 0.95), rgb(6 182 212 / 0.95));
+  background: linear-gradient(180deg, rgb(var(--accent) / 0.7), rgb(var(--accent-2) / 0.7));
   border-radius: 4px;
   border: 1px solid rgb(var(--bg-base) / 0.55);
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, rgb(var(--accent-hover) / 1), rgb(34 211 238 / 1));
+  background: linear-gradient(180deg, rgb(var(--accent)), rgb(var(--accent-2)));
 }
-
 * {
-  scrollbar-color: rgb(var(--accent)) rgb(var(--bg-base) / 0.5);
-}
-@import "tailwindcss";
-
-:root {
-  color-scheme: dark;
-  /* Design system: deep slate base + teal/cyan accent */
-  --bg-base: 15 23 42;       /* slate-900 */
-  --bg-elevated: 30 41 59;  /* slate-800 */
-  --bg-card: 30 41 59;
-  --border-subtle: 51 65 85;
-  --border-accent: 20 184 166; /* teal-500 */
-  --accent: 20 184 166;
-  --accent-hover: 45 212 191;
-  --accent-muted: 20 184 166 / 0.15;
-  --text-primary: 248 250 252;
-  --text-muted: 148 163 184;
-  --gradient-accent: linear-gradient(135deg, rgb(20 184 166) 0%, rgb(6 182 212) 100%);
-  --gradient-sidebar: linear-gradient(180deg, rgb(15 23 42) 0%, rgb(30 41 59) 100%);
-  --shadow-card: 0 4px 6px -1px rgb(0 0 0 / 0.2), 0 2px 4px -2px rgb(0 0 0 / 0.15);
-  --shadow-glow: 0 0 20px -5px rgb(20 184 166 / 0.25);
+  scrollbar-color: rgb(var(--accent) / 0.6) rgb(var(--bg-base) / 0.5);
 }
 
-body {
-  margin: 0;
-  min-height: 100vh;
-  background: linear-gradient(160deg, rgb(15 23 42) 0%, rgb(30 41 59) 50%, rgb(15 23 42) 100%);
-  background-attachment: fixed;
-  color: rgb(var(--text-primary));
-  font-family:
-    "Inter",
-    ui-sans-serif,
-    system-ui,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    sans-serif;
-  -webkit-font-smoothing: antialiased;
+/* ════════════════════════════════════════════════════
+   ENTERPRISE — primary CTA, layered cards, type rhythm
+   ════════════════════════════════════════════════════ */
+
+#app-main-content button.hf-primary-cta:not(:disabled) {
+  font-weight: 700 !important;
+  letter-spacing: 0.03em !important;
+  box-shadow:
+    0 2px 10px rgb(var(--accent) / 0.38),
+    0 0 0 1px rgb(255 255 255 / 0.1) inset,
+    0 6px 28px rgb(var(--accent) / 0.22) !important;
+}
+#app-main-content button.hf-primary-cta:hover:not(:disabled) {
+  box-shadow:
+    0 4px 26px rgb(var(--accent) / 0.52),
+    0 0 0 1px rgb(255 255 255 / 0.14) inset,
+    0 0 40px rgb(var(--accent) / 0.28) !important;
+  transform: translateY(-2px) scale(1.015) !important;
+}
+#app-main-content button.hf-primary-cta:active:not(:disabled) {
+  transform: translateY(0) scale(1) !important;
 }
 
-/* Card surfaces */
-.card {
-  background: rgb(var(--bg-card) / 0.9);
-  border: 1px solid rgb(var(--border-subtle) / 0.8);
-  border-radius: 0.75rem;
-  box-shadow: var(--shadow-card);
-  backdrop-filter: blur(8px);
+#app-main-content section.rounded-xl.border {
+  box-shadow:
+    0 6px 28px -6px rgb(0 0 0 / 0.58),
+    0 0 0 1px rgba(255 255 255 / 0.04),
+    inset 0 1px 0 rgba(255 255 255 / 0.035) !important;
 }
 
-.card-accent-top {
-  border-top: 3px solid rgb(var(--border-accent));
-  box-shadow: var(--shadow-card), 0 -1px 0 0 rgb(var(--border-accent) / 0.3);
+#app-main-content .rounded-xl.border-t-teal-500,
+#app-main-content .border-t-teal-500.rounded-xl {
+  box-shadow:
+    0 8px 32px -8px rgb(0 0 0 / 0.6),
+    0 0 0 1px rgb(var(--accent) / 0.1),
+    inset 0 1px 0 rgba(255 255 255 / 0.04) !important;
 }
 
-/* Buttons */
-.btn-primary {
-  background: var(--gradient-accent);
-  color: white;
+#app-main-content aside.product-details-panel .hf-detail-empty-card {
+  box-shadow:
+    0 10px 36px -14px rgb(0 0 0 / 0.5),
+    inset 0 1px 0 rgba(255 255 255 / 0.045) !important;
+  border-color: rgba(255 255 255 / 0.1) !important;
+}
+#app-main-content .text-xs.uppercase.tracking-wide,
+#app-main-content .text-\[10px\].uppercase {
   font-weight: 600;
-  border-radius: 0.5rem;
-  padding: 0.5rem 1rem;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-}
-.btn-primary:hover:not(:disabled) {
-  box-shadow: var(--shadow-glow);
-  transform: translateY(-0.5px);
-}
-.btn-primary:active:not(:disabled) {
-  transform: translateY(0);
+  letter-spacing: 0.08em !important;
+  color: rgb(180 190 208) !important;
 }
 
-.btn-ghost {
-  color: rgb(var(--text-muted));
-  border-radius: 0.5rem;
-  padding: 0.375rem 0.75rem;
-  font-size: 0.875rem;
-  transition: color 0.15s ease, background 0.15s ease;
-}
-.btn-ghost:hover {
-  color: rgb(var(--accent-hover));
-  background: rgb(var(--accent-muted));
+/* Detail panel product title */
+#app-main-content aside.product-details-panel .font-medium.text-slate-100 {
+  font-weight: 600 !important;
+  letter-spacing: -0.01em;
 }
 
-/* Inputs */
-input:focus, select:focus, textarea:focus {
-  outline: none;
-}
-.ring-accent:focus-within {
-  box-shadow: 0 0 0 2px rgb(var(--bg-base)), 0 0 0 4px rgb(var(--border-accent) / 0.5);
+/* Smooth text updates in detail metrics */
+#app-main-content aside.product-details-panel p,
+#app-main-content aside.product-details-panel a {
+  transition: color var(--hf-transition-fast), opacity var(--hf-transition-fast);
 }
 
-/* Scrollbar */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+/* Admin operations — activity feed scrollbar (avoids default thick blue bar) */
+.admin-overview-feed {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(45 212 191 / 0.22) transparent;
 }
-::-webkit-scrollbar-track {
-  background: rgb(var(--bg-base) / 0.5);
-  border-radius: 4px;
+.admin-overview-feed::-webkit-scrollbar {
+  width: 5px;
 }
-::-webkit-scrollbar-thumb {
-  background: rgb(var(--border-subtle));
-  border-radius: 4px;
+.admin-overview-feed::-webkit-scrollbar-track {
+  background: transparent;
 }
-::-webkit-scrollbar-thumb:hover {
-  background: rgb(71 85 105);
+.admin-overview-feed::-webkit-scrollbar-thumb {
+  background: rgb(45 212 191 / 0.2);
+  border-radius: 9999px;
+}
+.admin-overview-feed::-webkit-scrollbar-thumb:hover {
+  background: rgb(45 212 191 / 0.35);
 }

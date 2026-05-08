@@ -20,6 +20,7 @@ import { useSession } from "next-auth/react";
 import { DashboardHeaderAccount } from "@/app/components/DashboardHeaderAccount";
 import { DashboardHeaderMark } from "@/app/components/DashboardHeaderMark";
 import { ProductInsightBlurb } from "@/app/components/ProductInsightBlurb";
+import { ProductIntelPanelContent } from "@/app/components/ProductIntelPanelContent";
 import { useProductAiInsight } from "@/app/hooks/useProductAiInsight";
 import { AmazonAccountModal } from "@/app/settings/AmazonAccountModal";
 import { useOpenDashboardSettings } from "@/app/context/DashboardSettingsContext";
@@ -119,29 +120,11 @@ const numberColumns = new Set<SortColumn>([
   "estimatedMonthlySales",
 ]);
 
-function formatCurrency(value: number | null): string {
-  if (value === null) {
-    return "-";
-  }
-  return `$${value.toFixed(2)}`;
-}
-
-function formatPercent(value: number | null): string {
-  if (value === null) {
-    return "-";
-  }
-  return `${value.toFixed(2)}%`;
-}
-
 function formatNumber(value: number | null): string {
   if (value === null) {
     return "-";
   }
   return value.toLocaleString();
-}
-
-function roundToTwo(value: number): number {
-  return Math.round(value * 100) / 100;
 }
 
 /** Extract ASIN from Amazon product URL or return input if already ASIN-like. */
@@ -276,66 +259,6 @@ function parsePositiveInput(rawValue: string): number | null {
     return null;
   }
   return parsed;
-}
-
-function decisionDisplayLabel(decision: ProductAnalysis["decision"]): string {
-  const labels: Record<ProductAnalysis["decision"], string> = {
-    BUY: "Buy",
-    "WORTH UNGATING": "Worth ungating",
-    LOW_MARGIN: "Low margin",
-    NO_MARGIN: "No margin",
-  BAD: "Bad",
-  UNKNOWN: "",
-  };
-  return labels[decision] ?? decision;
-}
-
-function decisionBadgeClasses(decision: ProductAnalysis["decision"]): string {
-  if (decision === "BUY") {
-    return "bg-emerald-900/60 text-emerald-200";
-  }
-  if (decision === "WORTH UNGATING") {
-    return "bg-amber-900/60 text-amber-200";
-  }
-  if (decision === "LOW_MARGIN") {
-    return "bg-orange-900/50 text-orange-200";
-  }
-  if (decision === "NO_MARGIN" || decision === "BAD") {
-    return "bg-rose-900/50 text-rose-200";
-  }
-  return "bg-slate-700 text-slate-300";
-}
-
-function decisionExplanation(item: ProductAnalysis): string | null {
-  if (item.decision === "BAD") {
-    if (item.ipComplaintRisk === true) {
-      return "IP or brand complaint risk from Amazon restrictions.";
-    }
-    if (item.salesRank != null && item.salesRank > 100_000) {
-      return `BSR ${item.salesRank.toLocaleString()} is above 100,000.`;
-    }
-    const badReason = item.reasons.find(
-      (r) => /sales rank|above 100|IP|complaint risk/i.test(r),
-    );
-    return badReason ?? (item.reasons[0] ?? null);
-  }
-  if (item.decision === "NO_MARGIN") {
-    return item.netProfit != null && item.netProfit <= 0
-      ? "No profit at your cost and current buy box."
-      : item.reasons[0] ?? null;
-  }
-  if (item.decision === "LOW_MARGIN") {
-    return item.roiPercent != null && item.roiPercent < 10
-      ? "ROI below 10%."
-      : item.reasons[0] ?? null;
-  }
-  if (item.decision === "WORTH UNGATING") {
-    return "Gated but projected profit justifies ungating cost.";
-  }
-  if (item.decision === "BUY") {
-    return "Profit and ROI look good at current data.";
-  }
-  return item.reasons[0] ?? null;
 }
 
 const MATCH_GROUP_ORDER: Record<string, number> = {
@@ -1703,30 +1626,55 @@ function AnalyzerPageContent() {
   ];
 
   const rightPanelContent = panelAnalysisLoading ? (
-    <div className="flex flex-col items-center justify-center gap-4 py-12 text-slate-400">
-      <div className="relative flex h-14 w-14 items-center justify-center">
-        <div className="absolute h-14 w-14 animate-spin rounded-full border-2 border-teal-400 border-t-transparent" />
-        <div className="absolute h-8 w-8 animate-spin rounded-full border-2 border-teal-400/30 border-t-teal-400" style={{ animationDirection: "reverse", animationDuration: "0.9s" }} />
+    <div className="flex flex-col gap-3">
+      <div className="hf-analyzing-caption pl-0.5">Analyzing product…</div>
+      {/* Image skeleton */}
+      <div className="skeleton-shimmer h-32 w-full rounded-lg" />
+      {/* Title lines skeleton */}
+      <div className="space-y-2 px-0.5">
+        <div className="skeleton-shimmer h-3.5 w-3/4 rounded" />
+        <div className="skeleton-shimmer h-3 w-1/2 rounded opacity-75" />
+        <div className="skeleton-shimmer h-3 w-2/3 rounded opacity-50" />
       </div>
-      <div className="text-center">
-        <p className="text-sm font-semibold text-slate-200">Loading product details…</p>
-        <p className="mt-1 text-xs text-slate-500">Fetching pricing and eligibility</p>
+      {/* Badge skeleton */}
+      <div className="skeleton-shimmer h-6 w-20 rounded-full" />
+      {/* Info card skeleton */}
+      <div className="skeleton-shimmer h-12 w-full rounded-lg" />
+      {/* Stat cards skeleton */}
+      <div className="grid grid-cols-2 gap-2">
+        {[1, 2, 3, 4, 5, 6].map((i) => (
+          <div key={i} className="rounded-lg border border-slate-700/40 bg-slate-800/40 px-3 py-2.5">
+            <div className="skeleton-shimmer mb-1.5 h-2.5 w-1/2 rounded" />
+            <div className="skeleton-shimmer h-4 w-2/3 rounded" />
+          </div>
+        ))}
       </div>
     </div>
   ) : !selectedProduct ? (
-    <div className="flex flex-col gap-4 text-sm text-slate-400">
-      <div className="flex h-20 w-full items-center justify-center rounded-lg border border-slate-600 bg-slate-700/30 text-slate-500">
-        <span className="text-3xl">—</span>
+    <div className="flex flex-col gap-4 text-sm">
+      {/* Premium empty state */}
+      <div className="hf-detail-empty-card flex flex-col items-center justify-center gap-3 rounded-xl border border-slate-700/50 bg-slate-800/30 px-5 py-9 text-center">
+        <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-slate-700/60 bg-slate-800/60">
+          <svg className="h-7 w-7 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <rect x="18" y="3" width="4" height="18" rx="1" />
+            <rect x="10" y="8" width="4" height="13" rx="1" />
+            <rect x="2"  y="13" width="4" height="8"  rx="1" />
+            <path d="M2 21h20" />
+          </svg>
+        </div>
+        <div>
+          <p className="text-sm font-semibold text-slate-200">Search or scan a product to analyze</p>
+          <p className="mt-1.5 text-xs leading-relaxed text-slate-500">
+            Enter an ASIN, UPC, or keyword above to view eligibility, offers, fees, and profit estimates.
+          </p>
+        </div>
       </div>
-      <p className="font-medium text-slate-200">No product selected</p>
-      <p className="rounded-lg border border-slate-600 bg-slate-700/30 px-3 py-3 text-slate-400">
-        Select a product from the catalog to view details and check selling eligibility.
-      </p>
+      {/* Skeleton stat cards */}
       <div className="grid grid-cols-2 gap-2">
-        {["BSR", "Buy box", "FBA / FBM", "Cost", "Profit", "ROI"].map((label) => (
-          <div key={label} className="rounded-lg border border-slate-600 bg-slate-700/30 px-3 py-2">
-            <p className="text-xs text-slate-500">{label}</p>
-            <p className="font-semibold text-slate-500">—</p>
+        {["BSR", "Buy Box", "FBA / FBM", "Cost", "Profit", "ROI"].map((label) => (
+          <div key={label} className="rounded-lg border border-slate-700/50 bg-slate-800/40 px-3 py-2.5 transition-colors hover:bg-slate-800/60">
+            <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500">{label}</p>
+            <div className="skeleton-shimmer h-4 w-10 rounded" />
           </div>
         ))}
       </div>
@@ -1737,453 +1685,33 @@ function AnalyzerPageContent() {
     if (rightPanelContent !== null) return rightPanelContent;
     if (!selectedProduct) return null;
     return (
-      <div className="space-y-4">
-        <div className="flex flex-col gap-3 bg-slate-800 pb-2">
-          {selectedProduct.imageUrl ? (
-            selectedProduct.asin ? (
-              <a
-                href={amazonOfferListingUrl(marketplaceDomain, selectedProduct.asin)}
-                target="_blank"
-                rel="noopener noreferrer"
-                title="Open this product on Amazon (use Buying options / Other sellers there to compare offers)"
-                className="block rounded-lg outline-none ring-offset-2 ring-offset-slate-800 focus-visible:ring-2 focus-visible:ring-teal-400"
-              >
-                <img
-                  src={selectedProduct.imageUrl}
-                  alt={selectedProduct.title || "Product"}
-                  referrerPolicy="no-referrer"
-                  className="h-32 w-full rounded-lg border border-slate-600 object-contain bg-slate-700/30 transition hover:border-slate-500"
-                />
-              </a>
-            ) : (
-              <img
-                src={selectedProduct.imageUrl}
-                alt={selectedProduct.title || "Product"}
-                referrerPolicy="no-referrer"
-                className="h-32 w-full rounded-lg border border-slate-600 object-contain bg-slate-700/30"
-              />
-            )
-          ) : (
-            <div className="flex h-32 w-full items-center justify-center rounded-lg border border-slate-600 bg-slate-700/30 text-slate-500">—</div>
-          )}
-          <div>
-            {selectedProduct.asin ? (
-              <a
-                href={amazonOfferListingUrl(marketplaceDomain, selectedProduct.asin)}
-                target="_blank"
-                rel="noopener noreferrer"
-                title="Open this product on Amazon (use Buying options / Other sellers there to compare offers)"
-                className="font-medium text-slate-100 underline decoration-slate-500 underline-offset-2 transition hover:text-teal-300 hover:decoration-teal-300"
-              >
-                {selectedProduct.title || selectedProduct.asin || "Product"}
-              </a>
-            ) : (
-              <p className="font-medium text-slate-100">{selectedProduct.title || selectedProduct.asin || "Product"}</p>
-            )}
-            {selectedProduct.asin ? (
-              <p className="mt-1 text-[11px] leading-snug text-slate-500">
-                On Amazon, use <span className="text-slate-400">Buying options</span> or{" "}
-                <span className="text-slate-400">Other sellers</span> on that page to see who is selling this ASIN.
-              </p>
-            ) : null}
-            {selectedProduct.offerLabel ? (
-              <p className="text-sm text-teal-400">Listing: {selectedProduct.offerLabel}</p>
-            ) : null}
-            {selectedProduct.brand ? <p className="text-sm text-slate-400">Brand: {selectedProduct.brand}</p> : null}
-            {selectedProduct.asin ? (
-              <p className="text-xs text-slate-500">ASIN: {selectedProduct.asin}</p>
-            ) : null}
-            {selectedProduct.salesRankCategory ? (
-              <p className="text-xs text-slate-500">Category: {selectedProduct.salesRankCategory}</p>
-            ) : null}
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className={`inline-block w-fit rounded-full px-3 py-1 text-xs font-semibold ${decisionBadgeClasses(selectedProduct.decision)}`}>
-              {decisionDisplayLabel(selectedProduct.decision)}
-            </span>
-            {(() => {
-              const explanation = decisionExplanation(selectedProduct);
-              return explanation ? (
-                <span className="text-sm text-slate-400">— {explanation}</span>
-              ) : null;
-            })()}
-          </div>
-        </div>
-
-        <div className="rounded-lg border border-slate-600 bg-slate-700/30 px-3 py-2">
-          <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Gated / Eligible</p>
-          <div className="mt-1 flex flex-wrap gap-2">
-            {selectedProduct.approvalRequired === true ? (
-              <span className="rounded bg-amber-900/60 px-2 py-0.5 text-xs font-medium text-amber-200">Approval required</span>
-            ) : selectedProduct.approvalRequired === false ? (
-              <span className="rounded bg-slate-600/60 px-2 py-0.5 text-xs text-slate-300">No approval required</span>
-            ) : null}
-            {selectedProduct.listingRestricted === true ? (
-              <span className="rounded bg-amber-900/60 px-2 py-0.5 text-xs font-medium text-amber-200">Listing restricted</span>
-            ) : selectedProduct.listingRestricted === false ? (
-              <span className="rounded bg-slate-600/60 px-2 py-0.5 text-xs text-slate-300">Not restricted</span>
-            ) : null}
-            {selectedProduct.approvalRequired == null && selectedProduct.listingRestricted == null ? (
-              <span className="text-xs text-slate-500">—</span>
-            ) : null}
-          </div>
-        </div>
-
-        <div className="mt-4 border-t border-slate-700 pt-4">
-          <div className="space-y-3 rounded-xl border border-teal-500/35 bg-slate-800/70 p-3 shadow-sm shadow-teal-900/20">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-teal-400/90">Sourcing snapshot</p>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="rounded-lg border border-slate-600 bg-slate-700/30 px-2.5 py-1.5">
-              <p className="text-xs text-slate-500">
-                BSR
-                {selectedProduct.salesRankCategory ? ` · ${selectedProduct.salesRankCategory}` : ""}
-              </p>
-              <p className="text-base font-semibold text-slate-100">
-                {selectedProduct.salesRank != null ? formatNumber(selectedProduct.salesRank) : "—"}
-              </p>
-            </div>
-            <div className="rounded-lg border border-slate-600 bg-slate-700/30 px-2.5 py-1.5">
-              <p className="text-xs text-slate-500">Buy box</p>
-              <p className="text-base font-semibold text-slate-100">{formatCurrency(selectedProduct.buyBoxPrice)}</p>
-            </div>
-          </div>
-
-          <div className="flex rounded-lg border border-slate-600 bg-slate-700/30 p-1">
-            <button
-              type="button"
-              onClick={() => void handleSellerTypeChange("FBA")}
-              className={`flex-1 rounded-md px-3 py-2 text-xs font-semibold transition ${sellerType === "FBA" ? "bg-gradient-to-r from-teal-500 to-cyan-600 text-white" : "text-slate-400 hover:text-slate-200"}`}
-            >
-              FBA
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleSellerTypeChange("FBM")}
-              className={`flex-1 rounded-md px-3 py-2 text-xs font-semibold transition ${sellerType === "FBM" ? "bg-gradient-to-r from-teal-500 to-cyan-600 text-white" : "text-slate-400 hover:text-slate-200"}`}
-            >
-              FBM
-            </button>
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500">Your cost</label>
-            <input
-              type="number"
-              min={0}
-              step={0.01}
-              value={detailPanelCost}
-              onChange={(e) => setDetailPanelCost(e.target.value)}
-              placeholder="Enter your cost"
-              className="w-full rounded-lg border border-slate-600 bg-slate-700/50 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 outline-none focus:ring-2 focus:ring-teal-500/50 focus:border-teal-500"
-            />
-          </div>
-          {sellerType === "FBM" ? (
-            <div>
-              <label className="mb-1 block text-xs font-medium text-slate-500">Shipping cost (FBM)</label>
-              <input
-                type="number"
-                min={0}
-                step={0.01}
-                value={shippingCost}
-                onChange={(e) => setShippingCost(e.target.value)}
-                className="w-full rounded-lg border border-slate-600 bg-slate-700/50 px-3 py-2 text-sm text-slate-100 outline-none focus:ring-2 focus:ring-teal-500/50 focus:border-teal-500"
-              />
-            </div>
-          ) : null}
-
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500">Units (for total buy &amp; projected profit)</label>
-            <input
-              type="number"
-              min={1}
-              step={1}
-              value={projectedMonthlyUnits}
-              onChange={(e) => setProjectedMonthlyUnits(e.target.value)}
-              className="w-full rounded-lg border border-slate-600 bg-slate-700/50 px-3 py-2 text-sm text-slate-100 outline-none focus:ring-2 focus:ring-teal-500/50 focus:border-teal-500"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <div className="rounded-lg border border-slate-600 bg-slate-700/30 px-3 py-2">
-              <p className="text-xs text-slate-500">Profit</p>
-              <p className="font-semibold text-slate-100">
-                {detailPanelCost.trim() !== "" && Number.isFinite(parseFloat(detailPanelCost)) && selectedProduct.buyBoxPrice != null && selectedProduct.totalFees != null
-                  ? formatCurrency(roundToTwo(selectedProduct.buyBoxPrice - parseFloat(detailPanelCost) - selectedProduct.totalFees))
-                  : formatCurrency(selectedProduct.netProfit)}
-              </p>
-            </div>
-            <div className="rounded-lg border border-slate-600 bg-slate-700/30 px-3 py-2">
-              <p className="text-xs text-slate-500">ROI</p>
-              <p className="font-semibold text-slate-100">
-                {detailPanelCost.trim() !== "" && Number.isFinite(parseFloat(detailPanelCost)) && parseFloat(detailPanelCost) > 0 && selectedProduct.buyBoxPrice != null && selectedProduct.totalFees != null
-                  ? formatPercent(roundToTwo(((selectedProduct.buyBoxPrice - parseFloat(detailPanelCost) - selectedProduct.totalFees) / parseFloat(detailPanelCost)) * 100))
-                  : formatPercent(selectedProduct.roiPercent)}
-              </p>
-            </div>
-            <div className="col-span-2 rounded-lg border border-slate-600 bg-slate-700/30 px-3 py-2">
-              <p className="text-xs text-slate-500">Margin</p>
-              <p className="font-semibold text-slate-100">
-                {(() => {
-                  const buyBox = selectedProduct.buyBoxPrice;
-                  const netP = detailPanelCost.trim() !== "" && Number.isFinite(parseFloat(detailPanelCost)) && selectedProduct.buyBoxPrice != null && selectedProduct.totalFees != null
-                    ? roundToTwo(selectedProduct.buyBoxPrice - parseFloat(detailPanelCost) - selectedProduct.totalFees)
-                    : selectedProduct.netProfit;
-                  if (buyBox != null && buyBox > 0 && netP != null) return formatPercent(roundToTwo((netP / buyBox) * 100));
-                  return formatPercent(null);
-                })()}
-              </p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <div className="rounded-lg border border-slate-600 bg-slate-700/30 px-3 py-2">
-              <p className="text-xs text-slate-500">Wholesale / stored cost</p>
-              <p className="font-semibold text-slate-100">
-                {detailPanelCost.trim() !== "" && Number.isFinite(parseFloat(detailPanelCost))
-                  ? formatCurrency(parseFloat(detailPanelCost))
-                  : formatCurrency(selectedProduct.wholesalePrice)}
-              </p>
-            </div>
-            <div className="rounded-lg border border-slate-600 bg-slate-700/30 px-3 py-2">
-              <p className="text-xs text-slate-500">Fees (ref / {selectedProduct.sellerType === "FBA" ? "FBA" : "FBM ship"})</p>
-              <p className="font-semibold text-slate-100">{formatCurrency(selectedProduct.totalFees)}</p>
-              <p className="mt-1 text-[10px] text-slate-400">
-                Ref {formatCurrency(selectedProduct.referralFee)}
-                {selectedProduct.sellerType === "FBA" ? ` · FBA ${formatCurrency(selectedProduct.fbaFee)}` : ` · Ship ${formatCurrency(selectedProduct.shippingCost)}`}
-              </p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-2">
-            <div className="rounded-lg border border-slate-600 bg-slate-700/30 px-3 py-2">
-              <p className="text-xs text-slate-500">Total buy cost ({projectedMonthlyUnits} units)</p>
-              <p className="font-semibold text-slate-100">
-                {(() => {
-                  const qty = parsePositiveInput(projectedMonthlyUnits);
-                  const cost = detailPanelCost.trim() !== "" && Number.isFinite(parseFloat(detailPanelCost))
-                    ? parseFloat(detailPanelCost)
-                    : selectedProduct.wholesalePrice;
-                  return qty !== null ? formatCurrency(roundToTwo(cost * qty)) : "—";
-                })()}
-              </p>
-            </div>
-            <div className="rounded-lg border border-slate-600 bg-slate-700/30 px-3 py-2">
-              <p className="text-xs text-slate-500">Projected profit ({projectedMonthlyUnits} × net profit)</p>
-              <p className="font-semibold text-slate-100">
-                {(() => {
-                  const qty = parsePositiveInput(projectedMonthlyUnits);
-                  const cost = detailPanelCost.trim() !== "" && Number.isFinite(parseFloat(detailPanelCost))
-                    ? parseFloat(detailPanelCost)
-                    : selectedProduct.wholesalePrice;
-                  const netP =
-                    selectedProduct.buyBoxPrice != null && selectedProduct.totalFees != null
-                      ? roundToTwo(selectedProduct.buyBoxPrice - cost - selectedProduct.totalFees)
-                      : selectedProduct.netProfit;
-                  return netP != null && qty !== null ? formatCurrency(roundToTwo(netP * qty)) : "—";
-                })()}
-              </p>
-            </div>
-          </div>
-          </div>
-        </div>
-
-        <div className="space-y-3">
-          {(selectedProduct.approvalRequired || selectedProduct.listingRestricted || selectedProduct.restrictedBrand) ? (
-            <div className="rounded-lg border border-slate-600 bg-slate-700/30 px-3 py-2">
-              <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Ungating</p>
-              <ul className="mt-1 space-y-1 text-xs">
-                {selectedProduct.worthUngating != null && (
-                  <li className="flex justify-between gap-2">
-                    <span className="text-slate-400">Worth ungating</span>
-                    <span className={selectedProduct.worthUngating ? "font-medium text-emerald-300" : "text-slate-300"}>{selectedProduct.worthUngating ? "Yes" : "No"}</span>
-                  </li>
-                )}
-                {selectedProduct.ungatingCost10Units != null && (
-                  <li className="flex justify-between gap-2">
-                    <span className="text-slate-400">Cost (10 units)</span>
-                    <span className="text-slate-200">{formatCurrency(selectedProduct.ungatingCost10Units)}</span>
-                  </li>
-                )}
-                {selectedProduct.breakEvenUnits != null && (
-                  <li className="flex justify-between gap-2">
-                    <span className="text-slate-400">Break-even units</span>
-                    <span className="text-slate-200">{formatNumber(selectedProduct.breakEvenUnits)}</span>
-                  </li>
-                )}
-                {selectedProduct.projectedMonthlyProfit != null && (
-                  <li className="flex justify-between gap-2">
-                    <span className="text-slate-400">Projected monthly profit</span>
-                    <span className="text-slate-200">{formatCurrency(selectedProduct.projectedMonthlyProfit)}</span>
-                  </li>
-                )}
-              </ul>
-            </div>
-          ) : null}
-
-          {selectedProduct.amazonSalesVolumeLabel ? (
-            <div className="rounded-lg border border-slate-600 bg-emerald-900/30 px-3 py-2">
-              <p className="text-xs text-slate-500">Product sells (from Amazon)</p>
-              <p className="font-semibold text-slate-100">{selectedProduct.amazonSalesVolumeLabel}</p>
-              <p className="mt-0.5 text-[10px] text-slate-400">Extracted from product page when available.</p>
-            </div>
-          ) : null}
-
-          {(selectedProduct.offerCount != null || selectedProduct.fbaOfferCount != null || selectedProduct.fbmOfferCount != null) ? (
-            <div className="rounded-lg border border-slate-600 bg-slate-700/30 px-3 py-2">
-              <p className="text-xs text-slate-500">Listing (offers)</p>
-              <p className="text-sm font-medium text-slate-100">
-                {selectedProduct.offerCount != null ? (
-                  (selectedProduct.sellerDetails ?? []).length > 0 ? (
-                    <button
-                      type="button"
-                      onClick={(ev) => openSellerModal(ev, "all")}
-                      className="underline decoration-slate-500 underline-offset-2 hover:decoration-slate-400"
-                    >
-                      {selectedProduct.offerCount} seller{selectedProduct.offerCount !== 1 ? "s" : ""}
-                    </button>
-                  ) : (
-                    `${selectedProduct.offerCount} seller${selectedProduct.offerCount !== 1 ? "s" : ""}`
-                  )
-                ) : "—"}
-                {selectedProduct.fbaOfferCount != null || selectedProduct.fbmOfferCount != null ? (
-                  <span className="text-slate-400">
-                    {" "}(FBA:{" "}
-                    {(selectedProduct.sellerDetails ?? []).length > 0 ? (
-                      <button
-                        type="button"
-                        onClick={(ev) => openSellerModal(ev, "FBA")}
-                        className="underline decoration-slate-500 underline-offset-2 hover:decoration-slate-400"
-                      >
-                        {selectedProduct.fbaOfferCount ?? "—"}
-                      </button>
-                    ) : (
-                      selectedProduct.fbaOfferCount ?? "—"
-                    )}
-                    , FBM:{" "}
-                    {(selectedProduct.sellerDetails ?? []).length > 0 ? (
-                      <button
-                        type="button"
-                        onClick={(ev) => openSellerModal(ev, "FBM")}
-                        className="underline decoration-slate-500 underline-offset-2 hover:decoration-slate-400"
-                      >
-                        {selectedProduct.fbmOfferCount ?? "—"}
-                      </button>
-                    ) : (
-                      selectedProduct.fbmOfferCount ?? "—"
-                    )}
-                    )
-                  </span>
-                ) : null}
-              </p>
-            </div>
-          ) : null}
-
-          {(() => {
-            const codes = selectedProduct.restrictionReasonCodes;
-            const hasHazmat = codes.some((c) => /HAZMAT|HAZARD|DANGEROUS/i.test(c));
-            const fromRestrictionCodes = codes.some((c) => /VARIATION|VAR\b|PARENT_CHILD/i.test(c));
-            const fromCatalog = selectedProduct.hasCatalogVariationFamily;
-            const mg = selectedProduct.matchGroup;
-            const reason = (selectedProduct.matchReason ?? "").toLowerCase();
-
-            // Variation = true product attribute differences (size, scent, color, flavor).
-            // Multipacks (same product, different quantity) are NOT variations.
-            const isVariationYes =
-              mg === "variation" ||       // scan identified a true product variant
-              fromCatalog === true ||     // Amazon catalog confirms variation family
-              fromRestrictionCodes;       // restriction codes mention variations
-            // "No" for multipacks OR confirmed-no from catalog (manual lookups)
-            const isVariationNo =
-              mg === "multipack" ||
-              (mg === null && !isVariationYes && fromCatalog === false && !fromRestrictionCodes);
-            const variationLabel = isVariationYes ? "Yes" : isVariationNo ? "No" : "—";
-
-            // Show variation type only for confirmed product attribute variations
-            let variationType: string | null = null;
-            if (mg === "variation") {
-              if (/scent|fragrance|flavor|flavour/.test(reason)) variationType = "Scent / Flavor";
-              else if (/color|colour/.test(reason)) variationType = "Color";
-              else if (/size/.test(reason)) variationType = "Size";
-              else variationType = "Variant";
-            }
-
-            return (
-              <div className="grid grid-cols-1 gap-2">
-                <div className="rounded-lg border border-slate-600 bg-slate-700/30 px-3 py-2">
-                  <p className="text-xs text-slate-500">IP / complaint risk</p>
-                  <p className="text-sm font-medium text-slate-100">{selectedProduct.ipComplaintRisk ? "Yes" : "No"}</p>
-                </div>
-                <div className="rounded-lg border border-slate-600 bg-slate-700/30 px-3 py-2">
-                  <p className="text-xs text-slate-500">Meltable</p>
-                  <p className="text-sm font-medium text-slate-100">{selectedProduct.meltableRisk ? "Yes" : "No"}</p>
-                </div>
-                <div className="rounded-lg border border-slate-600 bg-slate-700/30 px-3 py-2">
-                  <p className="text-xs text-slate-500">Hazmat</p>
-                  <p className={`text-sm font-medium ${selectedProduct.isHazmat === true ? "text-rose-400" : selectedProduct.isHazmat === false ? "text-slate-100" : "text-slate-500"}`}>
-                    {selectedProduct.isHazmat === true ? "Yes" : selectedProduct.isHazmat === false ? "No" : hasHazmat ? "Yes" : "—"}
-                  </p>
-                  {selectedProduct.isHazmat === null && !hasHazmat ? (
-                    <p className="mt-0.5 text-[10px] text-slate-500">Load product details to check</p>
-                  ) : null}
-                </div>
-                <div className="rounded-lg border border-amber-900/50 bg-amber-900/20 px-3 py-2">
-                  <p className="text-xs text-slate-500">Private label (possible)</p>
-                  <p className="text-sm font-medium text-slate-100">{selectedProduct.privateLabelRisk ? "Yes" : "No"}</p>
-                </div>
-                <div className="rounded-lg border border-slate-600 bg-slate-700/30 px-3 py-2">
-                  <p className="text-xs text-slate-500">Variation</p>
-                  <p className="text-sm font-medium text-slate-100">{variationLabel}</p>
-                  {variationType ? (
-                    <p className="mt-0.5 text-[11px] text-teal-400">{variationType}</p>
-                  ) : variationLabel === "—" ? (
-                    <p className="mt-0.5 text-[10px] text-slate-500">
-                      Shown when catalog lists parent/child ASINs or a restriction code mentions variations.
-                    </p>
-                  ) : null}
-                </div>
-              </div>
-            );
-          })()}
-
-          {selectedProduct.reasons.length > 0 ||
-          selectedProduct.restrictionReasonCodes.length > 0 ||
-          selectedProduct.error ||
-          selectedProduct.listingRestricted ||
-          selectedProduct.approvalRequired ||
-          selectedProduct.restrictedBrand ? (
-            <div className="rounded-lg border border-amber-900/50 bg-amber-900/20 px-3 py-2">
-              <p className="text-xs font-semibold text-amber-200">Alerts / Amazon info</p>
-              {selectedProduct.error ? (
-                <p className="mt-1 text-sm text-rose-300">{selectedProduct.error}</p>
-              ) : null}
-              {selectedProduct.restrictedBrand ? <p className="mt-1 text-xs text-amber-300">Restricted brand list</p> : null}
-              {selectedProduct.listingRestricted ? <p className="mt-1 text-xs text-amber-300">Listing restricted</p> : null}
-              {selectedProduct.approvalRequired ? <p className="mt-1 text-xs text-amber-300">Approval required</p> : null}
-              {selectedProduct.restrictionReasonCodes.length > 0 ? (
-                <p className="mt-1 text-xs text-amber-300">Codes: {selectedProduct.restrictionReasonCodes.join(", ")}</p>
-              ) : null}
-              {selectedProduct.reasons.length > 0 ? (
-                <ul className="mt-2 list-disc space-y-0.5 pl-4 text-xs text-amber-200">
-                  {selectedProduct.reasons.map((r) => (
-                    <li key={r}>{r}</li>
-                  ))}
-                </ul>
-              ) : null}
-            </div>
-          ) : null}
-
-          <ProductInsightBlurb
-            product={selectedProduct}
-            sessionSignedIn={Boolean(session?.user)}
-            amazonConnected={amazonHeaderConnected}
-            onConnectAmazon={() => setShowAmazonAccountModal(true)}
-            openaiConfigured={photoSearchAvailable}
-            llmInsight={llmInsight}
-            llmLoading={llmLoading}
-            llmError={llmError}
-          />
-        </div>
-      </div>
+      <ProductIntelPanelContent
+        product={selectedProduct}
+        marketplaceDomain={marketplaceDomain}
+        sellerType={sellerType}
+        onSellerTypeChange={(next) => {
+          void handleSellerTypeChange(next);
+        }}
+        detailPanelCost={detailPanelCost}
+        onDetailPanelCostChange={setDetailPanelCost}
+        shippingCost={shippingCost}
+        onShippingCostChange={setShippingCost}
+        projectedMonthlyUnits={projectedMonthlyUnits}
+        onProjectedMonthlyUnitsChange={setProjectedMonthlyUnits}
+        openSellerModal={openSellerModal}
+        variationDetail="analyzer"
+      >
+        <ProductInsightBlurb
+          product={selectedProduct}
+          sessionSignedIn={Boolean(session?.user)}
+          amazonConnected={amazonHeaderConnected}
+          onConnectAmazon={() => setShowAmazonAccountModal(true)}
+          openaiConfigured={photoSearchAvailable}
+          llmInsight={llmInsight}
+          llmLoading={llmLoading}
+          llmError={llmError}
+        />
+      </ProductIntelPanelContent>
     );
   }
 
@@ -2332,9 +1860,10 @@ function AnalyzerPageContent() {
             <button
               type="button"
               onClick={() => void handleOpenScanner()}
-              className="shrink-0 rounded-lg border border-slate-600 bg-slate-700/50 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-600 transition-all"
+              disabled={scanPhase === "scanning"}
+              className="shrink-0 rounded-lg border border-slate-600 bg-slate-700/50 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-600 transition-all disabled:opacity-60 disabled:cursor-wait"
             >
-              Scan
+              {scanPhase === "scanning" ? "Starting…" : "Scan"}
             </button>
             <label className="shrink-0 cursor-pointer rounded-lg border border-slate-600 bg-slate-700/50 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-600 transition-all">
               Upload image
@@ -2348,7 +1877,7 @@ function AnalyzerPageContent() {
             <button
               type="submit"
               disabled={isManualLoading}
-              className="shrink-0 rounded-lg bg-gradient-to-r from-teal-500 to-cyan-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-teal-500/25 hover:from-teal-400 hover:to-cyan-500 disabled:opacity-50 transition-all"
+              className="hf-primary-cta shrink-0 rounded-lg bg-gradient-to-r from-teal-500 to-cyan-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-teal-500/25 hover:from-teal-400 hover:to-cyan-500 disabled:opacity-50 transition-all"
             >
               {isManualLoading ? "Loading…" : "Lookup"}
             </button>
@@ -2369,6 +1898,21 @@ function AnalyzerPageContent() {
         </div>
       </form>
 
+      {/* Camera / scanner error shown when camera acquisition failed and modal never opened */}
+      {scannerError && !isScannerOpen ? (
+        <div className="shrink-0 flex items-start gap-2 rounded-lg border border-rose-700/50 bg-rose-900/20 px-4 py-3 text-sm text-rose-300">
+          <span className="mt-0.5 shrink-0">⚠</span>
+          <span className="flex-1">{scannerError}</span>
+          <button
+            type="button"
+            onClick={() => setScannerError(null)}
+            className="ml-2 shrink-0 text-rose-400 hover:text-rose-200"
+            aria-label="Dismiss"
+          >
+            ✕
+          </button>
+        </div>
+      ) : null}
       {errorMessage ? (
         <div className="shrink-0 rounded-lg border border-rose-800 bg-rose-900/30 px-4 py-3 text-sm text-rose-300">
           {errorMessage}
@@ -2808,14 +2352,14 @@ function AnalyzerPageContent() {
       ) : null}
 
       <aside
-        className={`fixed flex min-h-0 flex-col overflow-hidden border-l border-slate-700 bg-slate-800 shadow-xl transition-transform duration-300 ease-out max-lg:inset-x-0 max-lg:top-0 max-lg:z-[100] max-lg:h-[100svh] max-lg:max-h-[100svh] max-lg:w-full max-lg:max-w-none ${
+        className={`product-details-panel fixed flex min-h-0 flex-col overflow-hidden border-l border-slate-700 bg-slate-800 shadow-xl transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] max-lg:inset-x-0 max-lg:top-0 max-lg:z-[100] max-lg:h-[100svh] max-lg:max-h-[100svh] max-lg:w-full max-lg:max-w-none ${
           mobileDetailsOpen ? "max-lg:translate-x-0" : "max-lg:pointer-events-none max-lg:translate-x-full"
         } lg:static lg:z-auto lg:h-full lg:max-h-full lg:w-80 lg:shrink-0 lg:translate-x-0 lg:rounded-l-xl xl:w-96`}
       >
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain">
             <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between gap-2 border-b border-slate-700 bg-slate-800 px-3 py-3 max-lg:py-0 max-lg:pb-3 max-lg:pt-[calc(0.75rem+env(safe-area-inset-top,0px))] sm:px-4">
-              <h3 className="min-w-0 truncate text-base font-semibold text-slate-100">Product details</h3>
+              <h3 className="min-w-0 truncate text-[11px] font-bold uppercase tracking-[0.1em] text-slate-400">Product Details</h3>
               <div className="flex shrink-0 items-center gap-2">
                 <button
                   type="button"
@@ -2846,7 +2390,9 @@ function AnalyzerPageContent() {
                 ) : null}
               </div>
             </div>
-            <div className="px-4 pb-4 pt-3 text-[13px] text-slate-200 lg:p-4">{getRightPanelBody()}</div>
+            <div className="px-3 pb-3 pt-2 text-[13px] leading-snug text-slate-200 lg:px-3.5 lg:pb-3.5 lg:pt-2.5">
+              {getRightPanelBody()}
+            </div>
           </div>
         </div>
       </aside>

@@ -1,6 +1,7 @@
 "use client";
 
 import { SupportContactHint } from "@/app/components/SupportContactHint";
+import { LegalFinePrint } from "@/app/components/LegalFinePrint";
 import type { BillingOverview } from "@/lib/billing/access";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -300,6 +301,17 @@ export function SubscribeContent({
                 portal.
               </p>
             )}
+            <p className="text-[11px] leading-snug text-slate-500">
+              By subscribing you agree to our{" "}
+              <Link href="/terms" className="font-semibold text-teal-400 hover:underline">
+                Terms
+              </Link>{" "}
+              and{" "}
+              <Link href="/privacy" className="font-semibold text-teal-400 hover:underline">
+                Privacy Policy
+              </Link>
+              .
+            </p>
             <button
               type="button"
               onClick={() => void onCheckout("starter")}
@@ -402,6 +414,7 @@ export function SubscribeContent({
           </Link>{" "}
           for a new purchase.
         </p>
+        <LegalFinePrint className="mt-6 text-slate-500" variant="dark" />
         {supportEmail ? <SupportContactHint email={supportEmail} tone="dark" /> : null}
       </div>
     </div>

@@ -1,5 +1,6 @@
 /* eslint-disable @next/next/no-img-element */
 import { BrandBackdrop } from "@/app/components/BrandBackdrop";
+import { LegalFinePrint } from "@/app/components/LegalFinePrint";
 import { auth } from "@/auth";
 import { supportContactEmail } from "@/lib/supportContact";
 import Link from "next/link";
@@ -65,6 +66,7 @@ export default async function LoginPage({
           </Link>
         </p>
       </div>
+      <LegalFinePrint className="relative z-[1] mt-8 max-w-lg sm:max-w-xl" variant="light" />
     </div>
   );
 }

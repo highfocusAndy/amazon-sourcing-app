@@ -8,33 +8,58 @@ export async function GET(): Promise<NextResponse> {
   const gate = await requireAdminAccess();
   if (!gate.ok) return gate.response;
 
-  const users = await prisma.user.findMany({
-    orderBy: { createdAt: "desc" },
-    select: {
-      id: true,
-      email: true,
-      name: true,
-      createdAt: true,
-      trialEndsAt: true,
-      promoAccessUntil: true,
-      subscriptionStatus: true,
-      subscriptionPlan: true,
-      stripeCustomerId: true,
-      stripeSubscriptionId: true,
-      amazonAccount: { select: { amazonStoreName: true, sellerId: true } },
-      promoRedemptions: {
-        select: { redeemedAt: true, promoCode: { select: { code: true } } },
-        orderBy: { redeemedAt: "desc" },
-        take: 5,
+  const [users, usageMaxRows] = await Promise.all([
+    prisma.user.findMany({
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        createdAt: true,
+        trialEndsAt: true,
+        promoAccessUntil: true,
+        subscriptionStatus: true,
+        subscriptionPlan: true,
+        stripeCustomerId: true,
+        stripeSubscriptionId: true,
+        amazonAccount: { select: { amazonStoreName: true, sellerId: true, updatedAt: true } },
+        promoRedemptions: {
+          select: { redeemedAt: true, promoCode: { select: { code: true } } },
+          orderBy: { redeemedAt: "desc" },
+          take: 5,
+        },
+        monthlyUsage: {
+          where: { periodKey: new Date().toISOString().slice(0, 7) },
+          select: { metric: true, used: true, limit: true },
+        },
       },
-      monthlyUsage: {
-        where: { periodKey: new Date().toISOString().slice(0, 7) },
-        select: { metric: true, used: true, limit: true },
-      },
-    },
-  });
+    }),
+    prisma.userMonthlyUsage.groupBy({
+      by: ["userId"],
+      _max: { updatedAt: true },
+    }),
+  ]);
 
-  return NextResponse.json({ ok: true, users });
+  const usageMaxMap = new Map(
+    usageMaxRows.map((r) => [r.userId, r._max.updatedAt]).filter((e): e is [string, Date] => e[1] != null),
+  );
+
+  function lastActiveIso(u: (typeof users)[0]): string | null {
+    const uMax = usageMaxMap.get(u.id)?.getTime() ?? 0;
+    const az = u.amazonAccount?.updatedAt?.getTime() ?? 0;
+    const t = Math.max(uMax, az);
+    return t > 0 ? new Date(t).toISOString() : null;
+  }
+
+  const enriched = users.map((u) => ({
+    ...u,
+    lastActiveAt: lastActiveIso(u),
+    monthlyUsageTotals: {
+      mtd: u.monthlyUsage.reduce((s, r) => s + r.used, 0),
+    },
+  }));
+
+  return NextResponse.json({ ok: true, users: enriched });
 }
 
 export async function PATCH(request: NextRequest): Promise<NextResponse> {

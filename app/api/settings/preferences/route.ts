@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAppAccess } from "@/lib/billing/requireAppAccess";
 import { prisma } from "@/lib/db";
 
+import {
+  normalizeCompetitionThresholds,
+  type CompetitionThresholds,
+} from "@/lib/competitionThresholds";
 import { isAllowedMarketplaceId } from "@/lib/marketplaces";
 
 const DEFAULTS = {
@@ -27,6 +31,9 @@ export type PreferencesPayload = {
   default_shipping_cost_fbm?: number;
   catalog_page_size?: number;
   marketplace_id?: string | null;
+  competition_low_max_offers?: number;
+  competition_moderate_max_offers?: number;
+  competition_saturated_min_offers?: number;
 };
 
 /** GET: return current user's preferences (or defaults). */
@@ -34,11 +41,16 @@ export async function GET(): Promise<NextResponse> {
   const gate = await requireAppAccess();
   if (!gate.ok) return gate.response;
 
+  const compDefaults = normalizeCompetitionThresholds(null);
+
   const defaults = {
     default_seller_type: DEFAULTS.defaultSellerType,
     default_shipping_cost_fbm: DEFAULTS.defaultShippingCostFbm,
     catalog_page_size: DEFAULTS.catalogPageSize,
     marketplace_id: getEnvMarketplaceId(),
+    competition_low_max_offers: compDefaults.lowMaxOffers,
+    competition_moderate_max_offers: compDefaults.moderateMaxOffers,
+    competition_saturated_min_offers: compDefaults.saturatedMinOffers,
   };
 
   const repo = (prisma as { userPreferences?: { findUnique: (args: unknown) => Promise<unknown> } }).userPreferences;
@@ -55,6 +67,12 @@ export async function GET(): Promise<NextResponse> {
       return NextResponse.json(defaults);
     }
 
+    const thresholds = normalizeCompetitionThresholds({
+      lowMaxOffers: row.competitionLowMaxOffers,
+      moderateMaxOffers: row.competitionModerateMaxOffers,
+      saturatedMinOffers: row.competitionSaturatedMinOffers,
+    });
+
     return NextResponse.json({
       default_seller_type: row.defaultSellerType as "FBA" | "FBM",
       default_shipping_cost_fbm: row.defaultShippingCostFbm,
@@ -63,6 +81,9 @@ export async function GET(): Promise<NextResponse> {
         Math.max(CATALOG_PAGE_SIZE_MIN, row.catalogPageSize)
       ),
       marketplace_id: row.marketplaceId ?? getEnvMarketplaceId(),
+      competition_low_max_offers: thresholds.lowMaxOffers,
+      competition_moderate_max_offers: thresholds.moderateMaxOffers,
+      competition_saturated_min_offers: thresholds.saturatedMinOffers,
     });
   } catch {
     return NextResponse.json(defaults);
@@ -106,6 +127,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         ? (isAllowedMarketplaceId(body.marketplace_id) ? body.marketplace_id : null)
         : (existing?.marketplaceId ?? null);
 
+    const prevThresholds: CompetitionThresholds = normalizeCompetitionThresholds({
+      lowMaxOffers: existing?.competitionLowMaxOffers,
+      moderateMaxOffers: existing?.competitionModerateMaxOffers,
+      saturatedMinOffers: existing?.competitionSaturatedMinOffers,
+    });
+    const nextThresholds = normalizeCompetitionThresholds({
+      lowMaxOffers: body.competition_low_max_offers ?? prevThresholds.lowMaxOffers,
+      moderateMaxOffers: body.competition_moderate_max_offers ?? prevThresholds.moderateMaxOffers,
+      saturatedMinOffers: body.competition_saturated_min_offers ?? prevThresholds.saturatedMinOffers,
+    });
+
     await prisma.userPreferences.upsert({
       where: { userId: gate.userId },
       create: {
@@ -114,12 +146,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         defaultShippingCostFbm,
         catalogPageSize,
         marketplaceId,
+        competitionLowMaxOffers: nextThresholds.lowMaxOffers,
+        competitionModerateMaxOffers: nextThresholds.moderateMaxOffers,
+        competitionSaturatedMinOffers: nextThresholds.saturatedMinOffers,
       },
       update: {
         defaultSellerType,
         defaultShippingCostFbm,
         catalogPageSize,
         marketplaceId,
+        competitionLowMaxOffers: nextThresholds.lowMaxOffers,
+        competitionModerateMaxOffers: nextThresholds.moderateMaxOffers,
+        competitionSaturatedMinOffers: nextThresholds.saturatedMinOffers,
       },
     });
 

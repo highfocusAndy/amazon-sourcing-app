@@ -32,9 +32,9 @@ export function buildProductInsightMessage(item: ProductAnalysis, ctx: ProductIn
       return "Amazon's API limit was reached. Wait a few minutes and try again.";
     }
     if (/Connect Amazon|not configured|SP-API is not configured|OAuth/i.test(item.error)) {
-      return "Link your Amazon seller account so the app can call Amazon’s APIs for this product.";
+      return "Link your Amazon seller account so the app can load pricing for this product.";
     }
-    return "Data connection issue. Re-run and verify your Amazon link and API credentials.";
+    return "Data connection issue. Re-run analysis and confirm your Amazon account link and API credentials.";
   }
 
   if (item.approvalRequired || item.listingRestricted || item.restrictedBrand) {
@@ -43,22 +43,22 @@ export function buildProductInsightMessage(item: ProductAnalysis, ctx: ProductIn
 
   if (item.netProfit === null || item.roiPercent === null || item.buyBoxPrice === null) {
     if (!ctx.sessionSignedIn) {
-      return "Sign in to your account first. Then connect your Amazon seller account so we can load buy box, offers, and fees from Amazon—not because the app is incomplete, but because pricing requires your authorized Seller Central link.";
+      return "Sign in, then connect your Amazon seller account to load buy box, offers, and profit.";
     }
     if (!ctx.amazonConnected) {
-      return "Connect your Amazon seller account from the header. Until Amazon is linked, buy box, offer counts, and fee-based profit/ROI cannot be pulled from Amazon’s APIs.";
+      return "Connect Amazon from the header. Buy box, offer counts, and profit need your seller account linked.";
     }
     if (item.buyBoxPrice !== null && item.wholesalePrice <= 0) {
       return "Buy box data is available. Enter a wholesale cost greater than zero to calculate net profit and ROI.";
     }
     if (item.buyBoxPrice === null) {
-      return "Amazon did not return buy box / full offer data for this ASIN in your marketplace (this can happen even with Seller Central linked). Check the listing on Amazon or retry later.";
+      return "Amazon did not return buy box or full offer data for this ASIN right now—retry the analysis or confirm marketplace and ASIN.";
     }
-    return "Some profit figures are still unavailable. Verify buy box, fees, and your cost on Seller Central before deciding.";
+    return "Profit and ROI need complete inputs—enter wholesale cost above and ensure Amazon returned fees for this row (refresh if needed).";
   }
 
   if (item.decision === "BUY") {
-    return "Strong candidate. Verify in Seller Central before sourcing.";
+    return "Strong candidate at current pricing and fees.";
   }
   if (item.decision === "WORTH UNGATING") {
     return "Potentially attractive after ungating.";

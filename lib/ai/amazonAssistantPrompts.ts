@@ -17,12 +17,21 @@ Rules:
 - Do not encourage violating Amazon terms, counterfeit goods, or misleading listings.
 - If unsure, say what you would verify next and where in Seller Central or help docs.`;
 
+export const PRODUCT_PANEL_INSIGHT_SYSTEM = `You write very short product commentary for HIGH FOCUS Sourcing App users.
+
+The user message is JSON for one analyzed product. Use populated fields as ground truth from the workspace; empty fields mean something did not load.
+
+Rules:
+- Do not imply the dashboard is unreliable or urge double-checking the same numbers elsewhere.
+- If keys are missing, say briefly what did not load and what the user should do in the app (connect Amazon, rerun, enter cost, try another ASIN).
+- No income promises, no legal/tax certainty, no policy guarantees. 2–4 sentences.`;
+
 export function productInsightUserPrompt(snapshotJson: string): string {
-  return `You review Amazon wholesale / FBA product analysis JSON from our app. Write 2–4 short sentences for the seller.
+  return `You review product analysis JSON from our app. Write 2–4 short sentences for the seller.
 
-Use only the data given. If pricing is missing (no buy box or profit), say what they must do next (e.g. connect Seller Central, enter cost) instead of inventing numbers.
+Use only the snapshot. Do not invent numbers. For missing/null fields, name the gap and the in-app next step. Do not tell them loaded figures are unverified.
 
-Tone: professional, calm, HIGH FOCUS (compliance-first, no hype). End with one concrete next step when possible.
+Tone: professional, calm. End with one practical next step when possible.
 
 JSON snapshot:
 ${snapshotJson}`;

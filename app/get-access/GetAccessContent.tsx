@@ -1,6 +1,7 @@
 "use client";
 
 import { SupportContactHint } from "@/app/components/SupportContactHint";
+import { LegalFinePrint } from "@/app/components/LegalFinePrint";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -243,6 +244,19 @@ export function GetAccessContent({
                   You will set your password on the next screen. Choose Starter or Pro.
                 </p>
               )}
+              {!subscriptionsPaused ? (
+                <p className="mt-3 text-center text-xs leading-snug text-slate-500">
+                  By continuing to checkout you agree to our{" "}
+                  <Link href="/terms" className="font-semibold text-teal-700 hover:underline">
+                    Terms
+                  </Link>{" "}
+                  and{" "}
+                  <Link href="/privacy" className="font-semibold text-teal-700 hover:underline">
+                    Privacy Policy
+                  </Link>
+                  .
+                </p>
+              ) : null}
               <div className="mt-4 grid gap-3">
                 <button
                   type="button"
@@ -302,6 +316,7 @@ export function GetAccessContent({
           </Link>
         </p>
         {supportEmail ? <SupportContactHint email={supportEmail} /> : null}
+        <LegalFinePrint className="mt-6 border-t border-slate-200 pt-5 sm:mt-8 sm:pt-6" variant="light" />
       </div>
     </div>
 
@@ -417,6 +432,17 @@ export function GetAccessContent({
                   </label>
                 </div>
               </div>
+              <p className="mt-4 shrink-0 text-center text-xs leading-snug text-slate-500 sm:mt-5">
+                By creating an account you agree to our{" "}
+                <Link href="/terms" className="font-semibold text-teal-700 hover:underline">
+                  Terms
+                </Link>{" "}
+                and{" "}
+                <Link href="/privacy" className="font-semibold text-teal-700 hover:underline">
+                  Privacy Policy
+                </Link>
+                .
+              </p>
               <button
                 type="submit"
                 disabled={promoLoading}

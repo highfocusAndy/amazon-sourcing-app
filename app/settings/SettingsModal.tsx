@@ -44,7 +44,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
         >
           ✕
         </button>
-        <div className="min-h-0 flex-1 overflow-hidden">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <SettingsContent />
         </div>
       </div>

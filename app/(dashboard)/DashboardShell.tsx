@@ -5,17 +5,24 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { signOut } from "next-auth/react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { SavedProductsProvider } from "@/app/context/SavedProductsContext";
 import { DashboardSettingsProvider } from "@/app/context/DashboardSettingsContext";
+// initAppearance is no longer called on mount — handled by the blocking
+// <script id="theme-init"> in app/layout.tsx before the first paint.
+// It is still exported and called directly by AppearanceSection when the
+// user changes their theme/mode/density in Settings.
 import { ExplorerCategoryProvider, useExplorerCategoryOptional } from "@/app/context/ExplorerCategoryContext";
-import { TOP_LEVEL_CATEGORIES, getSubcategoriesForCategory } from "@/lib/catalogCategories";
+import { MarketplaceProvider, useMarketplace } from "@/app/context/MarketplaceContext";
+import { CompetitionThresholdsProvider } from "@/app/context/CompetitionThresholdsContext";
+import { getSubcategoriesForCategory } from "@/lib/catalogCategories";
 import { BrandBackdrop } from "@/app/components/BrandBackdrop";
 import { AccountSettingsModal } from "@/app/settings/AccountSettingsModal";
 import { DashboardHeaderMark } from "@/app/components/DashboardHeaderMark";
 import { MobileHeaderAmazon } from "@/app/components/MobileHeaderAmazon";
 import { SettingsModal } from "@/app/settings/SettingsModal";
 import { AmazonAiChatDrawer } from "@/app/components/AmazonAiChatDrawer";
+import { resizeImageToJpegBlob } from "@/lib/resizeClientAvatar";
 
 function NavLink({
   href,
@@ -63,8 +70,13 @@ function LeftNavWithCategories({
 }) {
   const pathname = usePathname();
   const ctx = useExplorerCategoryOptional();
-  const { data: session, status } = useSession();
+  const { categories } = useMarketplace();
+  const { data: session, status, update } = useSession();
   const [showAccountModal, setShowAccountModal] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+  const [avatarBusy, setAvatarBusy] = useState(false);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
+  const [avatarStamp, setAvatarStamp] = useState(0);
 
   return (
     <nav
@@ -93,31 +105,92 @@ function LeftNavWithCategories({
           </div>
         ) : session?.user ? (
           <>
-            <button
-              type="button"
-              onClick={() => {
-                setShowAccountModal(true);
-                onCloseMobileMenu();
+            <input
+              ref={avatarInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="hidden"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (!file) return;
+                if (!file.type.startsWith("image/")) {
+                  setAvatarError("Use a JPEG, PNG, or WebP image.");
+                  return;
+                }
+                setAvatarError(null);
+                setAvatarBusy(true);
+                try {
+                  const blob = await resizeImageToJpegBlob(file);
+                  const fd = new FormData();
+                  fd.append("image", blob, "avatar.jpg");
+                  const res = await fetch("/api/settings/profile-image", {
+                    method: "POST",
+                    body: fd,
+                    credentials: "same-origin",
+                  });
+                  const json = (await res.json()) as { error?: string };
+                  if (!res.ok) throw new Error(json.error ?? "Upload failed");
+                  await update({ user: { image: "/api/settings/profile-image" } });
+                  setAvatarStamp((s) => s + 1);
+                } catch (err) {
+                  setAvatarError(err instanceof Error ? err.message : "Upload failed");
+                } finally {
+                  setAvatarBusy(false);
+                }
               }}
-              className="flex w-full items-center gap-3 min-w-0 rounded-lg px-1 py-1.5 -mx-1 transition-colors hover:bg-slate-700/60 focus:outline-none focus:ring-2 focus:ring-teal-500/50 focus:ring-offset-2 focus:ring-offset-slate-800"
-              title="Account settings"
-            >
-              {session.user.image ? (
-                <img
-                  src={session.user.image}
-                  alt=""
-                  className="h-10 w-10 shrink-0 rounded-full border-2 border-teal-500/30 object-cover ring-2 ring-slate-700"
-                  referrerPolicy="no-referrer"
-                />
-              ) : (
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-teal-500 to-cyan-600 text-sm font-semibold text-white shadow-lg shadow-teal-500/20">
-                  {(session.user.name || session.user.email || "?")[0].toUpperCase()}
-                </div>
-              )}
-              <span className="truncate text-sm font-medium text-slate-200" title={session.user.name || session.user.email || undefined}>
-                {session.user.name || session.user.email || "Signed in"}
-              </span>
-            </button>
+            />
+            <div className="flex w-full min-w-0 items-center gap-2.5 rounded-lg px-0.5 py-1 -mx-0.5">
+              <button
+                type="button"
+                disabled={avatarBusy}
+                onClick={() => avatarInputRef.current?.click()}
+                className="group relative shrink-0 rounded-full focus:outline-none focus:ring-2 focus:ring-teal-500/50 focus:ring-offset-2 focus:ring-offset-slate-800 disabled:opacity-60"
+                title="Change profile photo"
+                aria-label="Change profile photo"
+              >
+                {session.user.image ? (
+                  <img
+                    src={`${session.user.image}${session.user.image.includes("?") ? "&" : "?"}v=${avatarStamp}`}
+                    alt=""
+                    className="h-10 w-10 rounded-full border-2 border-teal-500/30 object-cover ring-2 ring-slate-700 transition group-hover:border-teal-400/50"
+                    referrerPolicy="same-origin"
+                  />
+                ) : (
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-transparent bg-gradient-to-br from-teal-500 to-cyan-600 text-sm font-semibold text-white shadow-lg shadow-teal-500/20 ring-2 ring-slate-700 transition group-hover:border-teal-400/40">
+                    {(session.user.name || session.user.email || "?")[0].toUpperCase()}
+                  </div>
+                )}
+                <span
+                  className="pointer-events-none absolute -bottom-0.5 -right-0.5 flex h-[18px] w-[18px] items-center justify-center rounded-full border border-slate-900 bg-slate-800 text-[11px] text-teal-300 shadow-md ring-1 ring-teal-500/30"
+                  aria-hidden
+                >
+                  +
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAccountModal(true);
+                  onCloseMobileMenu();
+                }}
+                className="min-w-0 flex-1 rounded-lg px-1 py-1 text-left transition-colors hover:bg-slate-700/60 focus:outline-none focus:ring-2 focus:ring-teal-500/50 focus:ring-offset-2 focus:ring-offset-slate-800"
+                title="Account settings"
+              >
+                <span
+                  className="block truncate text-sm font-medium text-slate-200"
+                  title={session.user.name || session.user.email || undefined}
+                >
+                  {session.user.name || session.user.email || "Signed in"}
+                </span>
+                {avatarBusy ? (
+                  <span className="block text-[10px] text-slate-500">Updating photo…</span>
+                ) : null}
+              </button>
+            </div>
+            {avatarError ? (
+              <p className="mt-1 px-1 text-[11px] leading-snug text-rose-400">{avatarError}</p>
+            ) : null}
             <button
               type="button"
               onClick={() => {
@@ -170,7 +243,7 @@ function LeftNavWithCategories({
               </button>
               {ctx.categoriesOpen && (
                 <ul className="py-1 text-sm">
-                  {TOP_LEVEL_CATEGORIES.map((cat) => {
+                  {categories.map((cat) => {
                     const isExpanded = ctx.expandedCategory === cat;
                     const subs = getSubcategoriesForCategory(cat);
                     return (
@@ -327,10 +400,12 @@ export function DashboardShell({ children, isOwner = false }: { children: React.
   }, [mobileDrawerVisible]);
 
   return (
+    <MarketplaceProvider>
+    <CompetitionThresholdsProvider>
     <SavedProductsProvider>
       <ExplorerCategoryProvider>
         <DashboardSettingsProvider openSettings={() => setSettingsModalOpen(true)}>
-        <div className="relative h-[100dvh] max-h-[100dvh] w-full overflow-hidden bg-slate-900/50">
+        <div id="app-root" className="relative h-[100dvh] max-h-[100dvh] w-full overflow-hidden bg-slate-900/50">
           <BrandBackdrop variant="onDark" />
           <div className="relative z-[1] flex h-full min-h-0 w-full flex-col md:flex-row">
             <header className="sticky top-0 z-40 shrink-0 border-b border-slate-700/80 bg-slate-900/95 px-3 py-2 backdrop-blur-md md:hidden">
@@ -375,7 +450,7 @@ export function DashboardShell({ children, isOwner = false }: { children: React.
               onOpenAiChat={() => setAiChatOpen(true)}
               isOwner={isOwner}
             />
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">{children}</div>
+            <div id="app-main-content" className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">{children}</div>
             {!mobileDrawerVisible && !pathname.startsWith("/analyzer") ? (
               <button
                 type="button"
@@ -420,5 +495,7 @@ export function DashboardShell({ children, isOwner = false }: { children: React.
         </DashboardSettingsProvider>
       </ExplorerCategoryProvider>
     </SavedProductsProvider>
+    </CompetitionThresholdsProvider>
+    </MarketplaceProvider>
   );
 }

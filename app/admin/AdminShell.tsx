@@ -4,44 +4,49 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const NAV_ITEMS = [
-  { href: "/admin/users", label: "Users", icon: "👤" },
-  { href: "/admin/promos", label: "Promo Codes", icon: "🎟" },
-  { href: "/admin/usage", label: "Usage", icon: "📊" },
+  { href: "/admin", label: "Overview", badge: false },
+  { href: "/admin/users", label: "Users", badge: false },
+  { href: "/admin/usage", label: "Usage", badge: false },
+  { href: "/admin/promos", label: "Promos", badge: false },
 ];
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      {/* Top bar */}
-      <header className="sticky top-0 z-30 border-b border-slate-700 bg-slate-900/95 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3">
-          <div className="flex items-center gap-3">
+    <div className="relative min-h-screen overflow-x-hidden bg-[#050608] text-slate-100">
+      <div
+        className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgb(13_148_136/0.14),transparent_55%),radial-gradient(ellipse_60%_40%_at_100%_0%,rgb(139_92_246/0.07),transparent_50%),radial-gradient(ellipse_50%_35%_at_0%_100%,rgb(13_148_136/0.05),transparent_45%)]"
+        aria-hidden
+      />
+      <header className="sticky top-0 z-30 border-b border-white/[0.07] bg-[#07090d]/88 backdrop-blur-2xl shadow-[0_20px_50px_-28px_rgba(0,0,0,0.85)]">
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-teal-500/25 to-transparent" aria-hidden />
+        <div className="relative mx-auto flex max-w-[1400px] flex-wrap items-center justify-between gap-3 px-4 py-3.5">
+          <div className="flex flex-wrap items-center gap-3">
             <Link
               href="/"
-              className="text-xs text-slate-500 hover:text-slate-300 transition-colors"
-              title="Back to app"
+              className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 transition-colors hover:text-teal-300"
             >
-              ← App
+              ← Workspace
             </Link>
-            <span className="text-slate-700">|</span>
-            <span className="text-sm font-bold tracking-tight text-teal-400">⚡ Admin</span>
+            <span className="hidden h-5 w-px bg-gradient-to-b from-transparent via-white/15 to-transparent sm:inline-block" aria-hidden />
+            <span className="rounded-md border border-teal-400/35 bg-gradient-to-br from-teal-500/15 to-teal-500/[0.04] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.2em] text-teal-100 shadow-[0_0_24px_-4px_rgb(45_212_191/0.35)]">
+              Admin
+            </span>
           </div>
-          <nav className="flex items-center gap-1">
+          <nav className="flex flex-wrap items-center gap-0.5 rounded-xl border border-white/[0.06] bg-white/[0.02] p-1 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]">
             {NAV_ITEMS.map((item) => {
-              const active = pathname.startsWith(item.href);
+              const active = item.href === "/admin" ? pathname === "/admin" : pathname.startsWith(item.href);
               return (
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition-colors ${
+                  className={`rounded-lg px-3 py-1.5 text-[13px] transition-all duration-200 ${
                     active
-                      ? "bg-teal-500/20 font-semibold text-teal-300"
-                      : "text-slate-400 hover:bg-slate-700/60 hover:text-slate-200"
+                      ? "bg-white/[0.1] font-semibold text-white shadow-[0_1px_0_0_rgba(255,255,255,0.08),0_12px_38px_-14px_rgb(45_212_191/0.22)] ring-1 ring-teal-500/25"
+                      : "font-medium text-slate-500 hover:bg-white/[0.04] hover:text-slate-200"
                   }`}
                 >
-                  <span aria-hidden>{item.icon}</span>
                   {item.label}
                 </Link>
               );
@@ -50,7 +55,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-4 py-8">{children}</main>
+      <main className="relative mx-auto max-w-[1400px] px-4 pb-14 pt-10">{children}</main>
     </div>
   );
 }

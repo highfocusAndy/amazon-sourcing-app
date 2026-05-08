@@ -12,6 +12,9 @@ model User {
   email                String   @unique
   passwordHash         String
   name                 String?
+  /// Optional profile photo stored for the sidebar (JPEG/PNG/WebP; managed via /api/settings/profile-image).
+  profileImageMime     String?
+  profileImage         Bytes?
   createdAt            DateTime @default(now())
   /// End of signup trial (set on register). Legacy users without this field get a computed grace in code.
   trialEndsAt          DateTime?
@@ -89,6 +92,12 @@ model UserPreferences {
   defaultShippingCostFbm    Float    @default(0)
   catalogPageSize           Int      @default(20)      // 10–100 (smaller default = fewer Catalog API GETs per screen)
   marketplaceId             String?  // e.g. ATVPDKIKX0DER (US), A2EUQ1WTGCTBG2 (CA), A1AM78C64UM0Y8 (MX)
+  /// Offer count at or below = “low competition” in analysis copy.
+  competitionLowMaxOffers           Int      @default(3)
+  /// Offer count at or below (and above low band) = “moderate”; above this until saturated = denser listing.
+  competitionModerateMaxOffers      Int      @default(8)
+  /// Offer count at or above = “highly saturated” / strong saturation signal.
+  competitionSaturatedMinOffers     Int      @default(12)
   updatedAt                 DateTime @updatedAt
 }
 

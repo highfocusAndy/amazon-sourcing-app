@@ -104,11 +104,36 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (path.startsWith("/api/")) return true;
       return !!auth?.user;
     },
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger, session }) {
       if (user) {
         token.id = user.id;
         token.email = user.email;
         token.name = user.name;
+        try {
+          const row = await prisma.user.findUnique({
+            where: { id: user.id },
+            select: { profileImage: true },
+          });
+          const raw = row?.profileImage;
+          const has =
+            raw != null &&
+            (Buffer.isBuffer(raw)
+              ? raw.length > 0
+              : typeof raw === "object" && raw instanceof Uint8Array && raw.byteLength > 0);
+          token.picture = has ? "/api/settings/profile-image" : undefined;
+        } catch {
+          token.picture = undefined;
+        }
+      }
+      if (trigger === "update" && session && typeof session === "object") {
+        const s = session as { user?: { image?: string | null }; image?: string | null };
+        if (s.user && "image" in s.user) {
+          const im = s.user.image;
+          token.picture = im && typeof im === "string" && im.length > 0 ? im : undefined;
+        } else if ("image" in s && s.image !== undefined) {
+          const im = s.image;
+          token.picture = im && typeof im === "string" && im.length > 0 ? im : undefined;
+        }
       }
       // Keep token.id aligned with the DB row for this email (fixes stale JWT after DB restore / user id change).
       const em = typeof token.email === "string" ? token.email.trim().toLowerCase() : "";
@@ -128,6 +153,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.id = token.id as string;
         session.user.email = token.email as string;
         session.user.name = token.name as string | null;
+        session.user.image = typeof token.picture === "string" && token.picture.length > 0 ? token.picture : null;
       }
       return session;
     },

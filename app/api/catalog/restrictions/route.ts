@@ -16,7 +16,8 @@ import { consumeMonthlyUsage } from "@/lib/usageQuota";
 /**
  * Returns gating/restriction status for one ASIN. Used when the user selects a product
  * (e.g. in Explorer) so the right panel can show Gated/Ungated. Requires auth.
- * Uses the signed-in user's Amazon account when linked; otherwise global env credentials.
+ * Uses the signed-in user's Amazon account when linked.
+ * If Amazon is not connected, returns unknown (no shared/env seller fallback for gating).
  */
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const { searchParams } = new URL(request.url);

@@ -1188,13 +1188,47 @@ export class SpApiClient {
       }
     }
 
-    const allSignals = unique([...reasonCodes, ...reasonMessages.map((msg) => msg.toUpperCase())]).join(" | ");
-    const approvalRequired = /APPROVAL|RESTRICT|GATED|NOT_ELIGIBLE|REQUIRES|APPLICATION/.test(allSignals);
-    const ipComplaintRisk = /INTELLECTUAL|IP\b|TRADEMARK|PATENT|COPYRIGHT|COUNTERFEIT|BRAND_PROTECTION/.test(allSignals);
-    const meltableRisk = /MELTABLE|MELT\s|HEAT\s*SENSITIVE/.test(allSignals);
-    const privateLabelRisk = Boolean(
-      approvalRequired && (ipComplaintRisk || /BRAND\s*GAT|BRAND_GAT|REGISTRY|PRIVATE\s*LABEL/.test(allSignals)),
+    const allSignals = unique([...reasonCodes, ...reasonMessages.map((msg) => msg.toUpperCase())]).join(
+      " | ",
     );
+
+    /** Generic “you need approval / app / gate” wording from Listings Restrictions. */
+    const approvalRequired =
+      /\b(APPROVED|APPROVAL|RESTRICT|GATED|NOT_ELIGIBLE|REQUIRES?_?TO|APPLICATION|QUALIFICATION|SIGNATURE|EFFECTIVE_APPROVALDATE)\b/.test(
+        allSignals,
+      );
+
+    /**
+     * IP / authenticity / infringement — separate from Brand Registry PL gating.
+     * Avoid bare TRADEMARK (often appears next to legitimate brand-registry text).
+     */
+    const ipComplaintRisk = Boolean(
+      /\b(INTELLECTUAL_PROPERTY|NOTICE_OF_INTELLECTUAL|INFRINGEMENT|INFRINGEMENTS|INFRINGEMENT_CLAIM)\b|\b(INAUTHENTIC|COUNTERFEIT|FAKE_ITEMS|PRODUCT_AUTHENTICITY|AUTHENTICITY(\s|_)?(COMPLAINT|VIOLATION))\b|\bCOPYRIGHT\b|\bPATENTS?\b|PATENT[^\w]{0,24}(INFRINGEMENT|INFRINGEMENT_CLAIM)|\b(IP|INTELLECTUAL)(\s|_)?(COMPLAINT|CLAIM|INFRINGEMENT|DISPUTE|REPORT)\b|\bBRAND_PROTECTION\b|RIGHTS_?OWNER|\bLEGAL_?NOTICE\b|\bNOTICE_?OF_?INFRINGEMENT\b/.test(
+        allSignals,
+      ),
+    );
+
+    /** Meltable FBA restriction. */
+    const meltableRisk = /MELTABLE|MELT\s|HEAT\s*SENSITIVE/.test(allSignals);
+
+    /**
+     * “Private label / brand-owner” posture for sourcing: Brand Registry, Transparency,
+     * gated-by-brand-owner, RBBA/Tenant-style codes, wholesale signature, etc.
+     * Driven by Listing Restrictions for the **connected seller** + ASIN (not catalog facets).
+     * YES when signals match — independent from {@link ipComplaintRisk}.
+     */
+    const hasBrandRegistryPrivateLabelSignals = Boolean(
+      /\bPRIVATE(\s|_)*LABEL\b|PRIVATE_LABEL\b|\bBRAND(\s|_)*REGISTRY\b|BRAND_REGISTRY\b|\bBRAND_OWNERSHIP\b|\bBRAND_OWNED\b|\bBRAND_OWNED_\w+|\bYOUR_?BRAND\b|\bSELL\s+YOUR\s+OWN\s+BRAND\b|\bMANUFACTURING_?BRAND\b|\bTENANT_?(BRAND|OWNER|FIRST_PARTY)?\b|\bFIRST_?PARTY\b|\bAMAZON_?FIRST_?PARTY\b|\bTRANSPARENCY\b|TRANSPARENCY_[A-Z0-9_]+|TBPS\b|\bBRAND\s*GAT(ED)?\b|BRAND_GATED|BRAND_GAT\b|\bRBBA\b|SIGNATURE_?REQ|SIGNATURE_REQUIRED|WHOLESALE_?CHANGES|AUTHORIZED_?(DISTRIBUTOR|RESELLER|SELLER)|DISTRIBUTOR_?AUTHORIZATION|\bWHOLESALE_?AUTHORIZATION\b|EXCLUSIVE_(BRAND|DEAL)|BRAND_APPROVAL\b|BRAND_APPROVAL_\w+|REQUIRES?_?BRAND|REQUIRE_?BRAND|BRAND_REQUIREMENT\b|APPLICATION.{0,40}\bBRAND\b|LISTING_REQUIRES_BRAND_APPROVAL|SOLD_?(ONLY)?_?\s*BY_?(THE_?)?BRAND\b/.test(
+        allSignals,
+      ),
+    );
+
+    const privateLabelRisk = Boolean(
+      hasBrandRegistryPrivateLabelSignals ||
+        (approvalRequired &&
+          /\b(BRAND(\s|_)*REGISTRY|BRAND_REGISTRY)\b|\bTRANSPARENCY\b|RBBA|BRAND_GAT|WHOLESALE_?AUTHOR|DISTRIBUTOR_?AUTHOR|AUTHORIZED_?(RESELLER|DISTRIBUTOR)|PRIVATE(\s|_)*LABEL|TENANT|FIRST_PARTY|BRAND_OWN/.test(allSignals)),
+    );
+
     // Broad hazmat detection: explicit HAZMAT codes + dangerous goods + battery/flammable regulation signals
     const isHazmat =
       /HAZMAT|HAZARD|DANGEROUS|DANGEROUS_GOOD|DG_REGULATION|FLAMMABLE|BATTERY|LITHIUM|AEROSOL|CORROSIVE|OXIDIZER|COMPRESSED_GAS|PESTICIDE|REGULATED_PRODUCT/.test(

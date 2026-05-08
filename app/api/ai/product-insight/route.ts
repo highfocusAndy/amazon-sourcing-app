@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { productAnalysisForInsightApi } from "@/lib/ai/productInsightPayload";
-import { HIGH_FOCUS_AMAZON_CHAT_SYSTEM, productInsightUserPrompt } from "@/lib/ai/amazonAssistantPrompts";
+import { PRODUCT_PANEL_INSIGHT_SYSTEM, productInsightUserPrompt } from "@/lib/ai/amazonAssistantPrompts";
 import { userOpenaiInsightLimit } from "@/lib/apiRateLimit";
 import { requireAppAccess } from "@/lib/billing/requireAppAccess";
 import { consumeMonthlyUsage } from "@/lib/usageQuota";
@@ -70,7 +70,7 @@ export async function POST(req: Request): Promise<NextResponse> {
         max_tokens: 280,
         temperature: 0.4,
         messages: [
-          { role: "system", content: HIGH_FOCUS_AMAZON_CHAT_SYSTEM },
+          { role: "system", content: PRODUCT_PANEL_INSIGHT_SYSTEM },
           { role: "user", content: productInsightUserPrompt(snapshotJson) },
         ],
       }),

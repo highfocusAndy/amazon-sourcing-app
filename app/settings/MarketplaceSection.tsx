@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { MARKETPLACE_IDS, MARKETPLACE_OPTIONS } from "@/lib/marketplaces";
+import { useMarketplace } from "@/app/context/MarketplaceContext";
 
 export function MarketplaceSection({ className = "" }: { className?: string }) {
+  const { setMarketplaceId: setContextMarketplace } = useMarketplace();
   const [marketplaceId, setMarketplaceId] = useState<string>(MARKETPLACE_IDS.USA);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -36,6 +38,7 @@ export function MarketplaceSection({ className = "" }: { className?: string }) {
       });
       const data = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(data.error ?? "Save failed");
+      setContextMarketplace(value); // update sidebar categories + domain instantly
       setMessage("saved");
       setTimeout(() => setMessage(null), 2000);
     } catch {
