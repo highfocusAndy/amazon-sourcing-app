@@ -114,12 +114,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             where: { id: user.id },
             select: { profileImage: true },
           });
-          const raw = row?.profileImage;
-          const has =
-            raw != null &&
-            (Buffer.isBuffer(raw)
-              ? raw.length > 0
-              : typeof raw === "object" && raw instanceof Uint8Array && raw.byteLength > 0);
+          const raw = row?.profileImage as Buffer | Uint8Array | null | undefined;
+          let has = false;
+          if (raw != null) {
+            if (Buffer.isBuffer(raw)) {
+              has = raw.length > 0;
+            } else {
+              has = raw.byteLength > 0;
+            }
+          }
           token.picture = has ? "/api/settings/profile-image" : undefined;
         } catch {
           token.picture = undefined;

@@ -12,10 +12,10 @@ type Search = Record<string, string | string[] | undefined>;
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams?: Promise<Search> | Search;
+  searchParams?: Promise<Search>;
 }) {
   const session = await auth();
-  const sp = searchParams != null ? await Promise.resolve(searchParams) : {};
+  const sp = searchParams != null ? await searchParams : {};
   const rawCb = sp.callbackUrl;
   const rawMsg = sp.message;
   const registerMessage =

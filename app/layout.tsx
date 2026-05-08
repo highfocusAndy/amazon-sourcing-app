@@ -85,7 +85,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
          * Using a raw <script> (not next/script) guarantees it is
          * never async/deferred by the framework.
          */}
-        {/* @ts-expect-error — dangerouslySetInnerHTML on script is intentional */}
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
         <PwaRegister />
         <AuthSessionProvider>{children}</AuthSessionProvider>

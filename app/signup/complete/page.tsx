@@ -11,14 +11,14 @@ type Search = Record<string, string | string[] | undefined>;
 export default async function SignupCompletePage({
   searchParams,
 }: {
-  searchParams?: Promise<Search> | Search;
+  searchParams?: Promise<Search>;
 }) {
   const session = await auth();
   if (session?.user) {
     redirect("/");
   }
 
-  const sp = searchParams != null ? await Promise.resolve(searchParams) : {};
+  const sp = searchParams != null ? await searchParams : {};
   const rawId = sp.session_id;
   const sessionId = (typeof rawId === "string" ? rawId : Array.isArray(rawId) ? rawId[0] : "")?.trim();
   if (!sessionId) {

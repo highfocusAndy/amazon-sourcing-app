@@ -11,7 +11,7 @@ type SearchParams = Record<string, string | string[] | undefined>;
 export default async function SettingsPage({
   searchParams,
 }: {
-  searchParams?: SearchParams;
+  searchParams?: Promise<SearchParams>;
 }) {
   const session = await auth();
   if (!session?.user?.id) {
@@ -21,10 +21,12 @@ export default async function SettingsPage({
     redirect("/subscribe");
   }
 
+  const sp = searchParams != null ? await searchParams : {};
+
   // If Amazon OAuth redirected here, immediately return to the dashboard.
   // This avoids forcing the user to click "Back to dashboard".
-  const amazonConnected = searchParams?.amazon_connected;
-  const amazonError = searchParams?.amazon_error;
+  const amazonConnected = sp.amazon_connected;
+  const amazonError = sp.amazon_error;
   if (amazonConnected === "1") {
     redirect("/?amazon_connected=1");
   }

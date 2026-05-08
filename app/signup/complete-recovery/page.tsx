@@ -9,14 +9,14 @@ type Search = Record<string, string | string[] | undefined>;
 export default async function CompleteRecoveryPage({
   searchParams,
 }: {
-  searchParams?: Promise<Search> | Search;
+  searchParams?: Promise<Search>;
 }) {
   const session = await auth();
   if (session?.user) {
     redirect("/");
   }
 
-  const sp = searchParams != null ? await Promise.resolve(searchParams) : {};
+  const sp = searchParams != null ? await searchParams : {};
   const raw = sp.token;
   const token = typeof raw === "string" ? raw : Array.isArray(raw) ? raw[0] : "";
   const trimmed = token?.trim() ?? "";

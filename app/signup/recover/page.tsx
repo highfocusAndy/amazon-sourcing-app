@@ -8,14 +8,14 @@ type Search = Record<string, string | string[] | undefined>;
 export default async function RecoverCheckoutPage({
   searchParams,
 }: {
-  searchParams?: Promise<Search> | Search;
+  searchParams?: Promise<Search>;
 }) {
   const session = await auth();
   if (session?.user) {
     redirect("/");
   }
 
-  const sp = searchParams != null ? await Promise.resolve(searchParams) : {};
+  const sp = searchParams != null ? await searchParams : {};
   const rawErr = sp.error;
   const showExpired =
     rawErr === "expired" || (Array.isArray(rawErr) && rawErr[0] === "expired");
