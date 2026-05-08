@@ -52,7 +52,7 @@ export async function GET(): Promise<NextResponse> {
     const mime = row?.profileImageMime?.trim();
     const ct = mime && ALLOWED.has(mime) ? mime : sniffMime(buf) ?? "image/jpeg";
 
-    return new NextResponse(buf, {
+    return new NextResponse(new Uint8Array(buf), {
       status: 200,
       headers: {
         "Content-Type": ct,
