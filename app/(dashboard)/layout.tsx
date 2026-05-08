@@ -1,5 +1,6 @@
 import { auth } from "@/auth";
 import { userHasAppAccess } from "@/lib/billing/access";
+import { isAppOwnerEmail } from "@/lib/billing/appOwner";
 import { redirect } from "next/navigation";
 import { DashboardShell } from "./DashboardShell";
 
@@ -11,5 +12,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
   if (!(await userHasAppAccess(session.user.id, session.user.email))) {
     redirect("/subscribe");
   }
-  return <DashboardShell>{children}</DashboardShell>;
+  const isOwner = isAppOwnerEmail(session.user.email);
+  return <DashboardShell isOwner={isOwner}>{children}</DashboardShell>;
 }

@@ -53,11 +53,13 @@ function LeftNavWithCategories({
   onCloseMobileMenu,
   onOpenSettings,
   onOpenAiChat,
+  isOwner,
 }: {
   mobileDrawerOpen: boolean;
   onCloseMobileMenu: () => void;
   onOpenSettings: () => void;
   onOpenAiChat: () => void;
+  isOwner: boolean;
 }) {
   const pathname = usePathname();
   const ctx = useExplorerCategoryOptional();
@@ -241,6 +243,11 @@ function LeftNavWithCategories({
           <NavLink href="/subscribe" active={pathname === "/subscribe"} icon="◈" onNavigate={onCloseMobileMenu}>
             Plan & billing
           </NavLink>
+          {isOwner && (
+            <NavLink href="/admin" active={pathname.startsWith("/admin")} icon="⚡" onNavigate={onCloseMobileMenu}>
+              Admin
+            </NavLink>
+          )}
         </div>
       </div>
       <div className="shrink-0 border-t border-slate-700/80 bg-slate-800/30 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2">
@@ -269,6 +276,7 @@ function mobilePageTitle(pathname: string): string {
   if (p.startsWith("/saved")) return "Saved";
   if (p.startsWith("/book")) return "Playbook";
   if (p.startsWith("/subscribe")) return "Plan & billing";
+  if (p.startsWith("/admin")) return "Admin";
   return "HIGH FOCUS";
 }
 
@@ -291,7 +299,7 @@ function MobileMenuOpenButton({ onClick, menuOpen }: { onClick: () => void; menu
   );
 }
 
-export function DashboardShell({ children }: { children: React.ReactNode }) {
+export function DashboardShell({ children, isOwner = false }: { children: React.ReactNode; isOwner?: boolean }) {
   const pathname = usePathname();
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [mobileDrawerPathname, setMobileDrawerPathname] = useState(pathname);
@@ -365,6 +373,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               onCloseMobileMenu={() => setMobileDrawerOpen(false)}
               onOpenSettings={() => setSettingsModalOpen(true)}
               onOpenAiChat={() => setAiChatOpen(true)}
+              isOwner={isOwner}
             />
             <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">{children}</div>
             {!mobileDrawerVisible && !pathname.startsWith("/analyzer") ? (
