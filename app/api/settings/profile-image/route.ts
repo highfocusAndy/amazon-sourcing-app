@@ -4,9 +4,13 @@ import { requireAppAccess } from "@/lib/billing/requireAppAccess";
 import { prisma } from "@/lib/db";
 
 const MAX_BYTES = 600_000; // ceiling (browser also resizes)
-const ALLOWED = new Set(["image/jpeg", "image/png", "image/webp"]);
+type AllowedMime = "image/jpeg" | "image/png" | "image/webp";
 
-function sniffMime(buf: Buffer): "image/jpeg" | "image/png" | "image/webp" | null {
+function isAllowedMime(s: string): s is AllowedMime {
+  return s === "image/jpeg" || s === "image/png" || s === "image/webp";
+}
+
+function sniffMime(buf: Buffer): AllowedMime | null {
   if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return "image/jpeg";
   if (buf.length >= 12 && buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46) {
     /* RIFF …. WEBP */
@@ -49,8 +53,9 @@ export async function GET(): Promise<NextResponse> {
       return new NextResponse(null, { status: 404 });
     }
 
-    const mime = row?.profileImageMime?.trim();
-    const ct = mime && ALLOWED.has(mime) ? mime : sniffMime(buf) ?? "image/jpeg";
+    const stored = row?.profileImageMime?.trim();
+    const ct: AllowedMime =
+      stored && isAllowedMime(stored) ? stored : (sniffMime(buf) ?? "image/jpeg");
 
     return new NextResponse(new Uint8Array(buf), {
       status: 200,
@@ -86,9 +91,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const sniffed = sniffMime(buf);
     const claimed = typeof file.type === "string" && file.type ? file.type.trim() : "";
 
-    let mime: "image/jpeg" | "image/png" | "image/webp" | null = sniffed;
-    if (!mime && ALLOWED.has(claimed)) {
-      mime = claimed as typeof mime;
+    let mime: AllowedMime | null = sniffed;
+    if (!mime && isAllowedMime(claimed)) {
+      mime = claimed;
     }
     if (!mime) {
       return NextResponse.json({ error: "Use a JPEG, PNG, or WebP image." }, { status: 400 });
