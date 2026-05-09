@@ -1015,38 +1015,38 @@ export default function ExplorerPage() {
 
       {/* Right panel: overlay sheet on small screens; in-flow column on lg+ so the page does not scroll under it */}
       <aside
-        className={`product-details-panel fixed flex min-h-0 flex-col overflow-hidden border-l border-slate-700 bg-slate-800 shadow-xl transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] max-lg:inset-x-0 max-lg:top-0 max-lg:z-[100] max-lg:h-[100svh] max-lg:max-h-[100svh] max-lg:w-full max-lg:max-w-none ${
+        className={`product-details-panel fixed flex min-h-0 flex-col overflow-hidden border-l border-slate-700 bg-slate-800 shadow-xl transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] max-lg:inset-x-0 max-lg:top-0 max-lg:z-[100] max-lg:h-[100dvh] max-lg:max-h-[100dvh] max-lg:w-full max-lg:max-w-none ${
           mobileDetailsOpen ? "max-lg:translate-x-0" : "max-lg:pointer-events-none max-lg:translate-x-full"
         } lg:static lg:z-auto lg:h-full lg:max-h-full lg:w-80 lg:shrink-0 lg:translate-x-0 xl:w-96`}
       >
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain">
-            <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b border-slate-700 bg-slate-800 px-4 py-3 max-lg:py-0 max-lg:pb-3 max-lg:pt-[calc(0.75rem+env(safe-area-inset-top,0px))]">
-              <h3 className="text-[11px] font-bold uppercase tracking-[0.1em] text-slate-400">Product Details</h3>
-              <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center justify-between border-b border-slate-700 bg-slate-800 px-4 py-3 max-lg:pt-[calc(0.75rem+env(safe-area-inset-top,0px))]">
+            <h3 className="text-[11px] font-bold uppercase tracking-[0.1em] text-slate-400">Product Details</h3>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setMobileDetailsOpen(false)}
+                className="rounded-lg border border-slate-600 bg-slate-700 px-3 py-1.5 text-sm font-semibold text-slate-200 hover:bg-slate-600 lg:hidden"
+              >
+                Back
+              </button>
+              {selectedProduct ? (
                 <button
                   type="button"
-                  onClick={() => setMobileDetailsOpen(false)}
-                  className="rounded-lg border border-slate-600 bg-slate-700 px-3 py-1.5 text-sm font-semibold text-slate-200 hover:bg-slate-600 lg:hidden"
+                  onClick={() => {
+                    setSelectedProduct(null);
+                    setDetailPanelCost("");
+                    setMobileDetailsOpen(false);
+                  }}
+                  className="rounded-lg border border-slate-600 bg-slate-700 px-3 py-1.5 text-sm font-semibold text-slate-200 hover:bg-slate-600"
                 >
-                  Back
+                  Clear
                 </button>
-                {selectedProduct ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedProduct(null);
-                      setDetailPanelCost("");
-                      setMobileDetailsOpen(false);
-                    }}
-                    className="rounded-lg border border-slate-600 bg-slate-700 px-3 py-1.5 text-sm font-semibold text-slate-200 hover:bg-slate-600"
-                  >
-                    Clear
-                  </button>
-                ) : null}
-              </div>
+              ) : null}
             </div>
-            <div className="px-3 pb-3 pt-2 text-[13px] leading-snug text-slate-200 lg:px-3.5 lg:pb-3.5 lg:pt-2.5">
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain touch-pan-y pb-[max(1.25rem,env(safe-area-inset-bottom,1.25rem))] [-webkit-overflow-scrolling:touch]">
+            <div className="px-3 pb-1 pt-2 text-[13px] leading-snug text-slate-200 lg:px-3.5 lg:pb-2 lg:pt-2.5">
           {panelAnalysisLoading ? (
             <div className="flex flex-col gap-3">
               <div className="hf-analyzing-caption pl-0.5">Analyzing product…</div>
