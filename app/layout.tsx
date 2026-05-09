@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import { appDisplayName } from "@/lib/appBranding";
+import { appDisplayName, appShortName } from "@/lib/appBranding";
 import { AuthSessionProvider } from "./components/AuthSessionProvider";
 import { PwaRegister } from "./components/PwaRegister";
 import { publicSiteOrigin } from "@/lib/publicSiteUrl";
@@ -13,9 +13,18 @@ const siteDescription =
 
 export const metadata: Metadata = {
   metadataBase: publicSiteOrigin(),
-  applicationName: "HIGH FOCUS Sourcing App",
+  applicationName: appDisplayName,
   title: siteTitle,
   description: siteDescription,
+  icons: {
+    icon: [{ url: "/HF_LOGO.png", sizes: "512x512", type: "image/png" }],
+    apple: [{ url: "/HF_LOGO.png", sizes: "180x180", type: "image/png" }],
+  },
+  appleWebApp: {
+    capable: true,
+    title: appShortName,
+    statusBarStyle: "black-translucent",
+  },
   openGraph: {
     type: "website",
     siteName: appDisplayName,

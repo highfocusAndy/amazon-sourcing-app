@@ -2,4 +2,5 @@
 export const appDisplayName =
   process.env.NEXT_PUBLIC_APP_TITLE?.trim() || "HIGH FOCUS Sourcing App";
 
-export const appShortName = process.env.NEXT_PUBLIC_APP_SHORT_NAME?.trim() || "HIGH FOCUS";
+/** Home screen / launcher label (keep short; full title uses appDisplayName). */
+export const appShortName = process.env.NEXT_PUBLIC_APP_SHORT_NAME?.trim() || "Sourcing";
