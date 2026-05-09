@@ -47,7 +47,7 @@ export default async function SettingsPage({
           <span className="text-sm text-slate-500">{session.user.email}</span>
         </div>
       </header>
-      <main className="flex min-h-0 flex-1 flex-col">
+      <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <div className="border-b border-slate-200 bg-white/60 px-6 py-3">
           <h1 className="text-xl font-bold tracking-tight text-slate-900">
             Settings

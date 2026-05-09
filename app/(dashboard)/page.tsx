@@ -760,17 +760,6 @@ export default function ExplorerPage() {
                   </span>
                   <span className="text-teal-200/85">Only ASINs you can list without approval.</span>
                 </span>
-              ) : amazonHeaderConnected && session?.user && !ungatedOnly ? (
-                <span className="flex flex-wrap items-center gap-2 text-xs text-emerald-200/92">
-                  <span
-                    className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/35 bg-emerald-950/50 px-2 py-0.5 font-medium text-emerald-100"
-                    title="Seller account linked"
-                  >
-                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.75)]" aria-hidden />
-                    Amazon linked
-                  </span>
-                  <span className="text-emerald-200/80">Click the button above to enable the filter.</span>
-                </span>
               ) : !session?.user && sessionStatus !== "loading" ? (
                 <span className="text-xs text-teal-200/75">Click to sign in</span>
               ) : null}
