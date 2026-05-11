@@ -52,6 +52,11 @@ export const viewport: Viewport = {
  * CSS :root defaults.  Must stay in sync with lib/theme.ts.
  */
 const themeInitScript = `(function(){try{
+  function hfCookie(n){
+    var p=document.cookie.split('; ');
+    for(var i=0;i<p.length;i++){if(p[i].indexOf(n+'=')===0)return decodeURIComponent(p[i].slice(n.length+1));}
+    return null;
+  }
   var T={
     teal:   {a:'20 184 166', h:'45 212 191', a2:'6 182 212',   g:'linear-gradient(135deg,rgb(20 184 166)0%,rgb(6 182 212)100%)',   gl:'rgb(20 184 166/0.3)',  r:'20 184 166',  st:'10 26 28', sm:'13 32 35', bb:'12 12 15', be:'16 16 20', m:'dark'},
     blue:   {a:'37 99 235',  h:'96 165 250', a2:'79 70 229',   g:'linear-gradient(135deg,rgb(37 99 235)0%,rgb(79 70 229)100%)',    gl:'rgb(37 99 235/0.3)',   r:'37 99 235',   st:'11 14 38', sm:'14 18 48', bb:'12 12 15', be:'16 16 20', m:'dark'},
@@ -62,7 +67,7 @@ const themeInitScript = `(function(){try{
     emerald:{a:'5 150 105',  h:'52 211 153', a2:'13 148 136',  g:'linear-gradient(135deg,rgb(5 150 105)0%,rgb(13 148 136)100%)',   gl:'rgb(5 150 105/0.3)',   r:'5 150 105',   st:'10 28 18', sm:'12 36 22', bb:'12 12 15', be:'16 16 20', m:'dark'},
     light:  {a:'14 165 233', h:'56 189 248', a2:'6 182 212',   g:'linear-gradient(135deg,rgb(14 165 233)0%,rgb(6 182 212)100%)',   gl:'rgb(14 165 233/0.3)',  r:'14 165 233',  st:'10 26 28', sm:'13 32 35', bb:'12 12 15', be:'16 16 20', m:'light'}
   };
-  var id=localStorage.getItem('hf-accent-theme')||'teal';
+  var id=localStorage.getItem('hf-accent-theme')||hfCookie('hf-accent-theme')||'teal';
   var t=T[id]||T.teal;
   var d=document.documentElement;
   d.style.setProperty('--accent',t.a);
@@ -77,10 +82,13 @@ const themeInitScript = `(function(){try{
   d.style.setProperty('--bg-sidebar-mid',t.sm);
   d.style.setProperty('--bg-body-base',t.bb);
   d.style.setProperty('--bg-body-elevated',t.be);
-  var mode=localStorage.getItem('hf-app-mode')||t.m;
-  if(mode==='light')d.setAttribute('data-mode','light');
-  var den=localStorage.getItem('hf-table-density');
-  if(den)d.setAttribute('data-density',den);
+  var mls=localStorage.getItem('hf-app-mode');
+  var mode=(mls==='light'||mls==='dark')?mls:null;
+  if(!mode){var mc=hfCookie('hf-app-mode');if(mc==='light'||mc==='dark')mode=mc;}
+  if(!mode)mode=t.m;
+  if(mode==='light')d.setAttribute('data-mode','light');else d.removeAttribute('data-mode');
+  var den=localStorage.getItem('hf-table-density')||hfCookie('hf-table-density');
+  if(den==='comfortable'||den==='compact')d.setAttribute('data-density',den);
 }catch(e){}})();`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

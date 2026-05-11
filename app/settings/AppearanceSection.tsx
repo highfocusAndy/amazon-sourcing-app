@@ -14,6 +14,7 @@ import {
   applyTheme,
   applyDensity,
   applyMode,
+  persistAppearanceCookies,
 } from "@/lib/theme";
 
 export function AppearanceSection({ className = "" }: { className?: string }) {
@@ -32,11 +33,13 @@ export function AppearanceSection({ className = "" }: { className?: string }) {
 
     const savedDensity = localStorage.getItem(DENSITY_STORAGE_KEY) as TableDensity | null;
     if (savedDensity === "comfortable" || savedDensity === "compact") setDensity(savedDensity);
+    persistAppearanceCookies();
   }, []);
 
   function handleModeChange(m: AppMode) {
     setMode(m);
     localStorage.setItem(MODE_STORAGE_KEY, m);
+    persistAppearanceCookies();
     document.documentElement.classList.add("theme-switching");
     setTimeout(() => document.documentElement.classList.remove("theme-switching"), 450);
     applyMode(m);
@@ -53,12 +56,14 @@ export function AppearanceSection({ className = "" }: { className?: string }) {
       setMode(themeMode);
       localStorage.setItem(MODE_STORAGE_KEY, themeMode);
     }
+    persistAppearanceCookies();
   }
 
   function handleDensityChange(d: TableDensity) {
     setDensity(d);
     localStorage.setItem(DENSITY_STORAGE_KEY, d);
     applyDensity(d);
+    persistAppearanceCookies();
   }
 
   return (

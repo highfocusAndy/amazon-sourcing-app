@@ -16,6 +16,8 @@ import { ExplorerCategoryProvider, useExplorerCategoryOptional } from "@/app/con
 import { MarketplaceProvider, useMarketplace } from "@/app/context/MarketplaceContext";
 import { CompetitionThresholdsProvider } from "@/app/context/CompetitionThresholdsContext";
 import { getSubcategoriesForCategory } from "@/lib/catalogCategories";
+import { persistAppearanceCookies } from "@/lib/theme";
+import { appHeaderCompact, appHeaderSuffix } from "@/lib/appBranding";
 import { BrandBackdrop } from "@/app/components/BrandBackdrop";
 import { AccountSettingsModal } from "@/app/settings/AccountSettingsModal";
 import { DashboardHeaderMark } from "@/app/components/DashboardHeaderMark";
@@ -391,6 +393,10 @@ export function DashboardShell({ children, isOwner = false }: { children: React.
   }, []);
 
   useEffect(() => {
+    persistAppearanceCookies();
+  }, []);
+
+  useEffect(() => {
     if (!mobileDrawerVisible) return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -425,11 +431,11 @@ export function DashboardShell({ children, isOwner = false }: { children: React.
                     {mobilePageTitle(pathname)}
                   </span>
                 </div>
-                <div className="flex min-w-0 flex-1 items-center gap-0">
+                <div className="flex min-w-0 flex-1 items-center gap-0 -space-x-0.5 sm:-space-x-1">
                   <DashboardHeaderMark variant="compact" />
-                  <span className="min-w-0 pl-0.5 text-xs font-bold leading-tight tracking-tight text-slate-100 sm:pl-1 sm:text-base sm:leading-snug">
-                    <span className="sm:hidden">Sourcing App</span>
-                    <span className="hidden sm:inline">HIGH FOCUS Sourcing App</span>
+                  <span className="inline-flex min-w-0 flex-1 flex-wrap items-baseline gap-x-1 gap-y-0 whitespace-normal text-[11px] font-bold leading-tight tracking-tight text-slate-100 sm:text-sm sm:leading-snug">
+                    <span className="text-slate-100">{appHeaderCompact}</span>
+                    <span className="font-semibold text-slate-400/95">{appHeaderSuffix}</span>
                   </span>
                 </div>
                 <MobileHeaderAmazon />

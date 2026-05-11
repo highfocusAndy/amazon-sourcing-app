@@ -28,7 +28,7 @@ export default function SavedPage() {
 
   return (
     <main className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-y-contain p-4 sm:gap-6 sm:p-6">
-      <header className="rounded-xl border border-slate-600/80 bg-slate-800/90 p-4 shadow-lg shadow-black/10 border-t-4 border-t-teal-500 sm:p-6">
+      <header className="hf-dash-brand-header invert-exempt rounded-xl border border-slate-600/80 border-t-4 border-t-teal-500 p-4 sm:p-6">
         <h1 className="text-xl font-bold text-slate-100 tracking-tight sm:text-2xl">Saved Products</h1>
         <p className="mt-2 text-sm text-slate-400">
           Products you’ve already looked up. Opening them here won’t call the API again—use Analyzer to refresh data.

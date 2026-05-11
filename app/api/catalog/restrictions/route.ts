@@ -12,6 +12,7 @@ import {
   setListingRestrictionsCachePayload,
 } from "@/lib/spApiResponseCache";
 import { consumeMonthlyUsage } from "@/lib/usageQuota";
+import { approvalRequiredEffective } from "@/lib/sourcingIntelligence";
 
 /**
  * Returns gating/restriction status for one ASIN. Used when the user selects a product
@@ -78,12 +79,17 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json(cached);
     }
     const restrictions = await client.fetchListingRestrictions(asin);
-    const gated =
-      restrictions.restricted === true || restrictions.approvalRequired === true;
+    const approval =
+      restrictions.approvalRequired ||
+      approvalRequiredEffective({
+        approvalRequired: restrictions.approvalRequired,
+        restrictionReasonCodes: restrictions.reasonCodes,
+      });
+    const gated = restrictions.restricted === true || approval;
     const body = {
       asin,
       gated,
-      approvalRequired: restrictions.approvalRequired,
+      approvalRequired: approval,
       listingRestricted: restrictions.restricted,
     };
     void setListingRestrictionsCachePayload(cacheKey, body);

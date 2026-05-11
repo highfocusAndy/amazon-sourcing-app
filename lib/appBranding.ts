@@ -4,3 +4,11 @@ export const appDisplayName =
 
 /** Home screen / launcher label (keep short; full title uses appDisplayName). */
 export const appShortName = process.env.NEXT_PUBLIC_APP_SHORT_NAME?.trim() || "Sourcing";
+
+/** Navbar / dashboard header — primary wordmark. Set NEXT_PUBLIC_APP_HEADER_LABEL to override. */
+export const appHeaderCompact =
+  process.env.NEXT_PUBLIC_APP_HEADER_LABEL?.trim() || "HIGH FOCUS";
+
+/** Shown after the primary wordmark (typically “Sourcing App”). Set NEXT_PUBLIC_APP_HEADER_SUFFIX to override. */
+export const appHeaderSuffix =
+  process.env.NEXT_PUBLIC_APP_HEADER_SUFFIX?.trim() || "Sourcing App";

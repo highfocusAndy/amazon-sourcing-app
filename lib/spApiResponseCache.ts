@@ -79,7 +79,7 @@ export function analysisCacheKey(
 }
 
 export function listingRestrictionsCacheKey(marketplaceId: string, sellerId: string, asin: string): string {
-  return `lr:${marketplaceId}:${sellerId}:${asin.trim().toUpperCase()}`;
+  return `lr2:${marketplaceId}:${sellerId}:${asin.trim().toUpperCase()}`;
 }
 
 type ApiResponseCacheDelegate = {

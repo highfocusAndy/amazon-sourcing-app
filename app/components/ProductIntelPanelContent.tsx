@@ -2,7 +2,7 @@
 
 import { useMemo, type MouseEvent, type ReactNode } from "react";
 import { amazonOfferListingUrl } from "@/lib/marketplaces";
-import { computeEffectiveEconomics } from "@/lib/sourcingIntelligence";
+import { computeEffectiveEconomics, approvalRequiredEffective, approvalEligibilityUnset } from "@/lib/sourcingIntelligence";
 import { useCompetitionThresholds } from "@/app/context/CompetitionThresholdsContext";
 import type { ProductAnalysis, SellerType } from "@/lib/types";
 import {
@@ -301,7 +301,7 @@ export function ProductIntelPanelContent({
         <div className={HF_INNER_CARD_STATIC}>
           <p className={HF_KPI_LABEL}>Gated / eligible</p>
           <div className="mt-1.5 flex flex-wrap gap-1.5">
-            {selectedProduct.approvalRequired === true ? (
+            {approvalRequiredEffective(selectedProduct) ? (
               <span className="rounded-full border border-amber-400/35 bg-amber-950/50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_0_16px_-8px_rgba(251,191,36,0.2)] ring-1 ring-inset ring-amber-400/12">
                 Approval required
               </span>
@@ -319,7 +319,7 @@ export function ProductIntelPanelContent({
                 Not restricted
               </span>
             ) : null}
-            {selectedProduct.approvalRequired == null && selectedProduct.listingRestricted == null ? (
+            {approvalEligibilityUnset(selectedProduct) && selectedProduct.listingRestricted == null ? (
               <span className="text-[11px] text-slate-500">—</span>
             ) : null}
           </div>
@@ -517,7 +517,9 @@ export function ProductIntelPanelContent({
       </IntelSection>
 
       <IntelSection eyebrow="Restrictions & compliance">
-        {selectedProduct.approvalRequired || selectedProduct.listingRestricted || selectedProduct.restrictedBrand ? (
+        {approvalRequiredEffective(selectedProduct) ||
+        selectedProduct.listingRestricted ||
+        selectedProduct.restrictedBrand ? (
           <div className={HF_INNER_CARD_STATIC}>
             <p className={HF_KPI_LABEL}>Ungating economics</p>
             <ul className="mt-1.5 space-y-1 text-[12px]">
@@ -627,14 +629,14 @@ export function ProductIntelPanelContent({
         selectedProduct.restrictionReasonCodes.length > 0 ||
         selectedProduct.error ||
         selectedProduct.listingRestricted ||
-        selectedProduct.approvalRequired ||
+        approvalRequiredEffective(selectedProduct) ||
         selectedProduct.restrictedBrand ? (
           <div className="rounded-[12px] border border-amber-400/24 bg-gradient-to-br from-amber-950/40 to-amber-950/[0.12] px-2.5 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
             <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-amber-200/90">Alerts / Amazon info</p>
             {selectedProduct.error ? <p className="mt-1 text-sm font-medium leading-snug text-rose-300">{selectedProduct.error}</p> : null}
             {selectedProduct.restrictedBrand ? <p className="mt-1 text-xs text-amber-200/95">Restricted brand list</p> : null}
             {selectedProduct.listingRestricted ? <p className="mt-1 text-xs text-amber-200/95">Listing restricted</p> : null}
-            {selectedProduct.approvalRequired ? <p className="mt-1 text-xs text-amber-200/95">Approval required</p> : null}
+            {approvalRequiredEffective(selectedProduct) ? <p className="mt-1 text-xs text-amber-200/95">Approval required</p> : null}
             {selectedProduct.restrictionReasonCodes.length > 0 ? (
               <p className="mt-1 font-mono text-[10px] leading-relaxed text-amber-200/85">
                 Codes: {selectedProduct.restrictionReasonCodes.join(", ")}

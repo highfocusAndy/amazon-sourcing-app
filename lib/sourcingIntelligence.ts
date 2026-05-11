@@ -5,6 +5,26 @@ import {
   type CompetitionThresholds,
 } from "@/lib/competitionThresholds";
 
+/**
+ * Listing Restrictions sometimes return reason codes such as APPROVAL_REQUIRED while the legacy
+ * boolean flag stays false (e.g. old cache, or regex edge cases). Treat explicit codes as approval.
+ */
+export function approvalRequiredEffective(
+  product: Pick<ProductAnalysis, "approvalRequired" | "restrictionReasonCodes">,
+): boolean {
+  if (product.approvalRequired === true) return true;
+  return product.restrictionReasonCodes.some((c) =>
+    /APPROVAL_REQUIRED|APPLICATION_REQUIRED|QUALIFICATION_REQUIRED|SELLER_APPROVAL|REQUIRES?_?APPROVAL/i.test(c),
+  );
+}
+
+/** True only when neither API nor reason codes indicate an approval posture. */
+export function approvalEligibilityUnset(
+  product: Pick<ProductAnalysis, "approvalRequired" | "restrictionReasonCodes">,
+): boolean {
+  return product.approvalRequired === null && !approvalRequiredEffective(product);
+}
+
 function resolveThresholds(thresholds?: CompetitionThresholds | null): CompetitionThresholds {
   return normalizeCompetitionThresholds(thresholds ?? null);
 }
@@ -50,7 +70,7 @@ export function getSourcingRiskLevel(
 
   const partialUnknown =
     product.listingRestricted == null ||
-    product.approvalRequired == null ||
+    approvalEligibilityUnset(product) ||
     offerCount == null ||
     product.ipComplaintRisk == null;
 
@@ -65,7 +85,7 @@ export function getSourcingRiskLevel(
 
   const restrictive =
     product.listingRestricted === true ||
-    product.approvalRequired === true ||
+    approvalRequiredEffective(product) ||
     product.restrictedBrand ||
     product.privateLabelRisk === true;
 
@@ -238,7 +258,7 @@ export function buildOpportunitySummary(
   } else if (!highStress && opts.effectiveRoi != null && opts.effectiveRoi >= 20) {
     headline = "Favorable posture";
     tone = "neutral";
-  } else if (opts.effectiveRoi == null || product.listingRestricted == null || product.approvalRequired == null) {
+  } else if (opts.effectiveRoi == null || product.listingRestricted == null || approvalEligibilityUnset(product)) {
     headline = "Finish loading listing data";
     tone = "neutral";
   }

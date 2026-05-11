@@ -3,6 +3,13 @@ import { NextResponse } from "next/server";
 
 export default auth((req) => {
   const path = req.nextUrl.pathname;
+  const oauthSp = req.nextUrl.searchParams;
+  if (oauthSp.has("amazon_error") || oauthSp.get("amazon_connected") === "1") {
+    const url = req.nextUrl.clone();
+    url.searchParams.delete("amazon_error");
+    url.searchParams.delete("amazon_connected");
+    return NextResponse.redirect(url);
+  }
 
   const isPublicPage =
     path.startsWith("/login") ||

@@ -1,9 +1,23 @@
 /* eslint-disable @next/next/no-img-element */
 /**
  * Full lockup asset with wordmark cropped off — only the HF mark stays visible.
- * Use `compact` in the mobile top bar; `default` in Explorer / Analyzer headers (md+).
+ * Use `compact` in the mobile top bar; `toolbar` in md+ dashboard headers when the title stays on one line;
+ * `default` for standalone brand marks needing the larger silhouette.
  */
-export function DashboardHeaderMark({ variant = "default" }: { variant?: "default" | "compact" }) {
+export function DashboardHeaderMark({ variant = "default" }: { variant?: "default" | "compact" | "toolbar" }) {
+  if (variant === "toolbar") {
+    return (
+      <div className="flex h-14 w-auto shrink-0 overflow-hidden sm:h-[3.75rem] md:h-[4.5rem] lg:h-[5rem]">
+        <img
+          src="/HF_LOGO.png"
+          alt=""
+          aria-hidden
+          className="h-[185%] w-auto max-w-[8.25rem] object-left object-top brightness-0 invert sm:max-w-[9.5rem] md:max-w-[11rem] lg:max-w-[12.25rem]"
+        />
+      </div>
+    );
+  }
+
   if (variant === "compact") {
     return (
       <div className="flex h-11 w-auto shrink-0 overflow-hidden sm:h-12">

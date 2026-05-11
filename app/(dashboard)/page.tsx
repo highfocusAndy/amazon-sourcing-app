@@ -7,8 +7,9 @@ import { DashboardHeaderAccount } from "@/app/components/DashboardHeaderAccount"
 import { DashboardHeaderMark } from "@/app/components/DashboardHeaderMark";
 import { ProductIntelPanelContent } from "@/app/components/ProductIntelPanelContent";
 import { AmazonAccountModal } from "@/app/settings/AmazonAccountModal";
-import { AmazonOAuthAlerts } from "@/app/settings/AmazonOAuthAlerts";
+import { AmazonOAuthQueryCleanup } from "@/app/settings/AmazonOAuthQueryCleanup";
 import { amazonSellerStorefrontUrl } from "@/lib/marketplaces";
+import { appHeaderCompact, appHeaderSuffix } from "@/lib/appBranding";
 import type { CatalogItem } from "@/lib/spApiClient";
 import type { ProductAnalysis, SellerType } from "@/lib/types";
 import Link from "next/link";
@@ -163,6 +164,15 @@ export default function ExplorerPage() {
       }
     }
   }, [catalogFetchSize]);
+
+  /** Best sellers catalog: clears category pick and reloads keyword list used for the default explorer feed. */
+  const openBestSellersList = useCallback(() => {
+    clearCategorySelection();
+    setKeyword("");
+    setInfoMessage(null);
+    setProductSort("bsr_asc");
+    void loadInitialBestSellers();
+  }, [clearCategorySelection, loadInitialBestSellers]);
 
   const searchProducts = useCallback(async () => {
     setLoadingPaused(false);
@@ -652,33 +662,34 @@ export default function ExplorerPage() {
         />
       )}
       <Suspense fallback={null}>
-        <AmazonOAuthAlerts />
+        <AmazonOAuthQueryCleanup />
       </Suspense>
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
-      <main className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-hidden p-4 pb-4 sm:gap-6 sm:p-6 sm:pb-6">
-        <header className="hidden shrink-0 rounded-xl border border-slate-600/80 border-t-4 border-t-teal-500 bg-slate-800/95 px-3 py-3 shadow-lg shadow-black/10 backdrop-blur md:block sm:px-4 sm:py-4 lg:px-5 lg:py-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-            <div className="hidden min-w-0 items-center gap-2 sm:gap-3 md:flex">
-              <div className="flex min-w-0 items-center gap-0">
-                <DashboardHeaderMark />
-                <h1 className="min-w-0 truncate pl-0.5 text-base font-bold tracking-tight text-slate-100 sm:pl-1 sm:text-lg md:text-xl lg:text-2xl xl:text-3xl sm:whitespace-normal">
-                  HIGH FOCUS Sourcing App
-                </h1>
-              </div>
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden p-3 pb-3 sm:gap-3 sm:p-4 sm:pb-4">
+        <header className="hf-dash-brand-header invert-exempt hidden shrink-0 rounded-xl border border-slate-600/80 border-t-4 border-t-teal-500 px-3 py-1.5 md:block sm:px-3 sm:py-2 lg:px-4 lg:py-2">
+          <div className="flex flex-col gap-1 md:gap-1">
+            <div className="flex min-w-0 flex-nowrap items-center gap-0 -space-x-1.5 md:-space-x-2.5">
+              <DashboardHeaderMark variant="toolbar" />
+              <h1 className="min-w-0 whitespace-nowrap text-base font-bold leading-none tracking-tight sm:text-lg md:text-xl lg:text-2xl">
+                <span className="text-slate-100 drop-shadow-[0_1px_14px_rgb(0_0_0/_0.5)]">{appHeaderCompact}</span>
+                <span className="font-semibold text-slate-400"> {appHeaderSuffix}</span>
+              </h1>
             </div>
-            <DashboardHeaderAccount
-              session={session}
-              amazonConnected={amazonHeaderConnected}
-              accountTitle={amazonHeaderTitle}
-              onConnectAmazon={() => setShowAmazonAccountModal(true)}
-              onAmazonDisconnected={refreshAmazonHeaderStatus}
-            />
+            <div className="flex shrink-0 justify-end">
+              <DashboardHeaderAccount
+                session={session}
+                amazonConnected={amazonHeaderConnected}
+                accountTitle={amazonHeaderTitle}
+                onConnectAmazon={() => setShowAmazonAccountModal(true)}
+                onAmazonDisconnected={refreshAmazonHeaderStatus}
+              />
+            </div>
           </div>
         </header>
 
         {/* Filters: Keyword, Sort, BSR max, Ungated */}
-        <section className="shrink-0 rounded-xl border border-slate-600/80 bg-slate-800/90 px-4 py-3 shadow-lg shadow-black/10">
-          <div className="flex flex-wrap items-center gap-3">
+        <section className="shrink-0 rounded-xl border border-slate-600/80 bg-slate-800/90 px-3 py-2 shadow-lg shadow-black/10 sm:px-3.5">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             <label className="flex items-center gap-2 text-sm text-slate-400">
               Sort
               <select
@@ -702,6 +713,15 @@ export default function ExplorerPage() {
                 className="w-24 rounded-lg border border-slate-600 bg-slate-700/50 px-2 py-1.5 text-sm text-slate-100 placeholder:text-slate-500 outline-none focus:ring-2 focus:ring-teal-500/50 focus:border-teal-500"
               />
             </label>
+            <button
+              type="button"
+              onClick={() => openBestSellersList()}
+              disabled={catalogLoading}
+              title="Clear category and load catalog results for Best sellers keyword search"
+              className="rounded-lg border border-slate-600 bg-slate-700/50 px-2.5 py-1 text-[13px] font-semibold text-slate-100 hover:bg-slate-600 disabled:opacity-45 sm:px-3 sm:py-1.5 sm:text-sm"
+            >
+              {catalogLoading ? "…" : "Best sellers"}
+            </button>
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
@@ -774,37 +794,11 @@ export default function ExplorerPage() {
                 {catalogLoading ? "…" : "Refresh"}
               </button>
             )}
-            {selectedCategory ? (
-              <button
-                type="button"
-                onClick={() => {
-                  clearCategorySelection();
-                  setKeyword("");
-                  setCatalogResults([]);
-                  setCatalogNextPageToken(null);
-                  setInfoMessage(null);
-                  setProductSort("bsr_asc");
-                  loadInitialBestSellers();
-                }}
-                className="rounded-lg border border-slate-600 bg-slate-700/50 px-3 py-1.5 text-sm font-medium text-slate-200 hover:bg-slate-600"
-              >
-                Best sellers
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => loadInitialBestSellers()}
-                disabled={catalogLoading}
-                className="rounded-lg border border-slate-600 bg-slate-700/50 px-3 py-1.5 text-sm font-medium text-slate-200 hover:bg-slate-600 disabled:opacity-50"
-              >
-                {catalogLoading ? "…" : "Refresh list"}
-              </button>
-            )}
           </div>
         </section>
 
         {error ? (
-          <div className="shrink-0 rounded-lg border border-rose-800 bg-rose-900/30 px-4 py-3 text-sm text-rose-300">
+          <div className="shrink-0 rounded-lg border border-rose-800 bg-rose-900/30 px-3 py-2 text-sm text-rose-300">
             {error}
             {analyzeRequiresAuth && (
               <p className="mt-2">
@@ -819,7 +813,7 @@ export default function ExplorerPage() {
           </div>
         ) : null}
         {infoMessage ? (
-          <div className="shrink-0 rounded-lg border border-emerald-800 bg-emerald-900/30 px-4 py-3 text-sm text-emerald-300">
+          <div className="shrink-0 rounded-lg border border-emerald-800 bg-emerald-900/30 px-3 py-2 text-sm text-emerald-300">
             {infoMessage}
           </div>
         ) : null}
@@ -828,9 +822,9 @@ export default function ExplorerPage() {
         {showProductTable && (
           <section
             ref={productTableContainerRef}
-            className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-600/80 bg-slate-800/90 shadow-lg shadow-black/10"
+            className="flex min-h-0 min-w-0 flex-1 basis-0 flex-col overflow-hidden rounded-xl border border-slate-600/80 bg-slate-800/90 shadow-lg shadow-black/10"
           >
-            <div className="flex shrink-0 flex-col gap-0.5 border-b border-slate-600/80 bg-slate-800/50 px-3 py-2.5">
+            <div className="flex shrink-0 flex-col gap-0 border-b border-slate-600/80 bg-slate-800/50 px-2.5 py-1 md:px-3 md:py-1.5">
               <div className="flex items-center justify-between gap-2">
                 <p className="text-xs font-medium text-slate-500 uppercase tracking-wide truncate">
                   {selectedCategory && selectedSubcategory
@@ -859,62 +853,18 @@ export default function ExplorerPage() {
                   ) : null}
                   <p>
                     {filteredAndSortedProducts.length} products
-                    {catalogNextPageToken ? " · Load more below" : ""}
+                    {catalogNextPageToken ? " · more below" : ""}
                   </p>
                 </div>
               </div>
-              {(selectedCategory || selectedSubcategory) && ungatedOnly && (
-                <p className="text-[10px] text-slate-500">
-                  {catalogLoading || loadMoreLoading ? (
-                    <>Loading up to 1,000 products in this category, then checking eligibility…</>
-                  ) : eligibilityStillChecking ? (
-                    eligibilityStats.checked > 0 ? (
-                      <>Checking eligibility… {eligibilityStats.checked} checked, <span className="text-slate-300 font-medium">{eligibilityStats.ungated} ungated</span> so far.</>
-                    ) : (
-                      <>Checking eligibility…</>
-                    )
-                  ) : (
-                    <>Ungated in this category. {eligibilityStats.checked} checked, {eligibilityStats.ungated} ungated.</>
-                  )}
-                </p>
-              )}
-              {!selectedCategory && !selectedSubcategory && ungatedOnly && (
-                <p className="text-[10px] text-slate-500">
-                  {eligibilityStillChecking ? (
-                    eligibilityStats.checked > 0 ? (
-                      <>Results update after each 500 products. {eligibilityStats.checked} checked, <span className="text-slate-300 font-medium">{eligibilityStats.ungated} ungated</span> so far.</>
-                    ) : (
-                      <>Checking eligibility…</>
-                    )
-                  ) : (
-                    <>Products confirmed ungated for your account. {eligibilityStats.checked} checked, {eligibilityStats.ungated} ungated.</>
-                  )}
-                </p>
-              )}
-              {!selectedCategory && !selectedSubcategory && !ungatedOnly && (
-                <p className="text-[10px] text-slate-500">
-                  {catalogResults.length === 0 && !catalogLoading ? (
-                    <>
-                      Use <span className="text-slate-400 font-medium">Best sellers</span> /{" "}
-                      <span className="text-slate-400 font-medium">Refresh list</span>, a category, or a keyword to load
-                      products from Amazon.
-                    </>
-                  ) : (
-                    <>
-                      Keyword search results, sorted by BSR. Amazon does not provide a true “top by rank” list; some
-                      high-BSR products may not appear.
-                    </>
-                  )}
-                </p>
-              )}
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto overflow-x-auto overscroll-y-contain pb-14 md:pb-3">
+            <div className="relative min-h-0 flex-1 overflow-y-auto overflow-x-auto overscroll-y-contain bg-slate-800/90 pb-14 pt-0 md:pb-10">
               <table className="w-full table-fixed border-collapse text-left text-sm">
-                <thead className="sticky top-0 z-[1] border-b border-slate-600/80 bg-slate-700/95 text-xs uppercase tracking-wide text-slate-400 backdrop-blur-sm">
+                <thead className="sticky top-0 z-[1] border-b border-slate-600/80 bg-slate-700 text-[10px] uppercase tracking-wide text-slate-400 shadow-[0_1px_0_0_rgb(71_85_105_/_0.8)] md:text-xs">
                   <tr>
-                    <th className="w-[60%] bg-slate-700/95 px-2 py-2">Product</th>
-                    <th className="w-[20%] bg-slate-700/95 px-2 py-2">Brand</th>
-                    <th className="w-[20%] bg-slate-700/95 px-2 py-2">BSR</th>
+                    <th className="w-[60%] bg-slate-700 px-2 py-1 md:py-1.5">Product</th>
+                    <th className="w-[20%] bg-slate-700 px-2 py-1 md:py-1.5">Brand</th>
+                    <th className="w-[20%] bg-slate-700 px-2 py-1 md:py-1.5">BSR</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -938,8 +888,9 @@ export default function ExplorerPage() {
                                   )
                                 ) : (
                                   <>
-                                    <Link href="/login" className="text-teal-400 hover:text-teal-300 underline">Sign in</Link>
-                                    {" "}
+                                    <Link href="/login" className="text-teal-400 hover:text-teal-300 underline">
+                                      Sign in
+                                    </Link>{" "}
                                     and connect Amazon to filter by ungated ASINs, or uncheck &quot;Ungated only&quot;.
                                   </>
                                 )}
@@ -962,44 +913,50 @@ export default function ExplorerPage() {
                             : ""
                         }`}
                       >
-                        <td className="px-2 py-1 min-w-0">
-                          <div className="flex items-center gap-1.5 min-w-0">
+                        <td className="min-w-0 px-2 py-0.5 md:py-1">
+                          <div className="flex min-w-0 items-center gap-1.5">
                             {item.imageUrl ? (
                               <img
                                 src={item.imageUrl}
                                 alt=""
                                 referrerPolicy="no-referrer"
-                                className="h-7 w-7 shrink-0 rounded border border-slate-600 object-contain"
+                                className="h-6 w-6 shrink-0 rounded border border-slate-600 object-contain md:h-7 md:w-7"
                               />
                             ) : (
-                              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded border border-slate-600 bg-slate-700 text-slate-500 text-[8px]">—</span>
+                              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-slate-600 bg-slate-700 text-[8px] text-slate-500 md:h-7 md:w-7">
+                                —
+                              </span>
                             )}
                             <div className="min-w-0">
-                              <p className="truncate font-medium text-slate-200 text-[11px]" title={item.title}>{item.title || item.asin}</p>
-                              <p className="text-[9px] text-slate-500 truncate">{item.asin}</p>
+                              <p className="truncate text-[11px] font-medium leading-tight text-slate-200" title={item.title}>
+                                {item.title || item.asin}
+                              </p>
+                              <p className="truncate text-[9px] leading-tight text-slate-500">{item.asin}</p>
                             </div>
                           </div>
                         </td>
-                        <td className="px-2 py-1 text-slate-300 text-[11px] truncate" title={item.brand ?? undefined}>{item.brand || "—"}</td>
-                        <td className="px-2 py-1 text-slate-300 text-[11px]">{formatNumber(item.rank)}</td>
+                        <td className="truncate px-2 py-0.5 text-[11px] text-slate-300 md:py-1" title={item.brand ?? undefined}>
+                          {item.brand || "—"}
+                        </td>
+                        <td className="px-2 py-0.5 text-[11px] tabular-nums text-slate-300 md:py-1">{formatNumber(item.rank)}</td>
                       </tr>
                     ))
                   )}
                 </tbody>
               </table>
+              {catalogNextPageToken && !catalogLoading ? (
+                <div className="flex justify-center border-t border-slate-700 bg-slate-800/95 px-3 py-2">
+                  <button
+                    type="button"
+                    onClick={() => loadMoreProducts()}
+                    disabled={loadMoreLoading}
+                    className="rounded-lg bg-sky-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-sky-500 disabled:opacity-50"
+                  >
+                    {loadMoreLoading ? "Loading…" : ungatedOnly ? "Load next 500" : "Load next 30"}
+                  </button>
+                </div>
+              ) : null}
             </div>
-            {catalogNextPageToken && !catalogLoading ? (
-              <div className="flex shrink-0 justify-center border-t border-slate-700 px-3 py-2">
-                <button
-                  type="button"
-                  onClick={() => loadMoreProducts()}
-                  disabled={loadMoreLoading}
-                  className="rounded-lg bg-sky-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-sky-500 disabled:opacity-50"
-                >
-                  {loadMoreLoading ? "Loading…" : ungatedOnly ? "Load next 500" : "Load next 30"}
-                </button>
-              </div>
-            ) : null}
           </section>
         )}
       </main>

@@ -1192,11 +1192,27 @@ export class SpApiClient {
       " | ",
     );
 
+    /**
+     * Listing reason codes like APPROVAL_REQUIRED do not match `\bAPPROVAL\b` — in JS, `_` is a
+     * word character, so there is no boundary between APPROVAL and _REQUIRED.
+     */
+    const approvalRequiredFromCodes = reasonCodes.some((c) =>
+      /APPROVAL_REQUIRED|APPLICATION_REQUIRED|QUALIFICATION_REQUIRED|SELLER_APPROVAL|REQUIRES?_?APPROVAL|REQUIRES?_?SELLER?_?APPROVAL/i.test(
+        c,
+      ),
+    );
+    const approvalRequiredFromUnderscorePhrases =
+      /\b(?:APPROVAL|APPLICATION|QUALIFICATION|SELLER)_REQUIRED\b/i.test(allSignals) ||
+      /\bREQUIRES?_?APPROVAL\b/i.test(allSignals);
+
     /** Generic “you need approval / app / gate” wording from Listings Restrictions. */
-    const approvalRequired =
+    const approvalRequiredFromWords =
       /\b(APPROVED|APPROVAL|RESTRICT|GATED|NOT_ELIGIBLE|REQUIRES?_?TO|APPLICATION|QUALIFICATION|SIGNATURE|EFFECTIVE_APPROVALDATE)\b/.test(
         allSignals,
       );
+
+    const approvalRequired =
+      approvalRequiredFromCodes || approvalRequiredFromUnderscorePhrases || approvalRequiredFromWords;
 
     /**
      * IP / authenticity / infringement — separate from Brand Registry PL gating.

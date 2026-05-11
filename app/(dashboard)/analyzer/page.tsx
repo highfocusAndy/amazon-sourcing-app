@@ -26,6 +26,7 @@ import { AmazonAccountModal } from "@/app/settings/AmazonAccountModal";
 import { useOpenDashboardSettings } from "@/app/context/DashboardSettingsContext";
 import { useSavedProducts } from "@/app/context/SavedProductsContext";
 import { amazonOfferListingUrl, amazonSellerStorefrontUrl } from "@/lib/marketplaces";
+import { appHeaderCompact, appHeaderSuffix } from "@/lib/appBranding";
 import type { ProductAnalysis, SellerType } from "@/lib/types";
 
 type SortColumn =
@@ -1812,23 +1813,24 @@ function AnalyzerPageContent() {
       )}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
       <main className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto overflow-x-hidden overscroll-y-contain p-4 pb-[calc(4.75rem+env(safe-area-inset-bottom,0px))] sm:gap-6 sm:p-6 sm:pb-[calc(4.75rem+env(safe-area-inset-bottom,0px))] lg:overflow-hidden lg:pb-6">
-        <header className="hidden shrink-0 rounded-xl border border-slate-600/80 border-t-4 border-t-teal-500 bg-slate-800/95 px-3 py-3 shadow-lg shadow-black/10 backdrop-blur md:block sm:px-4 sm:py-4 lg:px-5 lg:py-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-            <div className="hidden min-w-0 items-center gap-2 sm:gap-3 md:flex">
-              <div className="flex min-w-0 items-center gap-0">
-                <DashboardHeaderMark />
-                <h1 className="min-w-0 truncate pl-0.5 text-base font-bold tracking-tight text-slate-100 sm:pl-1 sm:text-lg md:text-xl lg:text-2xl xl:text-3xl sm:whitespace-normal">
-                  HIGH FOCUS Sourcing App
-                </h1>
-              </div>
+        <header className="hf-dash-brand-header invert-exempt hidden shrink-0 rounded-xl border border-slate-600/80 border-t-4 border-t-teal-500 px-3 py-2 md:block sm:px-4 sm:py-2 lg:px-5 lg:py-2.5">
+          <div className="flex flex-col gap-1 md:gap-1">
+            <div className="flex min-w-0 flex-nowrap items-center gap-0 -space-x-1.5 md:-space-x-2.5">
+              <DashboardHeaderMark variant="toolbar" />
+              <h1 className="min-w-0 whitespace-nowrap text-base font-bold leading-none tracking-tight sm:text-lg md:text-xl lg:text-2xl">
+                <span className="text-slate-100 drop-shadow-[0_1px_14px_rgb(0_0_0/_0.5)]">{appHeaderCompact}</span>
+                <span className="font-semibold text-slate-400"> {appHeaderSuffix}</span>
+              </h1>
             </div>
-            <DashboardHeaderAccount
-              session={session}
-              amazonConnected={amazonHeaderConnected}
-              accountTitle={amazonHeaderTitle}
-              onConnectAmazon={() => setShowAmazonAccountModal(true)}
-              onAmazonDisconnected={refreshAmazonHeaderStatus}
-            />
+            <div className="flex shrink-0 justify-end">
+              <DashboardHeaderAccount
+                session={session}
+                amazonConnected={amazonHeaderConnected}
+                accountTitle={amazonHeaderTitle}
+                onConnectAmazon={() => setShowAmazonAccountModal(true)}
+                onAmazonDisconnected={refreshAmazonHeaderStatus}
+              />
+            </div>
           </div>
         </header>
 

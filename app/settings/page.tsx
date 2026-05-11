@@ -2,8 +2,6 @@ import { auth } from "@/auth";
 import { userHasAppAccess } from "@/lib/billing/access";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Suspense } from "react";
-import { AmazonOAuthAlerts } from "./AmazonOAuthAlerts";
 import { SettingsContent } from "./SettingsContent";
 
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -28,10 +26,10 @@ export default async function SettingsPage({
   const amazonConnected = sp.amazon_connected;
   const amazonError = sp.amazon_error;
   if (amazonConnected === "1") {
-    redirect("/?amazon_connected=1");
+    redirect("/");
   }
   if (typeof amazonError === "string" && amazonError) {
-    redirect(`/?amazon_error=${amazonError}`);
+    redirect("/");
   }
 
   return (
@@ -56,9 +54,6 @@ export default async function SettingsPage({
             Explorer filters, analysis preferences, marketplace, and app preferences.
           </p>
         </div>
-        <Suspense fallback={null}>
-          <AmazonOAuthAlerts />
-        </Suspense>
         <SettingsContent />
       </main>
     </div>

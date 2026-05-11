@@ -220,4 +220,23 @@ export function initAppearance(): void {
 
   const savedDensity = localStorage.getItem(DENSITY_STORAGE_KEY) as TableDensity | null;
   if (savedDensity) applyDensity(savedDensity);
+
+  persistAppearanceCookies();
+}
+
+/** Mirrors appearance localStorage keys to cookies so top-level OAuth redirects restore prefs if storage is partitioned. */
+const APPEARANCE_COOKIE_MAX_AGE = 60 * 60 * 24 * 400;
+
+export function persistAppearanceCookies(): void {
+  if (typeof document === "undefined") return;
+  const seg = `; path=/; max-age=${APPEARANCE_COOKIE_MAX_AGE}; SameSite=Lax`;
+  const write = (key: string) => {
+    const v = localStorage.getItem(key);
+    if (v != null && v !== "") {
+      document.cookie = `${key}=${encodeURIComponent(v)}${seg}`;
+    }
+  };
+  write(THEME_STORAGE_KEY);
+  write(MODE_STORAGE_KEY);
+  write(DENSITY_STORAGE_KEY);
 }

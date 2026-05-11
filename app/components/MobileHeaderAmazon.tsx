@@ -47,7 +47,7 @@ export function MobileHeaderAmazon() {
           type="button"
           onClick={() => setModalOpen(true)}
           title="Connect your Amazon seller account"
-          className="shrink-0 rounded-md border border-teal-500/55 bg-teal-500/10 px-1.5 py-1 text-[10px] font-semibold leading-none text-teal-300 shadow-sm hover:bg-teal-500/20 hover:text-teal-200 sm:px-2"
+          className="shrink-0 rounded border border-teal-500/55 bg-teal-500/10 px-1 py-0.5 text-[9px] font-semibold leading-none text-teal-300 shadow-sm hover:bg-teal-500/20 hover:text-teal-200 sm:px-1.5 sm:py-0.5 sm:text-[10px]"
         >
           <span className="sm:hidden">Amazon</span>
           <span className="hidden sm:inline">Connect Amazon</span>

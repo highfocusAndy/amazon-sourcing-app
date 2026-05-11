@@ -1,4 +1,5 @@
 import type { ProductAnalysis } from "@/lib/types";
+import { approvalRequiredEffective } from "@/lib/sourcingIntelligence";
 
 export type ProductInsightContext = {
   sessionSignedIn: boolean;
@@ -8,7 +9,7 @@ export type ProductInsightContext = {
 function isIncompletePricingBlock(item: ProductAnalysis): boolean {
   return (
     !item.error &&
-    !(item.approvalRequired || item.listingRestricted || item.restrictedBrand) &&
+    !(approvalRequiredEffective(item) || item.listingRestricted || item.restrictedBrand) &&
     (item.netProfit === null || item.roiPercent === null || item.buyBoxPrice === null)
   );
 }
@@ -37,7 +38,7 @@ export function buildProductInsightMessage(item: ProductAnalysis, ctx: ProductIn
     return "Data connection issue. Re-run analysis and confirm your Amazon account link and API credentials.";
   }
 
-  if (item.approvalRequired || item.listingRestricted || item.restrictedBrand) {
+  if (approvalRequiredEffective(item) || item.listingRestricted || item.restrictedBrand) {
     return "Listing/gating risk detected. Check approvals and ungating before buying.";
   }
 

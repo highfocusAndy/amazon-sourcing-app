@@ -10,6 +10,7 @@ import {
 import { SpApiClient, tryReadSpApiConfig } from "@/lib/spApiClient";
 import type { CatalogItem } from "@/lib/spApiClient";
 import { estimateMonthlySalesFromBsr } from "@/lib/salesEstimate";
+import { approvalRequiredEffective } from "@/lib/sourcingIntelligence";
 import type { Decision, ProductAnalysis, ProductInput, RowColor, SellerType } from "@/lib/types";
 
 const BAD_SALES_RANK_THRESHOLD = 100_000;
@@ -146,7 +147,7 @@ function evaluateDecision(result: ProductAnalysis, projectedMonthlyUnits: number
   const restricted = isRestrictedBrand(result.brand, getServerEnv().restrictedBrands);
   result.restrictedBrand = restricted;
 
-  if (result.approvalRequired === true) {
+  if (approvalRequiredEffective(result)) {
     addReasonUnique(reasons, "This ASIN requires approval for your seller account.");
   }
 
@@ -228,7 +229,7 @@ function evaluateDecision(result: ProductAnalysis, projectedMonthlyUnits: number
   } else if (hasDeficit) {
     decision = "NO_MARGIN";
     rowColor = "red";
-  } else if ((restricted || result.approvalRequired === true || result.listingRestricted === true) && result.worthUngating) {
+  } else if ((restricted || approvalRequiredEffective(result) || result.listingRestricted === true) && result.worthUngating) {
     decision = "WORTH UNGATING";
     rowColor = "yellow";
   } else if (result.netProfit === null || result.roiPercent === null) {
@@ -380,11 +381,15 @@ export async function analyzeProduct(
 
     const cachedAnalysis = await getAnalysisResultCache(analysisCacheKeyStr);
     if (cachedAnalysis && !cachedAnalysis.error && cachedAnalysis.asin) {
-      return {
+      const merged: ProductAnalysis = {
         ...cachedAnalysis,
         id: crypto.randomUUID(),
         createdAt: new Date().toISOString(),
       };
+      if (approvalRequiredEffective(merged)) {
+        merged.approvalRequired = true;
+      }
+      return evaluateDecision(merged, projectedMonthlyUnits);
     }
 
     let catalog = null;
@@ -489,6 +494,9 @@ export async function analyzeProduct(
         result.isHazmat = result.isHazmat ?? null;
       }
       result.restrictionReasonCodes = listingRestrictions.reasonCodes;
+      if (approvalRequiredEffective(result)) {
+        result.approvalRequired = true;
+      }
       if (listingRestrictions.reasonCodes.length > 0) {
         addReasonUnique(result.reasons, `Restriction codes: ${listingRestrictions.reasonCodes.join(", ")}`);
       }

@@ -28,7 +28,7 @@ export function DashboardHeaderAccount({
         type="button"
         onClick={onConnectAmazon}
         title="Links your Amazon seller account (Seller Central). Your app login email can be different."
-        className="invert-exempt w-full rounded-lg border border-teal-500/60 bg-teal-500/10 px-3 py-2 text-sm font-semibold text-teal-300 hover:bg-teal-500/20 hover:text-teal-200 transition-colors sm:w-auto sm:py-1.5 sm:text-xs"
+        className="inline-flex w-auto max-w-full shrink-0 rounded-md border border-teal-500/55 bg-teal-500/10 px-2 py-1 text-[11px] font-semibold text-teal-300 hover:bg-teal-500/20 hover:text-teal-200 transition-colors sm:px-2.5 sm:py-1 sm:text-xs"
       >
         Connect Amazon account
       </button>
@@ -53,9 +53,9 @@ export function DashboardHeaderAccount({
   }
 
   return (
-    <div className="flex w-full min-w-0 max-w-none flex-col items-stretch gap-0.5 text-right sm:w-auto sm:max-w-[min(100%,18rem)] sm:items-end">
+    <div className="flex min-w-0 max-w-full flex-col items-end gap-0.5 text-right sm:max-w-[min(100%,18rem)]">
       <span
-        className="text-sm font-semibold text-slate-100 leading-snug truncate w-full"
+        className="block max-w-full text-sm font-semibold text-slate-100 leading-snug truncate text-right"
         title={title}
       >
         {title}
