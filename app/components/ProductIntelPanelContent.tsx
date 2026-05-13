@@ -3,6 +3,7 @@
 import { useMemo, type MouseEvent, type ReactNode } from "react";
 import { amazonOfferListingUrl } from "@/lib/marketplaces";
 import { computeEffectiveEconomics, approvalRequiredEffective, approvalEligibilityUnset } from "@/lib/sourcingIntelligence";
+import { estimateMonthlySalesFromBsr } from "@/lib/salesEstimate";
 import { useCompetitionThresholds } from "@/app/context/CompetitionThresholdsContext";
 import type { ProductAnalysis, SellerType } from "@/lib/types";
 import {
@@ -40,6 +41,23 @@ function formatNumber(value: number | null): string {
 
 function roundToTwo(value: number): number {
   return Math.round(value * 100) / 100;
+}
+
+const AMAZON_SELLER_ID = "ATVPDKIKX0DER";
+
+function roundToClean(n: number): number {
+  if (n < 50) return Math.max(1, Math.round(n));
+  if (n < 500) return Math.round(n / 25) * 25;
+  if (n < 2_000) return Math.round(n / 100) * 100;
+  if (n < 10_000) return Math.round(n / 250) * 250;
+  return Math.round(n / 1_000) * 1_000;
+}
+
+function formatSalesRange(estimate: number): string {
+  const low = Math.max(1, roundToClean(Math.round(estimate * 0.65)));
+  const high = roundToClean(Math.round(estimate * 1.4));
+  if (low >= high) return `~${low.toLocaleString()}/mo`;
+  return `~${low.toLocaleString()}–${high.toLocaleString()}/mo`;
 }
 
 function parsePositiveInput(raw: string): number | null {
@@ -150,6 +168,24 @@ export function ProductIntelPanelContent({
     () => computeEffectiveEconomics(selectedProduct, detailPanelCost),
     [selectedProduct, detailPanelCost],
   );
+
+  const salesEstimate = useMemo(() => {
+    if (selectedProduct.estimatedMonthlySales != null && selectedProduct.estimatedMonthlySales > 0) {
+      return selectedProduct.estimatedMonthlySales;
+    }
+    if (selectedProduct.salesRank != null) {
+      return estimateMonthlySalesFromBsr(selectedProduct.salesRank, selectedProduct.salesRankCategory);
+    }
+    return null;
+  }, [selectedProduct.estimatedMonthlySales, selectedProduct.salesRank, selectedProduct.salesRankCategory]);
+
+  const amazonOnListing = useMemo((): "yes" | "no" | "unknown" => {
+    const ids = selectedProduct.sellerIds ?? [];
+    const details = selectedProduct.sellerDetails ?? [];
+    if (ids.length === 0 && details.length === 0) return "unknown";
+    const found = ids.includes(AMAZON_SELLER_ID) || details.some((d) => d.sellerId === AMAZON_SELLER_ID);
+    return found ? "yes" : "no";
+  }, [selectedProduct.sellerIds, selectedProduct.sellerDetails]);
 
   const amazonListingUrl =
     selectedProduct.asin ? amazonOfferListingUrl(marketplaceDomain, selectedProduct.asin) : null;
@@ -349,6 +385,18 @@ export function ProductIntelPanelContent({
                   {formatCurrency(selectedProduct.buyBoxPrice)}
                 </p>
               </div>
+              {salesEstimate != null && salesEstimate > 0 ? (
+                <div
+                  className={`${HF_INNER_CARD} col-span-2`}
+                  title="Estimate based on BSR + category. Not guaranteed."
+                >
+                  <p className={HF_KPI_LABEL}>Est. sales / mo</p>
+                  <p className="mt-0.5 text-lg font-extrabold tabular-nums tracking-tight text-slate-50">
+                    {formatSalesRange(salesEstimate)}{" "}
+                    <span className="text-[10px] font-normal text-slate-500">(est.)</span>
+                  </p>
+                </div>
+              ) : null}
             </div>
 
             <div className="flex rounded-[11px] border border-white/[0.08] bg-slate-950/35 p-0.5 shadow-[inset_0_1px_2px_rgba(0,0,0,0.25)]">
@@ -502,6 +550,16 @@ export function ProductIntelPanelContent({
       </div>
 
       <IntelSection eyebrow="Competition">
+        <div className={HF_INNER_CARD_STATIC}>
+          <p className={HF_KPI_LABEL}>Amazon on listing</p>
+          {amazonOnListing === "yes" ? (
+            <p className="mt-0.5 text-sm font-bold text-rose-400">⚠️ YES — Amazon is a seller</p>
+          ) : amazonOnListing === "no" ? (
+            <p className="mt-0.5 text-sm font-bold text-emerald-400">✅ NO — Amazon not selling</p>
+          ) : (
+            <p className="mt-0.5 text-sm text-slate-500">— <span className="text-[10px]">Load offer details to check</span></p>
+          )}
+        </div>
         {selectedProduct.amazonSalesVolumeLabel ? (
           <div className="rounded-lg border border-slate-600 bg-emerald-900/30 px-3 py-2">
             <p className="text-xs text-slate-500">Product sells (from Amazon)</p>
