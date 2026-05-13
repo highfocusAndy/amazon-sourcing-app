@@ -2174,17 +2174,13 @@ function AnalyzerPageContent() {
                       {(() => {
                         const ids = item.sellerIds ?? [];
                         const details = item.sellerDetails ?? [];
-                        if (ids.length === 0 && details.length === 0) {
-                          return <span className="text-slate-600">—</span>;
+                        if (ids.includes("ATVPDKIKX0DER") || details.some((d) => d.sellerId === "ATVPDKIKX0DER")) {
+                          return <span className="font-semibold text-rose-400">⚠️ YES</span>;
                         }
-                        const found =
-                          ids.includes("ATVPDKIKX0DER") ||
-                          details.some((d) => d.sellerId === "ATVPDKIKX0DER");
-                        return found ? (
-                          <span className="font-semibold text-rose-400">⚠️ YES</span>
-                        ) : (
-                          <span className="font-semibold text-emerald-400">✅ NO</span>
-                        );
+                        if (ids.length > 0 || details.length > 0 || item.offerCount === 0) {
+                          return <span className="font-semibold text-emerald-400">✅ NO</span>;
+                        }
+                        return <span className="text-slate-600">—</span>;
                       })()}
                     </td>
                   </tr>
