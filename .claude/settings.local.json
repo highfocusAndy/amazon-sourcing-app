@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -E \"\\\\.ts$\")",
+      "Bash(npm run *)",
+      "Bash(Get-ChildItem -Path \"C:\\\\dev\\\\amazon-sourcing-app\" -Recurse -Filter \"*.tsx\" -o File)",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(Get-ChildItem -Path \"C:\\\\dev\\\\amazon-sourcing-app\" -Directory)",
+      "Bash(Select-Object Name)"
+    ]
+  }
+}
