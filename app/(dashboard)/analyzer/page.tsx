@@ -2122,12 +2122,15 @@ function AnalyzerPageContent() {
                     </button>
                   </th>
                 ))}
+                <th className="bg-slate-700/95 px-3 py-3 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-300 whitespace-nowrap">
+                  Amazon?
+                </th>
               </tr>
             </thead>
             <tbody>
               {displayedResults.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-3 py-8 text-center text-sm text-slate-500">
+                  <td colSpan={5} className="px-3 py-8 text-center text-sm text-slate-500">
                     {lastRunMode === "upload"
                       ? "No products match the selected view filter."
                       : "No listings to show."}
@@ -2167,6 +2170,23 @@ function AnalyzerPageContent() {
                     </td>
                     <td className="px-3 py-1.5 text-[13px] text-slate-300">{formatNumber(item.salesRank)}</td>
                     <td className="px-3 py-1.5 text-[13px] text-slate-300">{item.brand || "—"}</td>
+                    <td className="px-3 py-1.5 text-[13px] whitespace-nowrap">
+                      {(() => {
+                        const ids = item.sellerIds ?? [];
+                        const details = item.sellerDetails ?? [];
+                        if (ids.length === 0 && details.length === 0) {
+                          return <span className="text-slate-600">—</span>;
+                        }
+                        const found =
+                          ids.includes("ATVPDKIKX0DER") ||
+                          details.some((d) => d.sellerId === "ATVPDKIKX0DER");
+                        return found ? (
+                          <span className="font-semibold text-rose-400">⚠️ YES</span>
+                        ) : (
+                          <span className="font-semibold text-emerald-400">✅ NO</span>
+                        );
+                      })()}
+                    </td>
                   </tr>
                 ))
               )}
