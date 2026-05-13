@@ -339,6 +339,15 @@ function LeftNavWithCategories({
           </span>
           Settings
         </button>
+        <div className="flex justify-center gap-3 px-4 pb-1 pt-0.5">
+          <Link href="/terms" className="text-[10px] text-slate-600 transition-colors hover:text-slate-400">
+            Terms
+          </Link>
+          <span className="text-[10px] text-slate-700" aria-hidden>·</span>
+          <Link href="/privacy" className="text-[10px] text-slate-600 transition-colors hover:text-slate-400">
+            Privacy
+          </Link>
+        </div>
       </div>
     </nav>
   );
