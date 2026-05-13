@@ -182,10 +182,15 @@ export function ProductIntelPanelContent({
   const amazonOnListing = useMemo((): "yes" | "no" | "unknown" => {
     const ids = selectedProduct.sellerIds ?? [];
     const details = selectedProduct.sellerDetails ?? [];
-    if (ids.length === 0 && details.length === 0) return "unknown";
-    const found = ids.includes(AMAZON_SELLER_ID) || details.some((d) => d.sellerId === AMAZON_SELLER_ID);
-    return found ? "yes" : "no";
-  }, [selectedProduct.sellerIds, selectedProduct.sellerDetails]);
+    // Confirmed present
+    if (ids.includes(AMAZON_SELLER_ID) || details.some((d) => d.sellerId === AMAZON_SELLER_ID)) return "yes";
+    // Seller-level IDs available — Amazon is not among them
+    if (ids.length > 0 || details.length > 0) return "no";
+    // No sellers on the listing at all → Amazon cannot be selling
+    if (selectedProduct.offerCount === 0) return "no";
+    // Offer count exists but no seller IDs — can't confirm either way
+    return "unknown";
+  }, [selectedProduct.sellerIds, selectedProduct.sellerDetails, selectedProduct.offerCount]);
 
   const amazonListingUrl =
     selectedProduct.asin ? amazonOfferListingUrl(marketplaceDomain, selectedProduct.asin) : null;
@@ -553,11 +558,11 @@ export function ProductIntelPanelContent({
         <div className={HF_INNER_CARD_STATIC}>
           <p className={HF_KPI_LABEL}>Amazon on listing</p>
           {amazonOnListing === "yes" ? (
-            <p className="mt-0.5 text-sm font-bold text-rose-400">⚠️ YES — Amazon is a seller</p>
+            <p className="mt-0.5 text-sm font-bold text-rose-400">⚠️ YES</p>
           ) : amazonOnListing === "no" ? (
-            <p className="mt-0.5 text-sm font-bold text-emerald-400">✅ NO — Amazon not selling</p>
+            <p className="mt-0.5 text-sm font-bold text-emerald-400">✅ NO</p>
           ) : (
-            <p className="mt-0.5 text-sm text-slate-500">— <span className="text-[10px]">Load offer details to check</span></p>
+            <p className="mt-0.5 text-sm text-slate-500">— Unable to confirm</p>
           )}
         </div>
         {selectedProduct.amazonSalesVolumeLabel ? (
