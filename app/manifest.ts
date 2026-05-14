@@ -22,16 +22,16 @@ export default function manifest(): MetadataRoute.Manifest {
     categories: ["business", "finance", "utilities"],
     icons: [
       {
-        src: "/HF_LOGO.png",
+        src: "/api/icon",
         sizes: "512x512",
         type: "image/png",
-        purpose: "any",
+        purpose: "any maskable",
       },
       {
-        src: "/HF_LOGO.png",
+        src: "/api/icon",
         sizes: "192x192",
         type: "image/png",
-        purpose: "any",
+        purpose: "any maskable",
       },
     ],
   };
