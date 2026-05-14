@@ -25,13 +25,13 @@ export default function manifest(): MetadataRoute.Manifest {
         src: "/api/icon",
         sizes: "512x512",
         type: "image/png",
-        purpose: "any maskable",
+        purpose: "maskable",
       },
       {
         src: "/api/icon",
         sizes: "192x192",
         type: "image/png",
-        purpose: "any maskable",
+        purpose: "maskable",
       },
     ],
   };
