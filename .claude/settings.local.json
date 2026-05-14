@@ -6,7 +6,9 @@
       "Bash(Get-ChildItem -Path \"C:\\\\dev\\\\amazon-sourcing-app\" -Recurse -Filter \"*.tsx\" -o File)",
       "Bash(Select-Object -ExpandProperty FullName)",
       "Bash(Get-ChildItem -Path \"C:\\\\dev\\\\amazon-sourcing-app\" -Directory)",
-      "Bash(Select-Object Name)"
+      "Bash(Select-Object Name)",
+      "Bash(git add *)",
+      "Bash(git push *)"
     ]
   }
 }
