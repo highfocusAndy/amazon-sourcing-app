@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable @next/next/no-img-element */
 
 import { useMemo, type MouseEvent, type ReactNode } from "react";
 import { amazonOfferListingUrl } from "@/lib/marketplaces";

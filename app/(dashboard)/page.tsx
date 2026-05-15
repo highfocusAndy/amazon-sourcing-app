@@ -485,20 +485,7 @@ export default function ExplorerPage() {
     return asins.some((asin) => eligibilityByAsin[asin] === undefined);
   }, [ungatedOnly, catalogResults, eligibilityByAsin]);
 
-  const eligibilityStats = useMemo(() => {
-    if (catalogResults.length === 0) return { checked: 0, ungated: 0 };
-    const asins = catalogResults.map((p) => p.asin);
-    let checked = 0;
-    let ungated = 0;
-    for (const asin of asins) {
-      const v = eligibilityByAsin[asin];
-      if (v !== undefined) checked += 1;
-      if (v === true) ungated += 1;
-    }
-    return { checked, ungated };
-  }, [catalogResults, eligibilityByAsin]);
-
-  const handleProductClick = useCallback(
+const handleProductClick = useCallback(
     async (item: CatalogItem) => {
       setPendingProductAsin(item.asin);
       setPanelAnalysisLoading(true);

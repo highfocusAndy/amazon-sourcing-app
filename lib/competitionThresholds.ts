@@ -27,7 +27,7 @@ export function normalizeCompetitionThresholds(raw?: Partial<CompetitionThreshol
   const modDefault = DEFAULT_COMPETITION_THRESHOLDS.moderateMaxOffers;
   const satDefault = DEFAULT_COMPETITION_THRESHOLDS.saturatedMinOffers;
 
-  let low = clampInt(raw?.lowMaxOffers, 1, 98, lowDefault);
+  const low = clampInt(raw?.lowMaxOffers, 1, 98, lowDefault);
   let mod = clampInt(raw?.moderateMaxOffers, low + 1, 499, Math.max(low + 1, modDefault));
   let sat = clampInt(raw?.saturatedMinOffers, mod + 1, 500, Math.max(mod + 1, satDefault));
 

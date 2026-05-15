@@ -16,12 +16,10 @@ import {
   catalogTitleMatchesAuxProductType,
   catalogTitleMatchesProductFamily,
   classifyFamilyMatch,
-  detectCatalogCanonicalProductType,
   detectMultipackInTitle,
   familyTokens,
   parseVisionProductFamilyJson,
   sortByFamilyMatchGroup,
-  strictPackageBrandFromVision,
   type VisionProductFamilyParse,
 } from "@/lib/imageSearchRanking";
 import type { ProductAnalysis } from "@/lib/types";
@@ -33,18 +31,12 @@ const MAX_BYTES = 4 * 1024 * 1024;
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 /** Cap on rows we'll fetch from SP-API and consider for family matching. */
 const FAMILY_SEARCH_FETCH_CAP = 100;
-/** Product type must be explicitly identified with high confidence before strict type search. */
-const MIN_PRODUCT_TYPE_CONFIDENCE = 0.72;
 /** Extremely low vision confidence means the image is unusable. */
 const MIN_USABLE_IMAGE_CONFIDENCE = 0.05;
-const LOW_PRODUCT_TYPE_CONFIDENCE = 0.5;
 const FALLBACK_VISIBLE_TEXT_LIMIT = 4;
 
 const NOTICE_UNCLEAR =
   "Unable to confidently identify the product. Please rescan.";
-const NOTICE_NOT_ON_AMAZON =
-  "This product does not appear to be listed on Amazon yet.";
-
 const VISION_PROMPT = `You analyze one retail product photo. Extract the most stable product identity for Amazon lookup (works for ANY category: electronics, home, grocery, beauty, tools, etc.).
 
 Return ONLY valid JSON (no markdown, no code fences, no commentary) with this exact shape:
@@ -200,48 +192,12 @@ function brandLooksLikeVariantWord(brand: string): boolean {
   return false; // multi-word brands are usually real (e.g. "Tropic Isle Living")
 }
 
-/**
- * Strict brand match: when vision read a brand from the package, require the catalog row's
- * `brand` field (NOT the title) to actually match. This is what stops "olive" appearing in a
- * title from passing as if it were the brand.
- *
- * - Empty package brand → always pass (unbranded items, generic accessories).
- * - Package brand vs catalog brand: case-insensitive exact OR one contains the other (handles
- *   "ibi" vs "IBI", "Tropic Isle" vs "Tropic Isle Living").
- */
-function strictCatalogBrandMatch(catalogBrand: string, packageBrand: string | null): boolean {
-  if (!packageBrand) return true;
-  const pb = packageBrand.trim().toLowerCase();
-  if (pb.length < 2) return true;
-  const cb = catalogBrand.trim().toLowerCase();
-  if (!cb) return false;
-  if (cb === pb) return true;
-  if (cb.includes(pb) || pb.includes(cb)) return true;
-  return false;
-}
-
 type ScanLogEntry = {
   asin: string;
   title: string;
   status: "accepted" | "rejected";
   reason: string;
 };
-
-type ProductTypeMode = "high" | "medium" | "low" | "unknown";
-
-function logScanResults(label: string, entries: ScanLogEntry[]): void {
-  if (entries.length === 0) return;
-  const accepted = entries.filter((e) => e.status === "accepted");
-  const rejected = entries.filter((e) => e.status === "rejected");
-  console.log(
-    `[image-search] ${label} → ${accepted.length} accepted, ${rejected.length} rejected`,
-  );
-  for (const e of entries.slice(0, 30)) {
-    console.log(
-      `[image-search]   ${e.status === "accepted" ? "✓" : "✗"} ${e.asin} :: ${e.reason} :: ${e.title.slice(0, 90)}`,
-    );
-  }
-}
 
 function normalizeFormBarcode(raw: unknown): string {
   if (typeof raw !== "string") return "";
@@ -261,13 +217,6 @@ function titleMatchesVisibleText(title: string, visibleText: string[]): boolean 
     if (t.includes(cue)) hits++;
   }
   return hits >= 1;
-}
-
-function inferTypeMode(parse: VisionProductFamilyParse): ProductTypeMode {
-  if (!parse.product_type.trim()) return "unknown";
-  if (parse.product_type_confidence >= MIN_PRODUCT_TYPE_CONFIDENCE) return "high";
-  if (parse.product_type_confidence >= LOW_PRODUCT_TYPE_CONFIDENCE) return "medium";
-  return "low";
 }
 
 function imageIdentityIsUsable(parse: VisionProductFamilyParse): boolean {
@@ -313,70 +262,6 @@ function isBrandOnlyFallbackQuery(query: string, brand: string): boolean {
 function nonBrandKeywordTokens(query: string, brand: string): string[] {
   const brandTokens = new Set(familyTokens(brand));
   return familyTokens(query).filter((tok) => !brandTokens.has(tok));
-}
-
-function isGenericIdentityParse(parse: VisionProductFamilyParse): boolean {
-  const familyCount = familyTokens(parse.core_product_family).length;
-  const hasStrongSignals = Boolean(
-    parse.brand.trim() ||
-      parse.product_name.trim() ||
-      parse.model_number.trim() ||
-      parse.visible_text.some((x) => x.trim().length >= 4),
-  );
-  return !hasStrongSignals && familyCount <= 2;
-}
-
-async function rerankSeedByVisualMatch(opts: {
-  apiKey: string;
-  model: string;
-  scanDataUrl: string;
-  candidates: CatalogItem[];
-}): Promise<string[]> {
-  const candidates = opts.candidates.filter((c) => c.asin && c.imageUrl).slice(0, 10);
-  if (candidates.length < 2) return [];
-  const lines = candidates.map((c, idx) => `${idx + 1}. ${c.asin} :: ${c.title.slice(0, 140)}`);
-  const content: Array<{ type: "text"; text: string } | { type: "image_url"; image_url: { url: string; detail: "low" } }> = [
-    {
-      type: "text",
-      text:
-        "Match the scanned product photo to the closest candidate Amazon listings by physical appearance. " +
-        "Return JSON: {\"best_asins\":[\"ASIN1\",\"ASIN2\",\"ASIN3\"]}. Include only ASINs from this list.\n" +
-        `Candidates:\n${lines.join("\n")}\n\n` +
-        "First image is the scanned product. Following images are candidates in the same numbered order.",
-    },
-    { type: "image_url", image_url: { url: opts.scanDataUrl, detail: "low" } },
-  ];
-  for (const c of candidates) {
-    content.push({ type: "image_url", image_url: { url: c.imageUrl!, detail: "low" } });
-  }
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${opts.apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: opts.model,
-      temperature: 0,
-      max_tokens: 220,
-      response_format: { type: "json_object" },
-      messages: [{ role: "user", content }],
-    }),
-  });
-  if (!res.ok) return [];
-  const payload = (await res.json()) as { choices?: Array<{ message?: { content?: string | null } }> };
-  const raw = payload.choices?.[0]?.message?.content?.trim() ?? "";
-  try {
-    const parsed = JSON.parse(raw) as { best_asins?: unknown };
-    if (!Array.isArray(parsed.best_asins)) return [];
-    const set = new Set(candidates.map((c) => c.asin));
-    return parsed.best_asins
-      .filter((x): x is string => typeof x === "string")
-      .map((x) => x.trim().toUpperCase())
-      .filter((x) => set.has(x));
-  } catch {
-    return [];
-  }
 }
 
 const PRODUCT_TYPE_TOKENS = ["lotion", "shampoo", "conditioner", "oil", "cream", "cleanser"] as const;
@@ -451,32 +336,6 @@ function isLikelyCrossProductBundleTitle(title: string, parse: VisionProductFami
   const family = parse.core_product_family.trim().toLowerCase();
   if (family && !t.includes(family) && /\bwith\b/.test(t)) return true;
   return false;
-}
-
-function hasStrongAirFreshenerAnchors(parse: VisionProductFamilyParse): boolean {
-  const brand = parse.brand.trim().toLowerCase();
-  const name = parse.product_name.trim().toLowerCase();
-  const cues = parse.visible_text.map((x) => x.trim().toLowerCase());
-  const blob = [brand, name, ...cues].join(" ");
-  if (!blob) return false;
-  if (/\b(air\s*wick|febreze|glade|freshmatic)\b/.test(blob)) return true;
-  if (/\b(air\s*freshener|automatic\s*spray|spray\s*refill|fragrance\s*diffuser|odor\s*eliminator)\b/.test(blob)) {
-    return true;
-  }
-  return false;
-}
-
-function looksLikeAirFreshenerParse(parse: VisionProductFamilyParse): boolean {
-  const fam = parse.core_product_family.trim().toLowerCase();
-  const type = parse.product_type.trim().toLowerCase();
-  const name = parse.product_name.trim().toLowerCase();
-  return (
-    /\bair\s*fresh/.test(fam) ||
-    /\bair\s*fresh/.test(type) ||
-    /\bair\s*fresh/.test(name) ||
-    /\bfreshmatic\b/.test(fam) ||
-    /\bfreshmatic\b/.test(name)
-  );
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
@@ -943,7 +802,6 @@ async function collectFamilyResults(opts: {
   if (!client) return { results: [], usedAmazonVariationFamily: false };
 
   const log = opts.log ?? [];
-  const packageBrand = strictPackageBrandFromVision(parse.brand);
 
   let pool: CatalogItem[];
   let usedAmazonVariationFamily = false;

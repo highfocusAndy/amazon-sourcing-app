@@ -18,21 +18,22 @@ import {
 } from "@/lib/theme";
 
 export function AppearanceSection({ className = "" }: { className?: string }) {
-  const [mode, setMode] = useState<AppMode>(DEFAULT_MODE);
-  const [activeTheme, setActiveTheme] = useState<ThemeId>(DEFAULT_THEME_ID);
-  const [density, setDensity] = useState<TableDensity>("comfortable");
+  const [mode, setMode] = useState<AppMode>(() => {
+    if (typeof window === "undefined") return DEFAULT_MODE;
+    return (localStorage.getItem(MODE_STORAGE_KEY) as AppMode | null) ?? DEFAULT_MODE;
+  });
+  const [activeTheme, setActiveTheme] = useState<ThemeId>(() => {
+    if (typeof window === "undefined") return DEFAULT_THEME_ID;
+    const saved = localStorage.getItem(THEME_STORAGE_KEY) as ThemeId | null;
+    return saved && THEMES.some((t) => t.id === saved) ? saved : DEFAULT_THEME_ID;
+  });
+  const [density, setDensity] = useState<TableDensity>(() => {
+    if (typeof window === "undefined") return "comfortable";
+    const saved = localStorage.getItem(DENSITY_STORAGE_KEY) as TableDensity | null;
+    return saved === "comfortable" || saved === "compact" ? saved : "comfortable";
+  });
 
   useEffect(() => {
-    const savedMode = (localStorage.getItem(MODE_STORAGE_KEY) as AppMode | null) ?? DEFAULT_MODE;
-    setMode(savedMode);
-
-    const savedTheme = localStorage.getItem(THEME_STORAGE_KEY) as ThemeId | null;
-    if (savedTheme && THEMES.some((t) => t.id === savedTheme)) {
-      setActiveTheme(savedTheme as ThemeId);
-    }
-
-    const savedDensity = localStorage.getItem(DENSITY_STORAGE_KEY) as TableDensity | null;
-    if (savedDensity === "comfortable" || savedDensity === "compact") setDensity(savedDensity);
     persistAppearanceCookies();
   }, []);
 

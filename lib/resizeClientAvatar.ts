@@ -4,7 +4,7 @@ const MAX_DIMENSION = 384;
 
 export async function resizeImageToJpegBlob(file: File, quality = 0.88): Promise<Blob> {
   const bmp = await createImageBitmap(file);
-  let { width: w, height: h } = bmp;
+  const { width: w, height: h } = bmp;
   const scale = Math.min(1, MAX_DIMENSION / Math.max(w, h));
   const tw = Math.max(1, Math.round(w * scale));
   const th = Math.max(1, Math.round(h * scale));

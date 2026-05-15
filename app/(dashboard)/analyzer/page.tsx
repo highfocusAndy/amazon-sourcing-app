@@ -25,7 +25,7 @@ import { useProductAiInsight } from "@/app/hooks/useProductAiInsight";
 import { AmazonAccountModal } from "@/app/settings/AmazonAccountModal";
 import { useOpenDashboardSettings } from "@/app/context/DashboardSettingsContext";
 import { useSavedProducts } from "@/app/context/SavedProductsContext";
-import { amazonOfferListingUrl, amazonSellerStorefrontUrl } from "@/lib/marketplaces";
+import { amazonSellerStorefrontUrl } from "@/lib/marketplaces";
 import { appHeaderCompact, appHeaderSuffix } from "@/lib/appBranding";
 import type { ProductAnalysis, SellerType } from "@/lib/types";
 
@@ -849,7 +849,7 @@ function AnalyzerPageContent() {
   useEffect(() => {
     if (!isScannerOpen) {
       disposeScannerMedia();
-      if (scanPhase === "scanning") setScanPhase("idle");
+      setScanPhase((prev) => (prev === "scanning" ? "idle" : prev));
       return;
     }
 
