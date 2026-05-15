@@ -423,7 +423,7 @@ export function DashboardShell({ children, isOwner = false }: { children: React.
         <div id="app-root" className="relative h-[100dvh] max-h-[100dvh] w-full overflow-hidden bg-slate-900/50">
           <BrandBackdrop variant="onDark" />
           <div className="relative z-[1] flex h-full min-h-0 w-full flex-col md:flex-row">
-            <header className="sticky top-0 z-40 shrink-0 border-b border-slate-700/80 bg-slate-900/95 px-3 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))] backdrop-blur-md md:hidden">
+            <header className="sticky top-0 z-40 shrink-0 border-b border-slate-700/80 bg-slate-900/95 px-3 py-2 backdrop-blur-md md:hidden">
               <div className="flex min-w-0 items-center gap-2 sm:gap-3">
                 <div className="flex shrink-0 flex-col items-center gap-1">
                   <MobileMenuOpenButton
