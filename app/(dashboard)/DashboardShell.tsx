@@ -470,7 +470,7 @@ export function DashboardShell({ children, isOwner = false }: { children: React.
               <button
                 type="button"
                 onClick={() => setSettingsModalOpen(true)}
-                className="pointer-events-auto fixed bottom-[max(0.75rem,env(safe-area-inset-bottom))] left-3 z-[60] flex h-12 w-12 items-center justify-center rounded-full border border-slate-600 bg-slate-800/95 text-lg text-slate-200 shadow-lg shadow-black/30 backdrop-blur-sm transition hover:border-teal-500/50 hover:bg-slate-700 hover:text-teal-200"
+                className="pointer-events-auto fixed bottom-[max(0.75rem,env(safe-area-inset-bottom))] left-3 z-[60] flex h-12 w-12 items-center justify-center rounded-full border border-slate-600 bg-slate-800/95 text-lg text-slate-200 shadow-lg shadow-black/30 backdrop-blur-sm transition hover:border-teal-500/50 hover:bg-slate-700 hover:text-teal-200 md:hidden"
                 aria-label="Settings"
                 title="Settings"
               >
@@ -485,7 +485,7 @@ export function DashboardShell({ children, isOwner = false }: { children: React.
                   pathname.startsWith("/analyzer")
                     ? "bottom-[max(5.5rem,calc(env(safe-area-inset-bottom,0px)+4.75rem))]"
                     : "bottom-[max(0.75rem,env(safe-area-inset-bottom))]"
-                } right-3 z-[60] flex h-14 w-14 items-center justify-center overflow-hidden rounded-full border border-teal-500/40 bg-slate-800/95 p-1 shadow-lg shadow-black/30 ring-1 ring-white/5 backdrop-blur-sm transition hover:border-teal-400/60 hover:bg-slate-700`}
+                } right-3 z-[60] flex h-14 w-14 items-center justify-center overflow-hidden rounded-full border border-teal-500/40 bg-slate-800/95 p-1 shadow-lg shadow-black/30 ring-1 ring-white/5 backdrop-blur-sm transition hover:border-teal-400/60 hover:bg-slate-700 md:hidden`}
                 aria-label="Ask AI about Amazon"
                 title="Ask AI"
               >
