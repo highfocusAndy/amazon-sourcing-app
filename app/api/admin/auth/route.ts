@@ -4,15 +4,12 @@ import {
   ADMIN_AUTH_COOKIE,
   checkAdminPassword,
   generateAdminSessionToken,
-  getSessionFingerprint,
-  getRawNextAuthToken,
   isAdminPasswordRequired,
 } from "@/lib/adminAuth";
-import { cookies } from "next/headers";
 
 export const runtime = "nodejs";
 
-/** POST — verify admin password and issue a session-bound cookie. */
+/** POST — verify admin password and issue a session cookie. */
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const gate = await requireAdminEmailOnly();
   if (!gate.ok) return gate.response;
@@ -24,22 +21,20 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const body = (await req.json()) as { password?: string };
   const ok = await checkAdminPassword(body.password ?? "");
   if (!ok) {
-    return NextResponse.json({ error: "Incorrect admin password" }, { status: 401 });
+    return NextResponse.json({ error: "Incorrect password" }, { status: 401 });
   }
 
-  const cookieStore = await cookies();
-  const rawNextAuth = getRawNextAuthToken(cookieStore);
-  const fingerprint = getSessionFingerprint(rawNextAuth);
-  const token = generateAdminSessionToken(gate.userId, fingerprint);
-
-  const response = NextResponse.json({ ok: true });
-  response.cookies.set(ADMIN_AUTH_COOKIE, token, {
+  const token = generateAdminSessionToken(gate.userId);
+  const res = NextResponse.json({ ok: true });
+  res.cookies.set(ADMIN_AUTH_COOKIE, token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "strict",
     path: "/",
+    // No maxAge → session cookie, cleared when browser closes.
+    // The middleware also deletes this cookie when the user signs out.
   });
-  return response;
+  return res;
 }
 
 /** DELETE — clear the admin session cookie. */
@@ -47,7 +42,7 @@ export async function DELETE(): Promise<NextResponse> {
   const gate = await requireAdminEmailOnly();
   if (!gate.ok) return gate.response;
 
-  const response = NextResponse.json({ ok: true });
-  response.cookies.delete(ADMIN_AUTH_COOKIE);
-  return response;
+  const res = NextResponse.json({ ok: true });
+  res.cookies.delete(ADMIN_AUTH_COOKIE);
+  return res;
 }

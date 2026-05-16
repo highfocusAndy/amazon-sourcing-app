@@ -19,52 +19,27 @@ function safeHexEqual(a: string, b: string): boolean {
   }
 }
 
-/**
- * A short hash of the raw NextAuth session cookie value.
- * Changes every time the user signs out and back in, so the admin token
- * is automatically invalidated on each new login session.
- */
-export function getSessionFingerprint(rawNextAuthToken: string): string {
-  return crypto
-    .createHash("sha256")
-    .update(rawNextAuthToken + authSecret())
-    .digest("hex")
-    .slice(0, 32);
+/** Token = HMAC(userId, AUTH_SECRET). Simple and stateless. */
+export function generateAdminSessionToken(userId: string): string {
+  const sig = crypto.createHmac("sha256", authSecret()).update(userId).digest("hex");
+  return `${userId}:${sig}`;
 }
 
-/** Token payload: userId:expires:sessionFingerprint */
-export function generateAdminSessionToken(userId: string, sessionFingerprint: string): string {
-  const payload = `${userId}:${sessionFingerprint}`;
-  const sig = crypto.createHmac("sha256", authSecret()).update(payload).digest("hex");
-  return `${payload}:${sig}`;
-}
-
-export function validateAdminSessionToken(
-  token: string,
-  userId: string,
-  sessionFingerprint: string,
-): boolean {
+export function validateAdminSessionToken(token: string, userId: string): boolean {
   try {
-    const lastColon = token.lastIndexOf(":");
-    if (lastColon < 0) return false;
-    const sig = token.slice(lastColon + 1);
-    const payload = token.slice(0, lastColon);
-    const expected = crypto.createHmac("sha256", authSecret()).update(payload).digest("hex");
-    if (!safeHexEqual(sig, expected)) return false;
-    // payload = userId:sessionFingerprint
-    const colonIdx = payload.indexOf(":");
-    if (colonIdx < 0) return false;
-    const tokenUserId = payload.slice(0, colonIdx);
-    const tokenFingerprint = payload.slice(colonIdx + 1);
+    const colon = token.indexOf(":");
+    if (colon < 0) return false;
+    const tokenUserId = token.slice(0, colon);
+    const sig = token.slice(colon + 1);
     if (tokenUserId !== userId) return false;
-    if (tokenFingerprint !== sessionFingerprint) return false;
-    return true;
+    const expected = crypto.createHmac("sha256", authSecret()).update(userId).digest("hex");
+    return safeHexEqual(sig, expected);
   } catch {
     return false;
   }
 }
 
-/** Returns true if ADMIN_PASSWORD env var is set, OR if a password hash has been saved via admin UI. */
+/** Returns true if ADMIN_PASSWORD env var is set, OR a hash was saved via admin UI. */
 export async function isAdminPasswordRequired(): Promise<boolean> {
   if (process.env.ADMIN_PASSWORD?.trim()) return true;
   try {
@@ -100,15 +75,4 @@ export async function hashAndStoreAdminPassword(newPassword: string): Promise<vo
     update: { value: hashed },
     create: { key: "admin:password_hash", value: hashed },
   });
-}
-
-/** Read the raw NextAuth session token from the incoming request cookies. */
-export function getRawNextAuthToken(
-  cookieStore: Awaited<ReturnType<typeof import("next/headers")["cookies"]>>,
-): string {
-  return (
-    cookieStore.get("authjs.session-token")?.value ??
-    cookieStore.get("__Secure-authjs.session-token")?.value ??
-    ""
-  );
 }

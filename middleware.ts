@@ -34,7 +34,10 @@ export default auth((req) => {
     const signIn = new URL("/login", req.nextUrl);
     const callback = `${path}${req.nextUrl.search}`;
     signIn.searchParams.set("callbackUrl", callback);
-    return NextResponse.redirect(signIn);
+    const loginRedirect = NextResponse.redirect(signIn);
+    // Clear the admin password cookie so it is re-required after sign-out.
+    loginRedirect.cookies.delete("admin_auth_v2");
+    return loginRedirect;
   }
 
   // Static category tree only (no SP-API). Catalog search requires a session to protect SP-API usage.
