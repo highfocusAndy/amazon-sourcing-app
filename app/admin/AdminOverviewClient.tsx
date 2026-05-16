@@ -598,14 +598,15 @@ export function AdminOverviewClient() {
                     {flags.flags.map((flag) => (
                       <div
                         key={flag.key}
-                        className={`flex items-start justify-between gap-4 rounded-xl border px-4 py-3 transition-colors ${
+                        className="flex items-start justify-between gap-4 rounded-xl border px-4 py-3 transition-colors"
+                        style={
                           flag.enabled
-                            ? "border-teal-500/25 bg-teal-500/[0.06]"
-                            : "border-white/[0.06] bg-white/[0.02]"
-                        }`}
+                            ? { borderColor: "rgb(var(--accent) / 0.28)", backgroundColor: "rgb(var(--accent) / 0.07)" }
+                            : { borderColor: "rgb(255 255 255 / 0.06)", backgroundColor: "rgb(255 255 255 / 0.02)" }
+                        }
                       >
                         <div className="min-w-0">
-                          <p className={`text-[13px] font-semibold ${flag.enabled ? "text-teal-100" : "text-slate-400"}`}>
+                          <p className={`text-[13px] font-semibold ${flag.enabled ? "text-white" : "text-slate-400"}`}>
                             {flag.label}
                           </p>
                           <p className="mt-0.5 text-[11px] leading-snug text-slate-600">{flag.description}</p>
@@ -615,9 +616,11 @@ export function AdminOverviewClient() {
                           role="switch"
                           aria-checked={flag.enabled}
                           onClick={() => void toggleFlag(flag.key, !flag.enabled)}
-                          className={`relative mt-0.5 h-5 w-9 shrink-0 rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-teal-500/50 ${
-                            flag.enabled ? "bg-teal-500" : "bg-slate-700"
-                          }`}
+                          className="relative mt-0.5 h-5 w-9 shrink-0 rounded-full transition-colors duration-200 focus:outline-none focus:ring-2"
+                          style={{
+                            background: flag.enabled ? "rgb(var(--accent))" : "rgb(100 116 139)",
+                            boxShadow: flag.enabled ? "0 0 0 2px transparent" : undefined,
+                          }}
                         >
                           <span
                             className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform duration-200 ${

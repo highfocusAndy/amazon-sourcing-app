@@ -99,6 +99,7 @@ html[data-mode="light"] #app-main-content .border-slate-700\/40 {
   border-color: rgba(255 255 255 / 0.11) !important;
 }
 
+
 /* ── Page body — uses themed background variables ───── */
 body {
   margin: 0;
@@ -132,10 +133,92 @@ body {
   ) !important;
 }
 
+/* ════════════════════════════════════════════════════
+   ADMIN LIGHT MODE
+   Dark header + light content — the industry standard
+   pattern (AWS Console, GCP, Retool). The sticky header
+   intentionally stays dark; only #admin-main-content is
+   inverted. All values below are PRE-INVERSION: the
+   filter maps them to their intended final appearance.
+   ════════════════════════════════════════════════════ */
+
+/* Outer shell: steel-blue wash visible in the page margins */
+html[data-mode="light"] #admin-shell-bg {
+  background: linear-gradient(
+    160deg,
+    rgb(212 220 240) 0%,
+    rgb(220 228 248) 50%,
+    rgb(212 220 240) 100%
+  ) !important;
+}
+
+/* Dial back the accent glow overlay in light context */
+html[data-mode="light"] #admin-shell-bg > .fixed {
+  opacity: 0.22;
+}
+
+/* Content: explicit dark bg → invert → warm off-white, not stark white */
+html[data-mode="light"] #admin-main-content {
+  background: rgb(var(--bg-body-base));
+  filter: invert(1) hue-rotate(180deg) contrast(1.03);
+  transition: filter var(--hf-transition), background var(--hf-transition);
+}
+
+html[data-mode="light"] #admin-main-content img,
+html[data-mode="light"] #admin-main-content video,
+html[data-mode="light"] #admin-main-content canvas {
+  filter: invert(1) hue-rotate(180deg) contrast(calc(1 / 1.03));
+}
+
+html[data-mode="light"] #admin-main-content .invert-exempt {
+  filter: invert(1) hue-rotate(180deg) contrast(calc(1 / 1.03));
+}
+
+/* Cards (div with border + radius) — pre-inversion white:
+   → card surface ~23 rgb units darker than bg after filter ✓
+   → crisp visible border after filter ✓
+   → subtle drop-shadow after filter ✓                       */
+html[data-mode="light"] #admin-main-content div.rounded-xl.border,
+html[data-mode="light"] #admin-main-content div.rounded-2xl.border {
+  background: rgba(255 255 255 / 0.10) !important;
+  border-color: rgba(255 255 255 / 0.22) !important;
+  box-shadow: 0 6px 28px rgba(255 255 255 / 0.09), 0 1px 5px rgba(255 255 255 / 0.15) !important;
+}
+
+/* Inputs — more visible pre-inversion so they read as editable fields */
+html[data-mode="light"] #admin-main-content input {
+  background: rgba(255 255 255 / 0.12) !important;
+  border-color: rgba(255 255 255 / 0.26) !important;
+}
+
+/* Section / card-internal dividers — slightly stronger edge */
+html[data-mode="light"] #admin-main-content .border-t,
+html[data-mode="light"] #admin-main-content .border-b {
+  border-color: rgba(255 255 255 / 0.11) !important;
+}
+
+/* ── Text contrast fix ─────────────────────────────────────────────────────
+   invert(1) hue-rotate(180deg) preserves hue but INVERTS lightness.
+   text-slate-500 (L≈47%) → L≈53% post-filter = poor contrast on white.
+   text-slate-600 (L≈35%) → L≈65% post-filter = nearly invisible.
+   Fix: shift these mid-grays to L≈60-65% pre-filter so they land at
+   L≈35-40% post-filter — readable dark blue-gray on the off-white bg.   */
+html[data-mode="light"] #admin-main-content .text-slate-600 {
+  color: rgb(142 157 178) !important;
+}
+html[data-mode="light"] #admin-main-content .text-slate-500 {
+  color: rgb(128 142 163) !important;
+}
+
 /* ── Smooth transition ONLY during explicit user theme switches ──────────── */
 html.theme-switching body,
-html.theme-switching #dashboard-sidebar-nav {
+html.theme-switching #dashboard-sidebar-nav,
+html.theme-switching #admin-shell-bg,
+html.theme-switching #admin-shell-header {
   transition: background 0.4s ease;
+}
+html.theme-switching #admin-main-content {
+  transition: background 0.4s ease, filter 0.4s ease;
 }
 
 /* ── Card surfaces ─────────────────────────────────── */
