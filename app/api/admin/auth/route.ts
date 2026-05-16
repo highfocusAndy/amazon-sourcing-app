@@ -15,7 +15,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const gate = await requireAdminEmailOnly();
   if (!gate.ok) return gate.response;
 
-  if (!isAdminPasswordRequired()) {
+  if (!await isAdminPasswordRequired()) {
     return NextResponse.json({ error: "Admin password is not configured" }, { status: 400 });
   }
 

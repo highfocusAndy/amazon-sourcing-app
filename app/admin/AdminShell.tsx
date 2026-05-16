@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 
 const NAV_ITEMS = [
@@ -14,6 +15,16 @@ const NAV_ITEMS = [
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+
+  // Force a full reload when the browser restores this page from bfcache,
+  // so the server-side password check always re-runs.
+  useEffect(() => {
+    function onPageShow(e: PageTransitionEvent) {
+      if (e.persisted) window.location.reload();
+    }
+    window.addEventListener("pageshow", onPageShow);
+    return () => window.removeEventListener("pageshow", onPageShow);
+  }, []);
 
   return (
     <div className="relative min-h-screen overflow-x-hidden bg-[#050608] text-slate-100">

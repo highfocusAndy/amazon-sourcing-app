@@ -9,7 +9,7 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
   const gate = await requireAdminAccess();
   if (!gate.ok) return gate.response;
 
-  if (!isAdminPasswordRequired()) {
+  if (!await isAdminPasswordRequired()) {
     return NextResponse.json({ error: "Admin password is not configured" }, { status: 400 });
   }
 

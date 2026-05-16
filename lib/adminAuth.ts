@@ -47,8 +47,16 @@ export function validateAdminSessionToken(token: string, userId: string): boolea
   }
 }
 
-export function isAdminPasswordRequired(): boolean {
-  return Boolean(process.env.ADMIN_PASSWORD?.trim());
+/** Returns true if ADMIN_PASSWORD env var is set, OR if a password hash has been saved via admin UI. */
+export async function isAdminPasswordRequired(): Promise<boolean> {
+  if (process.env.ADMIN_PASSWORD?.trim()) return true;
+  try {
+    const { prisma } = await import("@/lib/db");
+    const row = await prisma.systemConfig.findUnique({ where: { key: "admin:password_hash" } });
+    return Boolean(row?.value);
+  } catch {
+    return false;
+  }
 }
 
 /** Verifies against bcrypt hash in DB first, then plaintext env var as fallback. */

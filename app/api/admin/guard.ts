@@ -31,7 +31,7 @@ export async function requireAdminAccess(): Promise<GuardOk | GuardFail> {
   const emailCheck = await requireAdminEmailOnly();
   if (!emailCheck.ok) return emailCheck;
 
-  if (isAdminPasswordRequired()) {
+  if (await isAdminPasswordRequired()) {
     const cookieStore = await cookies();
     const token = cookieStore.get(ADMIN_AUTH_COOKIE)?.value ?? "";
     if (!validateAdminSessionToken(token, emailCheck.userId)) {
