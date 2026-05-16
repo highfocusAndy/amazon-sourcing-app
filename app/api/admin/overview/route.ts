@@ -68,12 +68,14 @@ export async function GET(): Promise<NextResponse> {
     Promise.resolve(Boolean(process.env.OPENAI_API_KEY?.trim())),
     Promise.resolve(Boolean(process.env.KEEPA_API_KEY?.trim())),
     Promise.resolve(
-      Boolean(
-        process.env.RAILWAY_ENVIRONMENT_NAME?.trim() ||
-          process.env.RAILWAY_PROJECT_ID?.trim() ||
-          process.env.RAILWAY_SERVICE_ID?.trim() ||
-          process.env.RAILWAY_DEPLOYMENT_ID?.trim(),
-      ),
+      process.env.NODE_ENV === "production" ||
+        Boolean(
+          process.env.RAILWAY_ENVIRONMENT_NAME?.trim() ||
+            process.env.RAILWAY_PROJECT_ID?.trim() ||
+            process.env.RAILWAY_SERVICE_ID?.trim() ||
+            process.env.RAILWAY_DEPLOYMENT_ID?.trim() ||
+            process.env.RAILWAY_STATIC_URL?.trim(),
+        ),
     ),
     Promise.resolve(tryReadSpApiConfig()),
     Promise.resolve(Number(process.env.ADMIN_ESTIMATE_STARTER_USD ?? "29") || 29),

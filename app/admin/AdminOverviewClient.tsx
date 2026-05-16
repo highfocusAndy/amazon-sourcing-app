@@ -525,7 +525,7 @@ export function AdminOverviewClient() {
                 <div className="mt-5 space-y-2.5">
                   <HealthRow label="Database" tier={h?.database === "ok" ? "operational" : "attention"} />
                   <HealthRow label="SP-API configuration" tier={h?.spApiConfigured ? "operational" : "attention"} />
-                  <HealthRow label="Railway deployment" tier={h?.railwayDetected ? "operational" : "idle"} />
+                  <HealthRow label="Production environment" tier={h?.railwayDetected ? "operational" : "idle"} />
                   <HealthRow label="OpenAI vision (image scans)" tier={h?.imageSearchEnabled ? "operational" : "idle"} />
                   <HealthRow label="Keepa API token" tier={h?.keepaConfigured ? "operational" : "idle"} />
                 </div>
