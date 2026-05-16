@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { href: "/admin/usage", label: "Usage" },
   { href: "/admin/promos", label: "Promos" },
   { href: "/admin/legal", label: "Legal" },
+  { href: "/admin/settings", label: "Settings" },
 ];
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
