@@ -29,7 +29,6 @@ export async function GET(): Promise<NextResponse> {
     dbPing,
     openaiConfigured,
     keepaEnv,
-    railwayEnv,
     spConfigured,
     estimatedStarterUsd,
     estimatedProUsd,
@@ -67,16 +66,6 @@ export async function GET(): Promise<NextResponse> {
     prisma.$queryRaw<unknown[]>`SELECT 1 AS ok`.then(() => true).catch(() => false),
     Promise.resolve(Boolean(process.env.OPENAI_API_KEY?.trim())),
     Promise.resolve(Boolean(process.env.KEEPA_API_KEY?.trim())),
-    Promise.resolve(
-      process.env.NODE_ENV === "production" ||
-        Boolean(
-          process.env.RAILWAY_ENVIRONMENT_NAME?.trim() ||
-            process.env.RAILWAY_PROJECT_ID?.trim() ||
-            process.env.RAILWAY_SERVICE_ID?.trim() ||
-            process.env.RAILWAY_DEPLOYMENT_ID?.trim() ||
-            process.env.RAILWAY_STATIC_URL?.trim(),
-        ),
-    ),
     Promise.resolve(tryReadSpApiConfig()),
     Promise.resolve(Number(process.env.ADMIN_ESTIMATE_STARTER_USD ?? "29") || 29),
     Promise.resolve(Number(process.env.ADMIN_ESTIMATE_PRO_USD ?? "79") || 79),
@@ -129,7 +118,6 @@ export async function GET(): Promise<NextResponse> {
     health: {
       database: dbPing ? "ok" : "error",
       spApiConfigured: Boolean(spConfigured),
-      railwayDetected: railwayEnv,
       openaiConfigured,
       imageSearchEnabled: openaiConfigured,
       keepaConfigured: keepaEnv,
