@@ -8,12 +8,9 @@ import {
   THEME_STORAGE_KEY,
   MODE_STORAGE_KEY,
   DEFAULT_MODE,
-  DENSITY_STORAGE_KEY,
   type AppMode,
-  type TableDensity,
   applyTheme,
   applyMode,
-  applyDensity,
   persistAppearanceCookies,
 } from "@/lib/theme";
 
@@ -128,22 +125,16 @@ function PasswordChangeForm() {
 }
 
 function AdminThemeSection() {
-  const [activeTheme, setActiveTheme] = useState<ThemeId>(() => {
-    if (typeof window === "undefined") return DEFAULT_THEME_ID;
-    const saved = localStorage.getItem(THEME_STORAGE_KEY) as ThemeId | null;
-    return saved && THEMES.some((t) => t.id === saved) ? saved : DEFAULT_THEME_ID;
-  });
-  const [mode, setMode] = useState<AppMode>(() => {
-    if (typeof window === "undefined") return DEFAULT_MODE;
-    return (localStorage.getItem(MODE_STORAGE_KEY) as AppMode | null) ?? DEFAULT_MODE;
-  });
-  const [density, setDensity] = useState<TableDensity>(() => {
-    if (typeof window === "undefined") return "comfortable";
-    const saved = localStorage.getItem(DENSITY_STORAGE_KEY) as TableDensity | null;
-    return saved === "comfortable" || saved === "compact" ? saved : "comfortable";
-  });
+  // Always initialise with SSR-safe defaults so server and client
+  // render identical HTML. localStorage is read in useEffect after mount.
+  const [activeTheme, setActiveTheme] = useState<ThemeId>(DEFAULT_THEME_ID);
+  const [mode, setMode] = useState<AppMode>(DEFAULT_MODE);
 
   useEffect(() => {
+    const savedTheme = localStorage.getItem(THEME_STORAGE_KEY) as ThemeId | null;
+    if (savedTheme && THEMES.some((t) => t.id === savedTheme)) setActiveTheme(savedTheme);
+    const savedMode = localStorage.getItem(MODE_STORAGE_KEY) as AppMode | null;
+    if (savedMode === "dark" || savedMode === "light") setMode(savedMode);
     persistAppearanceCookies();
   }, []);
 
@@ -167,13 +158,6 @@ function AdminThemeSection() {
     document.documentElement.classList.add("theme-switching");
     setTimeout(() => document.documentElement.classList.remove("theme-switching"), 450);
     applyMode(m);
-  }
-
-  function handleDensityChange(d: TableDensity) {
-    setDensity(d);
-    localStorage.setItem(DENSITY_STORAGE_KEY, d);
-    applyDensity(d);
-    persistAppearanceCookies();
   }
 
   return (
@@ -279,37 +263,6 @@ function AdminThemeSection() {
         </div>
       </div>
 
-      {/* Table density */}
-      <div className="border-t border-white/[0.06] pt-6">
-        <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-          Table density
-        </label>
-        <p className="mb-3 text-xs text-slate-600">
-          Controls row height in product tables.
-        </p>
-        <div className="flex gap-3">
-          {(
-            [
-              { id: "comfortable" as TableDensity, label: "Comfortable", desc: "Standard row height." },
-              { id: "compact" as TableDensity, label: "Compact", desc: "More products visible." },
-            ]
-          ).map(({ id, label, desc }) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => handleDensityChange(id)}
-              className={`flex-1 rounded-xl border px-4 py-3 text-left text-sm transition-colors ${
-                density === id
-                  ? "border-teal-500/60 bg-teal-500/[0.08] text-white"
-                  : "border-white/[0.08] bg-white/[0.02] text-slate-400 hover:border-white/[0.15] hover:text-slate-300"
-              }`}
-            >
-              <span className="block font-medium">{label}</span>
-              <span className="text-xs text-slate-600">{desc}</span>
-            </button>
-          ))}
-        </div>
-      </div>
     </div>
   );
 }
