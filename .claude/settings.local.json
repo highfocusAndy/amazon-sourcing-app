@@ -11,7 +11,10 @@
       "Bash(git push *)",
       "Bash(Remove-Item \"C:\\\\dev\\\\amazon-sourcing-app\\\\lib\\\\constants.ts\" -Force)",
       "Bash(Remove-Item \"C:\\\\dev\\\\amazon-sourcing-app\\\\lib\\\\spApiUtils.ts\" -Force)",
-      "Bash(Write-Host \"Deleted\")"
+      "Bash(Write-Host \"Deleted\")",
+      "PowerShell(Get-Process *)",
+      "PowerShell(cd C:\\\\dev\\\\amazon-sourcing-app; Start-Process -FilePath \"npx\" -ArgumentList \"prisma\",\"generate\" -Verb RunAs -Wait 2>&1; Write-Host \"Done\")",
+      "PowerShell(New-Item *)"
     ]
   }
 }

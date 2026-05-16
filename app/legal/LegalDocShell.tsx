@@ -2,15 +2,20 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { appDisplayName } from "@/lib/appBranding";
 
-/** Readable layout for `/terms` and `/privacy` — light, matches auth marketing pages. */
+/**
+ * Readable layout for `/terms` and `/privacy` — light, matches auth marketing pages.
+ * Pass `dangerousHtml` to render DB-managed content; pass `children` for the static fallback.
+ */
 export function LegalDocShell({
   title,
   updated,
   children,
+  dangerousHtml,
 }: {
   title: string;
   updated: string;
-  children: ReactNode;
+  children?: ReactNode;
+  dangerousHtml?: string;
 }) {
   const appName = appDisplayName;
 
@@ -62,7 +67,11 @@ export function LegalDocShell({
           [&_section]:scroll-mt-8
           [&_strong]:font-semibold [&_strong]:text-slate-900
           [&_ul]:list-disc [&_ul]:pl-6">
-          {children}
+          {dangerousHtml ? (
+            <div dangerouslySetInnerHTML={{ __html: dangerousHtml }} />
+          ) : (
+            children
+          )}
         </article>
 
         {/* Footer */}

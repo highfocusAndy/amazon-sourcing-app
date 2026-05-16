@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import { LegalDocShell } from "@/app/legal/LegalDocShell";
 import { legalOperatorName, legalPublicContactEmail } from "@/lib/legalEntity";
 import { publicSiteOrigin } from "@/lib/publicSiteUrl";
+import { prisma } from "@/lib/db";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Privacy Policy",
@@ -10,7 +13,7 @@ export const metadata: Metadata = {
 
 const UPDATED = "May 13, 2026";
 
-export default function PrivacyPage() {
+export default async function PrivacyPage() {
   const operator = legalOperatorName();
   const contact = legalPublicContactEmail();
   let host = "our platform";
@@ -18,6 +21,17 @@ export default function PrivacyPage() {
     host = publicSiteOrigin().host;
   } catch {
     /* build without metadataBase */
+  }
+
+  const dbContent = await prisma.legalContent.findUnique({ where: { slug: "privacy" } }).catch(() => null);
+  if (dbContent) {
+    return (
+      <LegalDocShell
+        title={dbContent.title}
+        updated={new Date(dbContent.updatedAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
+        dangerousHtml={dbContent.contentHtml}
+      />
+    );
   }
 
   return (

@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import { LegalDocShell } from "@/app/legal/LegalDocShell";
 import { legalOperatorName, legalPublicContactEmail } from "@/lib/legalEntity";
+import { prisma } from "@/lib/db";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Terms of Service",
@@ -9,9 +12,20 @@ export const metadata: Metadata = {
 
 const UPDATED = "May 13, 2026";
 
-export default function TermsPage() {
+export default async function TermsPage() {
   const operator = legalOperatorName();
   const contact = legalPublicContactEmail();
+  const dbContent = await prisma.legalContent.findUnique({ where: { slug: "tos" } }).catch(() => null);
+
+  if (dbContent) {
+    return (
+      <LegalDocShell
+        title={dbContent.title}
+        updated={new Date(dbContent.updatedAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
+        dangerousHtml={dbContent.contentHtml}
+      />
+    );
+  }
 
   return (
     <LegalDocShell title="Terms of Service" updated={UPDATED}>
