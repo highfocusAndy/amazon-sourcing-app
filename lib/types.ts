@@ -1,3 +1,8 @@
+/**
+ * Shared TypeScript types and interfaces used across the entire application.
+ * Keep this file free of runtime logic — types only.
+ */
+
 export type Decision = "BUY" | "WORTH UNGATING" | "BAD" | "LOW_MARGIN" | "NO_MARGIN" | "UNKNOWN";
 export type RowColor = "green" | "yellow" | "red";
 export type SellerType = "FBA" | "FBM";

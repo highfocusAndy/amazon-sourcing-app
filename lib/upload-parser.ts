@@ -1,3 +1,9 @@
+/**
+ * Parses Excel (.xlsx/.xls) and CSV bulk upload files into product rows.
+ * Performs fuzzy column-header detection so suppliers' varying spreadsheet formats are handled automatically.
+ * Max 200 rows per upload; duplicate ASINs are collapsed by keeping the lowest wholesale price.
+ */
+
 import * as XLSX from "xlsx";
 
 import type { ParsedUploadRow } from "@/lib/types";

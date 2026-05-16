@@ -1,3 +1,9 @@
+/**
+ * GET /api/catalog/restrictions
+ * Checks listing restrictions for a given ASIN against the user's seller account.
+ * Returns approval status, IP risk, hazmat, meltable, and private label signals.
+ */
+
 import { NextRequest, NextResponse } from "next/server";
 import { userRestrictionsLimit } from "@/lib/apiRateLimit";
 import { requireAppAccess } from "@/lib/billing/requireAppAccess";

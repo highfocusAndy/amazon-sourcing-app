@@ -1,3 +1,8 @@
+/**
+ * Builds the structured context object passed to the AI product insight prompt.
+ * Reads a ProductAnalysis and formats it into a concise summary for the LLM.
+ */
+
 import type { ProductAnalysis } from "@/lib/types";
 import { approvalRequiredEffective } from "@/lib/sourcingIntelligence";
 

@@ -1,3 +1,8 @@
+/**
+ * Utilities for the image-search (scan) feature: JSON extraction from LLM output,
+ * ASIN candidate filtering, and result ranking by visual match confidence.
+ */
+
 import type { CatalogItem } from "@/lib/spApiClient";
 
 /** Pull JSON object from model output (handles ```json fences). */

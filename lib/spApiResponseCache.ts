@@ -1,3 +1,9 @@
+/**
+ * TTL-based response cache for SP-API calls (catalog items, pricing, analysis results).
+ * Backed by the ApiResponseCache SQLite table. Reduces SP-API quota consumption on repeated lookups.
+ * Cache TTL is configurable per entry type; defaults are set in lib/env.ts.
+ */
+
 import { createHash } from "crypto";
 
 import { prisma } from "@/lib/db";

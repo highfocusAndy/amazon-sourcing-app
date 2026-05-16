@@ -1,3 +1,12 @@
+/**
+ * Core product analysis engine.
+ * Orchestrates SP-API calls (catalog, pricing, offers, fees, restrictions) and
+ * runs the profit / decision calculation for a single product or a batch upload.
+ *
+ * Decision hierarchy: BUY → WORTH UNGATING → LOW_MARGIN → NO_MARGIN → BAD → UNKNOWN
+ */
+
+// ── Imports ───────────────────────────────────────────────────────────────────
 import { extractAmazonSalesVolume } from "@/lib/amazonSalesVolume";
 import { getServerEnv } from "@/lib/env";
 import { getListingTypeFromTitle } from "@/lib/listingLabel";
@@ -13,6 +22,7 @@ import { estimateMonthlySalesFromBsr } from "@/lib/salesEstimate";
 import { approvalRequiredEffective } from "@/lib/sourcingIntelligence";
 import type { Decision, ProductAnalysis, ProductInput, RowColor, SellerType } from "@/lib/types";
 
+// ── Constants ─────────────────────────────────────────────────────────────────
 const BAD_SALES_RANK_THRESHOLD = 100_000;
 const MIN_HEALTHY_ROI_PERCENT = 10;
 
@@ -43,6 +53,7 @@ const ESTIMATED_REFERRAL_RATE = 0.15;
 const ASIN_REGEX = /^[A-Z0-9]{10}$/i;
 const DEFAULT_BATCH_CONCURRENCY = 6;
 
+// ── Pure Helpers ──────────────────────────────────────────────────────────────
 function toCurrency(value: number | null): number | null {
   if (value === null || !Number.isFinite(value)) {
     return null;
@@ -94,6 +105,7 @@ function isRestrictedBrand(brand: string, restrictedBrandSet: Set<string>): bool
   return restrictedBrandSet.has(brand.trim().toUpperCase());
 }
 
+// ── Result Construction ────────────────────────────────────────────────────────
 function buildBaseResult(input: ProductInput): ProductAnalysis {
   const sellerType = normalizeSellerType(input.sellerType);
   return {
@@ -141,6 +153,7 @@ function buildBaseResult(input: ProductInput): ProductAnalysis {
   };
 }
 
+// ── Decision Engine ────────────────────────────────────────────────────────────
 function evaluateDecision(result: ProductAnalysis, projectedMonthlyUnits: number): ProductAnalysis {
   const reasons: string[] = [...result.reasons];
 
@@ -254,6 +267,7 @@ function evaluateDecision(result: ProductAnalysis, projectedMonthlyUnits: number
 }
 
 /** Build a catalog-only ProductAnalysis for a variation (e.g. Single, 2-Pack) — no pricing/fees until user selects. */
+// ── Public Builders ────────────────────────────────────────────────────────────
 export function buildCatalogOnlyResult(
   catalog: CatalogItem,
   inputIdentifier: string,
@@ -339,6 +353,7 @@ export function buildAnalysisForOffer(
   return evaluateDecision(copy, projectedMonthlyUnits);
 }
 
+// ── Entry Points ──────────────────────────────────────────────────────────────
 export async function analyzeProduct(
   input: ProductInput,
   client?: SpApiClient | null,

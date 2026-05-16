@@ -1,7 +1,10 @@
 /**
- * Optional PA-API 5.0 client to fetch the main product-page BSR (WebsiteSalesRank).
+ * Optional PA-API 5.0 (Product Advertising API) client.
+ * Used exclusively to fetch WebsiteSalesRank — the "main-category BSR" that matches
+ * what Amazon shows on the product page. SP-API only returns sub-category ranks.
+ *
  * Requires PA_API_ACCESS_KEY, PA_API_SECRET_KEY, PA_API_PARTNER_TAG in env.
- * If not set or request fails, callers should fall back to SP-API catalog rank.
+ * When not configured or if the request fails, callers fall back to the SP-API catalog rank.
  */
 
 import aws4 from "aws4";

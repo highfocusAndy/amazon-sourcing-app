@@ -1,3 +1,8 @@
+/**
+ * Reads and validates required SP-API environment variables at runtime.
+ * Throws a clear error message if any required variable is missing so deployments fail fast.
+ */
+
 const DEFAULT_MARKETPLACE = "ATVPDKIKX0DER";
 const DEFAULT_REGION = "us-east-1";
 const DEFAULT_HOST = "sellingpartnerapi-na.amazon.com";

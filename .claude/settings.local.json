@@ -8,7 +8,10 @@
       "Bash(Get-ChildItem -Path \"C:\\\\dev\\\\amazon-sourcing-app\" -Directory)",
       "Bash(Select-Object Name)",
       "Bash(git add *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(Remove-Item \"C:\\\\dev\\\\amazon-sourcing-app\\\\lib\\\\constants.ts\" -Force)",
+      "Bash(Remove-Item \"C:\\\\dev\\\\amazon-sourcing-app\\\\lib\\\\spApiUtils.ts\" -Force)",
+      "Bash(Write-Host \"Deleted\")"
     ]
   }
 }

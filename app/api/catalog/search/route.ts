@@ -1,3 +1,9 @@
+/**
+ * GET /api/catalog/search
+ * Paginates through Amazon's catalog using keyword search.
+ * Used by the Analyzer page's infinite-scroll catalog browser.
+ */
+
 import { NextRequest, NextResponse } from "next/server";
 import { userCatalogSearchLimit } from "@/lib/apiRateLimit";
 import { requireAppAccess } from "@/lib/billing/requireAppAccess";

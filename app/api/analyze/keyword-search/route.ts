@@ -1,3 +1,9 @@
+/**
+ * POST /api/analyze/keyword-search
+ * Searches Amazon's catalog by keyword and returns enriched product listings.
+ * Used by the Analyzer page to browse ASINs without needing an explicit ASIN.
+ */
+
 import { NextRequest, NextResponse } from "next/server";
 
 import { userKeywordSearchLimit } from "@/lib/apiRateLimit";

@@ -1,3 +1,9 @@
+/**
+ * GET /api/admin/overview
+ * Returns aggregate stats for the admin dashboard: total users, active subscribers, SP-API config status.
+ * Access is restricted to APP_OWNER_EMAIL.
+ */
+
 import { NextResponse } from "next/server";
 import { requireAdminAccess } from "@/app/api/admin/guard";
 import { prisma } from "@/lib/db";

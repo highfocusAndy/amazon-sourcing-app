@@ -1,3 +1,9 @@
+/**
+ * POST /api/analyze
+ * Analyze a single product by ASIN or UPC.
+ * Checks rate limits and monthly quota before delegating to lib/analysis.ts.
+ */
+
 import { NextRequest, NextResponse } from "next/server";
 
 import { userAnalyzeLimit } from "@/lib/apiRateLimit";

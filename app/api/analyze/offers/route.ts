@@ -1,3 +1,9 @@
+/**
+ * GET /api/analyze/offers
+ * Returns all offers (seller list) for a given ASIN from Get Item Offers.
+ * Used by the product detail panel to show the full seller table.
+ */
+
 import { NextRequest, NextResponse } from "next/server";
 
 import { userAnalyzeLimit } from "@/lib/apiRateLimit";

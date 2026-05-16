@@ -1,3 +1,9 @@
+/**
+ * POST /api/ai/amazon-chat
+ * Streams an AI chat response using the amazon sourcing assistant system prompt.
+ * Metered by usage quota; rate-limited per user.
+ */
+
 import { NextResponse } from "next/server";
 
 import { HIGH_FOCUS_AMAZON_CHAT_SYSTEM } from "@/lib/ai/amazonAssistantPrompts";

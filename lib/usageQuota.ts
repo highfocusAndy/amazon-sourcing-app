@@ -1,3 +1,9 @@
+/**
+ * Per-user monthly usage tracking and plan-limit enforcement.
+ * The app owner (APP_OWNER_EMAIL) always gets unlimited access.
+ * All other users are metered by plan tier with hard limits per operation type.
+ */
+
 import { prisma } from "@/lib/db";
 import { isAppOwnerEmail } from "@/lib/billing/appOwner";
 

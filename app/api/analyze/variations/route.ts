@@ -1,3 +1,9 @@
+/**
+ * GET /api/analyze/variations
+ * Returns parent/child ASIN relationships for a given ASIN.
+ * Used by the product detail panel to surface variation family links.
+ */
+
 import { NextRequest, NextResponse } from "next/server";
 
 import { userAnalyzeLimit } from "@/lib/apiRateLimit";

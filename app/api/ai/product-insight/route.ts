@@ -1,3 +1,9 @@
+/**
+ * POST /api/ai/product-insight
+ * Generates an AI narrative insight for a single product using Claude.
+ * Metered by usage quota and rate-limited per user.
+ */
+
 import { NextResponse } from "next/server";
 
 import { productAnalysisForInsightApi } from "@/lib/ai/productInsightPayload";

@@ -1,3 +1,14 @@
+/**
+ * Amazon Selling Partner API (SP-API) client.
+ *
+ * Handles: LWA token refresh, optional AWS STS role assumption, AWS Signature v4 signing,
+ * catalog lookup, competitive pricing, offer listing, fee preview, and listing restrictions.
+ *
+ * Use `getSpApiClient()` to obtain a singleton client from global env vars, or
+ * `buildSpApiConfigFromEnvAndAccount()` + `new SpApiClient()` for per-user OAuth accounts.
+ */
+
+// ── Imports ───────────────────────────────────────────────────────────────────
 import { AssumeRoleCommand, STSClient } from "@aws-sdk/client-sts";
 import aws4 from "aws4";
 
@@ -28,6 +39,7 @@ interface SpApiConfig {
   awsRoleSessionName: string;
 }
 
+// ── Interfaces & Config Types ─────────────────────────────────────────────────
 /** Build SP-API config from env (used for per-user accounts: app credentials from env, rest from DB). */
 export function buildSpApiConfigFromEnvAndAccount(account: {
   refreshToken: string;
@@ -146,6 +158,7 @@ export interface ListingRestrictionsAssessment {
   reasonMessages: string[];
 }
 
+// ── Constants & Pure Helpers ──────────────────────────────────────────────────
 const ASIN_REGEX = /^[A-Z0-9]{10}$/i;
 const UPC_EAN_REGEX = /^\d{8,14}$/;
 const RETRYABLE_HTTP_STATUS = new Set([429, 500, 502, 503, 504]);
@@ -154,6 +167,7 @@ const listingRestrictionsCache = new Map<string, ListingRestrictionsAssessment>(
 
 let spApiClientSingleton: SpApiClient | null = null;
 
+// ── Config Factories ──────────────────────────────────────────────────────────
 function defaultSpApiHost(awsRegion: string): string {
   if (awsRegion.startsWith("eu-")) {
     return "sellingpartnerapi-eu.amazon.com";
@@ -483,6 +497,7 @@ export function tryReadSpApiConfig(marketplaceIdOverride?: string | null): SpApi
   }
 }
 
+// ── SpApiClient ────────────────────────────────────────────────────────────────
 export class SpApiClient {
   private lwaTokenCache: LwaTokenCache | null = null;
   private assumedRoleCache: AwsCredentials | null = null;
@@ -497,6 +512,7 @@ export class SpApiClient {
     return this.config.sellerId;
   }
 
+  // ── Auth ────────────────────────────────────────────────────────────────────
   private async getLwaAccessToken(): Promise<string> {
     const now = Date.now();
     if (this.lwaTokenCache && this.lwaTokenCache.expiresAt - 60_000 > now) {
@@ -592,6 +608,7 @@ export class SpApiClient {
     return this.assumedRoleCache;
   }
 
+  // ── HTTP ────────────────────────────────────────────────────────────────────
   private async request<T>(
     method: HttpMethod,
     path: string,
@@ -673,6 +690,7 @@ export class SpApiClient {
   /**
    * Store / seller display name from Sellers API marketplace participations.
    */
+  // ── Catalog ──────────────────────────────────────────────────────────────────
   async fetchSellerStoreDisplayName(preferredMarketplaceId?: string | null): Promise<string | null> {
     type ParticipationRow = {
       storeName?: string;
@@ -874,6 +892,7 @@ export class SpApiClient {
     };
   }
 
+  // ── Pricing ──────────────────────────────────────────────────────────────────
   private extractPricing(data: unknown): CompetitivePricing {
     const root = asObject(data);
     // Get Item Offers returns { payload: { Summary, Offers, ASIN } }; allow Summary/Offers at root too.
@@ -1157,6 +1176,7 @@ export class SpApiClient {
     };
   }
 
+  // ── Listing Restrictions ─────────────────────────────────────────────────────
   private extractListingRestrictions(data: unknown): ListingRestrictionsAssessment {
     const root = asObject(data);
     const restrictions = asArray(getField(root, ["restrictions", "Restrictions"]));
@@ -1264,6 +1284,7 @@ export class SpApiClient {
     };
   }
 
+  // ── Public Methods ────────────────────────────────────────────────────────────
   async fetchCatalogItem(asin: string): Promise<CatalogItem | null> {
     const normalized = asin.trim().toUpperCase();
     if (!ASIN_REGEX.test(normalized)) {
@@ -1668,6 +1689,7 @@ export class SpApiClient {
   }
 }
 
+// ── Module-Level Factories ────────────────────────────────────────────────────
 const spApiClientByMarketplace = new Map<string, SpApiClient>();
 
 /**

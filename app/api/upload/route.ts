@@ -1,3 +1,9 @@
+/**
+ * POST /api/upload
+ * Accepts a multipart .xlsx/.xls/.csv file, parses up to 200 rows,
+ * and runs batch analysis via lib/analysis.ts, streaming results back as JSON.
+ */
+
 import { NextRequest, NextResponse } from "next/server";
 
 import { userUploadLimit } from "@/lib/apiRateLimit";

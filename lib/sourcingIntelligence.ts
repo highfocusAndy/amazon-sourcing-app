@@ -1,3 +1,9 @@
+/**
+ * Higher-level sourcing signals derived from a ProductAnalysis result.
+ * Functions here translate raw API data (restriction codes, offer counts, flags)
+ * into actionable sourcing copy for the UI and report export.
+ */
+
 import type { ProductAnalysis } from "@/lib/types";
 import {
   cautionOfferBand,

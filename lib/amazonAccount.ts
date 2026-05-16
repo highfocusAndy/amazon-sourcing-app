@@ -1,3 +1,10 @@
+/**
+ * Retrieves an SP-API client for a given user.
+ * Tries the user's connected Amazon account first; falls back to the global env credentials.
+ * Use `getSpApiClientForUserOrGlobal` in API routes — it handles both cases and returns a
+ * consistent error message when neither is configured.
+ */
+
 import {
   buildSpApiConfigFromEnvAndAccount,
   getSpApiClient,

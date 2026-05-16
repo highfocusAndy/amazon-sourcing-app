@@ -1,3 +1,10 @@
+/**
+ * GET /api/amazon/oauth/callback
+ * Handles the SP-API OAuth redirect from Amazon Seller Central.
+ * Exchanges the authorization code for a refresh token and persists it
+ * (encrypted) to the user's AmazonAccount record.
+ */
+
 import { auth } from "@/auth";
 import { loadBillingUser } from "@/lib/billing/access";
 import { encryptAmazonRefreshToken } from "@/lib/amazonTokenCrypto";

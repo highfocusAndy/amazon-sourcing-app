@@ -1,3 +1,8 @@
+/**
+ * Singleton Prisma client for SQLite database access.
+ * Re-uses a single client across hot-reloads in development to avoid exhausting connections.
+ */
+
 import { PrismaClient } from "@prisma/client";
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient | undefined };

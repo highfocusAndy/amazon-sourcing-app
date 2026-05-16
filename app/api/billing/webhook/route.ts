@@ -1,3 +1,10 @@
+/**
+ * POST /api/billing/webhook
+ * Stripe webhook handler. Verifies the Stripe signature then processes subscription
+ * lifecycle events (checkout.session.completed, customer.subscription.updated/deleted)
+ * to keep the DB plan tier in sync with the Stripe subscription state.
+ */
+
 import { NextRequest, NextResponse } from "next/server";
 import type Stripe from "stripe";
 
