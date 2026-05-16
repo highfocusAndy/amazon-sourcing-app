@@ -2,7 +2,7 @@ import crypto from "crypto";
 import { compare, hash } from "bcryptjs";
 
 export const ADMIN_AUTH_COOKIE = "admin_auth";
-const TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24 h
+const TOKEN_TTL_MS = 12 * 60 * 60 * 1000; // 12 h max safety window
 
 function authSecret(): string {
   return process.env.AUTH_SECRET ?? "no-secret-configured";

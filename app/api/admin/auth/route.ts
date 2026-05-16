@@ -32,7 +32,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     secure: process.env.NODE_ENV === "production",
     sameSite: "strict",
     path: "/",
-    maxAge: 24 * 60 * 60, // 24 h
+    // No maxAge/expires → session cookie; browser discards it on close
   });
 
   return NextResponse.json({ ok: true });
