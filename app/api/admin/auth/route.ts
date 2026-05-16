@@ -32,17 +32,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const fingerprint = getSessionFingerprint(rawNextAuth);
   const token = generateAdminSessionToken(gate.userId, fingerprint);
 
-  cookieStore.set(ADMIN_AUTH_COOKIE, token, {
+  const response = NextResponse.json({ ok: true });
+  response.cookies.set(ADMIN_AUTH_COOKIE, token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "strict",
     path: "/",
-    // No maxAge → session cookie; browser discards it on close.
-    // Token is also bound to the current NextAuth session, so
-    // signing out and back in invalidates it automatically.
   });
-
-  return NextResponse.json({ ok: true });
+  return response;
 }
 
 /** DELETE — clear the admin session cookie. */
@@ -50,7 +47,7 @@ export async function DELETE(): Promise<NextResponse> {
   const gate = await requireAdminEmailOnly();
   if (!gate.ok) return gate.response;
 
-  const cookieStore = await cookies();
-  cookieStore.delete(ADMIN_AUTH_COOKIE);
-  return NextResponse.json({ ok: true });
+  const response = NextResponse.json({ ok: true });
+  response.cookies.delete(ADMIN_AUTH_COOKIE);
+  return response;
 }
