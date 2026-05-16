@@ -69,9 +69,10 @@ export async function GET(): Promise<NextResponse> {
     Promise.resolve(Boolean(process.env.KEEPA_API_KEY?.trim())),
     Promise.resolve(
       Boolean(
-        process.env.RAILWAY_ENVIRONMENT?.trim() ||
+        process.env.RAILWAY_ENVIRONMENT_NAME?.trim() ||
           process.env.RAILWAY_PROJECT_ID?.trim() ||
-          process.env.RAILWAY_STATIC_URL?.trim(),
+          process.env.RAILWAY_SERVICE_ID?.trim() ||
+          process.env.RAILWAY_DEPLOYMENT_ID?.trim(),
       ),
     ),
     Promise.resolve(tryReadSpApiConfig()),
