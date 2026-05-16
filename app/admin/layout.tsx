@@ -10,6 +10,8 @@ import { redirect } from "next/navigation";
 import { AdminPasswordGate } from "./AdminPasswordGate";
 import { AdminShell } from "./AdminShell";
 
+export const dynamic = "force-dynamic";
+
 export const metadata = { title: "Admin — HIGH FOCUS" };
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
