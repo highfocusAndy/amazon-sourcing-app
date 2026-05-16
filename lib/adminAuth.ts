@@ -2,7 +2,6 @@ import crypto from "crypto";
 import { compare, hash } from "bcryptjs";
 
 export const ADMIN_AUTH_COOKIE = "admin_auth_v2";
-const TOKEN_TTL_MS = 12 * 60 * 60 * 1000; // 12 h max safety window
 
 function authSecret(): string {
   return process.env.AUTH_SECRET ?? "no-secret-configured";
@@ -20,14 +19,31 @@ function safeHexEqual(a: string, b: string): boolean {
   }
 }
 
-export function generateAdminSessionToken(userId: string): string {
-  const expires = Date.now() + TOKEN_TTL_MS;
-  const payload = `${userId}:${expires}`;
+/**
+ * A short hash of the raw NextAuth session cookie value.
+ * Changes every time the user signs out and back in, so the admin token
+ * is automatically invalidated on each new login session.
+ */
+export function getSessionFingerprint(rawNextAuthToken: string): string {
+  return crypto
+    .createHash("sha256")
+    .update(rawNextAuthToken + authSecret())
+    .digest("hex")
+    .slice(0, 32);
+}
+
+/** Token payload: userId:expires:sessionFingerprint */
+export function generateAdminSessionToken(userId: string, sessionFingerprint: string): string {
+  const payload = `${userId}:${sessionFingerprint}`;
   const sig = crypto.createHmac("sha256", authSecret()).update(payload).digest("hex");
   return `${payload}:${sig}`;
 }
 
-export function validateAdminSessionToken(token: string, userId: string): boolean {
+export function validateAdminSessionToken(
+  token: string,
+  userId: string,
+  sessionFingerprint: string,
+): boolean {
   try {
     const lastColon = token.lastIndexOf(":");
     if (lastColon < 0) return false;
@@ -35,12 +51,13 @@ export function validateAdminSessionToken(token: string, userId: string): boolea
     const payload = token.slice(0, lastColon);
     const expected = crypto.createHmac("sha256", authSecret()).update(payload).digest("hex");
     if (!safeHexEqual(sig, expected)) return false;
+    // payload = userId:sessionFingerprint
     const colonIdx = payload.indexOf(":");
     if (colonIdx < 0) return false;
     const tokenUserId = payload.slice(0, colonIdx);
-    const expires = Number(payload.slice(colonIdx + 1));
+    const tokenFingerprint = payload.slice(colonIdx + 1);
     if (tokenUserId !== userId) return false;
-    if (!Number.isFinite(expires) || Date.now() > expires) return false;
+    if (tokenFingerprint !== sessionFingerprint) return false;
     return true;
   } catch {
     return false;
@@ -83,4 +100,15 @@ export async function hashAndStoreAdminPassword(newPassword: string): Promise<vo
     update: { value: hashed },
     create: { key: "admin:password_hash", value: hashed },
   });
+}
+
+/** Read the raw NextAuth session token from the incoming request cookies. */
+export function getRawNextAuthToken(
+  cookieStore: Awaited<ReturnType<typeof import("next/headers")["cookies"]>>,
+): string {
+  return (
+    cookieStore.get("authjs.session-token")?.value ??
+    cookieStore.get("__Secure-authjs.session-token")?.value ??
+    ""
+  );
 }

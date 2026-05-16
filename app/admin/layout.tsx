@@ -2,6 +2,8 @@ import { auth } from "@/auth";
 import { isAppOwnerEmail } from "@/lib/billing/appOwner";
 import {
   ADMIN_AUTH_COOKIE,
+  getSessionFingerprint,
+  getRawNextAuthToken,
   isAdminPasswordRequired,
   validateAdminSessionToken,
 } from "@/lib/adminAuth";
@@ -21,8 +23,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   if (await isAdminPasswordRequired()) {
     const cookieStore = await cookies();
+    const rawNextAuth = getRawNextAuthToken(cookieStore);
+    const fingerprint = getSessionFingerprint(rawNextAuth);
     const token = cookieStore.get(ADMIN_AUTH_COOKIE)?.value ?? "";
-    if (!validateAdminSessionToken(token, session.user.id)) {
+
+    if (!validateAdminSessionToken(token, session.user.id, fingerprint)) {
       return (
         <AdminShell>
           <AdminPasswordGate />
