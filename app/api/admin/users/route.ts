@@ -51,8 +51,11 @@ export async function GET(): Promise<NextResponse> {
     return t > 0 ? new Date(t).toISOString() : null;
   }
 
+  const ownerEmail = process.env.APP_OWNER_EMAIL?.trim().toLowerCase();
+
   const enriched = users.map((u) => ({
     ...u,
+    isOwner: Boolean(ownerEmail && u.email.toLowerCase() === ownerEmail),
     lastActiveAt: lastActiveIso(u),
     monthlyUsageTotals: {
       mtd: u.monthlyUsage.reduce((s, r) => s + r.used, 0),

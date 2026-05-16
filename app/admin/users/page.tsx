@@ -24,6 +24,7 @@ type UserRow = {
   monthlyUsage: { metric: string; used: number; limit: number | null }[];
   lastActiveAt: string | null;
   monthlyUsageTotals?: { mtd: number };
+  isOwner?: boolean;
 };
 
 type SortKey =
@@ -41,6 +42,14 @@ function accessClassification(user: UserRow): {
   toneClass: string;
   sortBucket: number;
 } {
+  if (user.isOwner) {
+    return {
+      label: "App owner",
+      toneClass: "border-teal-400/50 bg-teal-500/[0.15] text-teal-100",
+      sortBucket: 6,
+    };
+  }
+
   const now = Date.now();
   const trialOk = user.trialEndsAt && new Date(user.trialEndsAt).getTime() > now;
   const promoOk = user.promoAccessUntil && new Date(user.promoAccessUntil).getTime() > now;
@@ -325,11 +334,17 @@ export default function AdminUsersPage() {
                         </span>
                       </td>
                       <td className="px-3 py-3 align-top">
-                        <span
-                          className={`inline-flex rounded-md border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${planBadge(user.subscriptionPlan)}`}
-                        >
-                          {user.subscriptionPlan}
-                        </span>
+                        {user.isOwner ? (
+                          <span className="inline-flex rounded-md border border-teal-400/50 bg-teal-500/[0.15] px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-teal-100">
+                            Owner
+                          </span>
+                        ) : (
+                          <span
+                            className={`inline-flex rounded-md border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${planBadge(user.subscriptionPlan)}`}
+                          >
+                            {user.subscriptionPlan}
+                          </span>
+                        )}
                       </td>
                       <td className="px-3 py-3 align-top">
                         {user.amazonAccount?.sellerId ? (
