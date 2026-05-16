@@ -121,6 +121,7 @@ export async function GET(): Promise<NextResponse> {
       openaiConfigured,
       imageSearchEnabled: openaiConfigured,
       keepaConfigured: keepaEnv,
+      uptimeSeconds: Math.floor(process.uptime()),
     },
     generatedAt: now.toISOString(),
   });

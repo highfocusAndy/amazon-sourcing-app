@@ -39,6 +39,7 @@ type OverviewResponse = {
     openaiConfigured: boolean;
     imageSearchEnabled: boolean;
     keepaConfigured: boolean;
+    uptimeSeconds: number;
   };
 };
 
@@ -138,14 +139,24 @@ const healthStyle: Record<HealthTier, { bar: string; text: string; subtle: strin
   },
 };
 
-function HealthRow({ label, tier }: { label: string; tier: HealthTier }) {
+function formatUptime(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  const m = Math.floor(seconds / 60) % 60;
+  const h = Math.floor(seconds / 3600) % 24;
+  const d = Math.floor(seconds / 86400);
+  if (d > 0) return `${d}d ${h}h ${m}m`;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+
+function HealthRow({ label, tier, detail }: { label: string; tier: HealthTier; detail?: string }) {
   const s = healthStyle[tier];
   return (
     <div className={`flex items-center justify-between gap-3 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3.5 py-2.5 transition hover:bg-white/[0.035] ${s.row}`}>
       <span className="text-[13px] font-medium text-slate-300">{label}</span>
       <span className={`flex items-center gap-2.5 text-xs font-semibold ${s.subtle}`}>
         <span className={`h-2 w-2 shrink-0 rounded-full ${s.bar}`} aria-hidden />
-        {s.text}
+        {detail ?? s.text}
       </span>
     </div>
   );
@@ -522,6 +533,7 @@ export function AdminOverviewClient() {
                   Lightweight environment checks — pair with external uptime for production SLA.
                 </p>
                 <div className="mt-5 space-y-2.5">
+                  <HealthRow label="App server" tier="operational" detail={h?.uptimeSeconds !== undefined ? `Up ${formatUptime(h.uptimeSeconds)}` : "Running"} />
                   <HealthRow label="Database" tier={h?.database === "ok" ? "operational" : "attention"} />
                   <HealthRow label="SP-API configuration" tier={h?.spApiConfigured ? "operational" : "attention"} />
                   <HealthRow label="OpenAI vision (image scans)" tier={h?.imageSearchEnabled ? "operational" : "idle"} />
