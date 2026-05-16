@@ -38,6 +38,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           <div className="flex flex-wrap items-center gap-3">
             <Link
               href="/"
+              prefetch={false}
               className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 transition-colors hover:text-teal-300"
             >
               ← Workspace

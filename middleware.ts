@@ -35,9 +35,23 @@ export default auth((req) => {
     const callback = `${path}${req.nextUrl.search}`;
     signIn.searchParams.set("callbackUrl", callback);
     const loginRedirect = NextResponse.redirect(signIn);
-    // Clear the admin password cookie so it is re-required after sign-out.
     loginRedirect.cookies.delete("admin_auth_v2");
     return loginRedirect;
+  }
+
+  // When an authenticated user navigates away from /admin, delete the admin
+  // password cookie so it is required again on the next admin visit.
+  // Prefetch requests (RSC + Next-Router-Prefetch) are skipped to avoid
+  // clearing the cookie while the user is still actively on an admin page.
+  const isAdminPath = path.startsWith("/admin") || path.startsWith("/api/admin");
+  const isRscPrefetch =
+    req.headers.get("RSC") === "1" && req.headers.get("Next-Router-Prefetch") === "1";
+  const hasAdminCookie = Boolean(req.cookies.get("admin_auth_v2")?.value);
+
+  if (isLoggedIn && hasAdminCookie && !isAdminPath && !isRscPrefetch) {
+    const res = NextResponse.next();
+    res.cookies.delete("admin_auth_v2");
+    return res;
   }
 
   // Static category tree only (no SP-API). Catalog search requires a session to protect SP-API usage.
