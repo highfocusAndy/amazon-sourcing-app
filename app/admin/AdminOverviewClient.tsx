@@ -352,7 +352,18 @@ export function AdminOverviewClient() {
               />
               <MetricCard label="Trial windows" value={m.trialUsers} accent="amber" />
               <MetricCard label="Promo access" value={m.promoAccessUsers} accent="cyan" />
-              <MetricCard label="Linked Amazon OAuth" value={m.connectedAmazonAccounts} accent="teal" />
+              <MetricCard
+                label="Linked Amazon OAuth"
+                value={m.connectedAmazonAccounts}
+                sub={
+                  m.connectedAmazonAccounts > 0
+                    ? "Per-user OAuth accounts"
+                    : h?.spApiConfigured
+                      ? "0 per-user — global env var active"
+                      : "No SP-API configured"
+                }
+                accent="teal"
+              />
               <MetricCard
                 label="API requests (mtd)"
                 value={m.apiRequestsMonthToDate.toLocaleString()}
