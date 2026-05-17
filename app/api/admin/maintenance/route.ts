@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdminAccess } from "@/app/api/admin/guard";
-import { prisma } from "@/lib/prisma";
+import { prisma } from "@/lib/db";
 
 export const runtime = "nodejs";
 
