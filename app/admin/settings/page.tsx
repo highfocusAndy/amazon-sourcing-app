@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, type FormEvent } from "react";
+import { useState, useEffect, useRef, type FormEvent } from "react";
 import {
   THEMES,
   type ThemeId,
@@ -267,6 +267,143 @@ function AdminThemeSection() {
   );
 }
 
+type MaintenanceResult = {
+  expiredCache: number;
+  expiredChallenges: number;
+  expiredLoginTokens: number;
+  expiredPasswordResets: number;
+  oldUsageRecords: number;
+};
+
+function MaintenanceSection() {
+  const [status, setStatus] = useState<"idle" | "running" | "done" | "error">("idle");
+  const [result, setResult] = useState<MaintenanceResult | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => { if (timeoutRef.current) clearTimeout(timeoutRef.current); }, []);
+
+  async function runMaintenance() {
+    setStatus("running");
+    setResult(null);
+    setErrorMsg(null);
+    try {
+      const res = await fetch("/api/admin/maintenance", { method: "POST" });
+      const data = (await res.json()) as { ok?: boolean; deleted?: MaintenanceResult; error?: string };
+      if (!res.ok || !data.ok) {
+        setErrorMsg(data.error ?? "Maintenance failed");
+        setStatus("error");
+      } else {
+        setResult(data.deleted ?? null);
+        setStatus("done");
+        timeoutRef.current = setTimeout(() => setStatus("idle"), 12000);
+      }
+    } catch {
+      setErrorMsg("Network error — please try again");
+      setStatus("error");
+    }
+  }
+
+  const tasks = [
+    { label: "Expired SP-API response cache", key: "expiredCache" as const },
+    { label: "Expired passkey challenges", key: "expiredChallenges" as const },
+    { label: "Expired passkey login tokens", key: "expiredLoginTokens" as const },
+    { label: "Expired password reset tokens", key: "expiredPasswordResets" as const },
+    { label: "Usage records older than 12 months", key: "oldUsageRecords" as const },
+  ];
+
+  const totalDeleted = result ? Object.values(result).reduce((s, n) => s + n, 0) : 0;
+
+  return (
+    <div className="rounded-2xl border border-white/[0.07] bg-gradient-to-b from-white/[0.04] to-transparent p-6 shadow-[0_20px_50px_-32px_rgba(0,0,0,0.8)]">
+      <h2 className="mb-1 text-base font-semibold text-white">Database Maintenance</h2>
+      <p className="mb-6 text-sm text-slate-500">
+        Cleans up expired records and compacts the database. Safe to run at any time — only
+        removes rows that are no longer needed.
+      </p>
+
+      {/* Task list */}
+      <ul className="mb-6 space-y-2">
+        {tasks.map(({ label, key }) => (
+          <li key={key} className="flex items-center justify-between rounded-xl border border-white/[0.05] bg-white/[0.02] px-4 py-2.5">
+            <span className="text-[13px] text-slate-400">{label}</span>
+            {status === "done" && result ? (
+              <span
+                className="rounded-full px-2.5 py-0.5 text-[11px] font-semibold tabular-nums"
+                style={
+                  result[key] > 0
+                    ? { background: "rgb(var(--accent) / 0.12)", color: "rgb(var(--accent))" }
+                    : { background: "rgb(255 255 255 / 0.04)", color: "rgb(148 163 184)" }
+                }
+              >
+                {result[key] > 0 ? `−${result[key]}` : "clean"}
+              </span>
+            ) : (
+              <span className="h-5 w-14 animate-pulse rounded-full bg-white/[0.04]" style={status !== "running" ? { animation: "none", background: "transparent" } : {}} />
+            )}
+          </li>
+        ))}
+        <li className="flex items-center justify-between rounded-xl border border-white/[0.05] bg-white/[0.02] px-4 py-2.5">
+          <span className="text-[13px] text-slate-400">SQLite VACUUM (compact DB file)</span>
+          {status === "done" ? (
+            <span className="rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-400">
+              done
+            </span>
+          ) : (
+            <span className="h-5 w-14 rounded-full" style={{ background: "transparent" }} />
+          )}
+        </li>
+      </ul>
+
+      {/* Result banner */}
+      {status === "done" && result && (
+        <div
+          className="mb-5 flex items-center gap-3 rounded-xl border px-4 py-3"
+          style={{ borderColor: "rgb(var(--accent) / 0.25)", background: "rgb(var(--accent) / 0.06)" }}
+        >
+          <span className="text-lg">✓</span>
+          <p className="text-[13px] text-slate-300">
+            Maintenance complete.{" "}
+            <strong className="text-white">{totalDeleted} row{totalDeleted !== 1 ? "s" : ""}</strong>{" "}
+            deleted and database compacted.
+          </p>
+        </div>
+      )}
+
+      {status === "error" && errorMsg && (
+        <div className="mb-5 rounded-xl border border-rose-500/25 bg-rose-500/[0.07] px-4 py-3">
+          <p className="text-[13px] text-rose-300">{errorMsg}</p>
+        </div>
+      )}
+
+      <button
+        type="button"
+        onClick={() => void runMaintenance()}
+        disabled={status === "running" || status === "done"}
+        className="flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-50"
+        style={{
+          background: "rgb(var(--accent))",
+          boxShadow: "0 0 20px -4px rgb(var(--accent) / 0.4)",
+        }}
+      >
+        {status === "running" ? (
+          <>
+            <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4l3-3-3-3v4a8 8 0 00-8 8h4z" />
+            </svg>
+            Running…
+          </>
+        ) : status === "done" ? (
+          "Done ✓"
+        ) : (
+          "Run Maintenance"
+        )}
+      </button>
+    </div>
+  );
+}
+
 export default function AdminSettingsPage() {
   return (
     <div className="space-y-8">
@@ -298,6 +435,10 @@ export default function AdminSettingsPage() {
 
       <section>
         <AdminThemeSection />
+      </section>
+
+      <section>
+        <MaintenanceSection />
       </section>
     </div>
   );

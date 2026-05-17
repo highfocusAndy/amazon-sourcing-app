@@ -597,7 +597,10 @@ export async function analyzeProduct(
   }
 }
 
-export async function analyzeBatch(inputs: ProductInput[]): Promise<ProductAnalysis[]> {
+export async function analyzeBatch(
+  inputs: ProductInput[],
+  client?: SpApiClient | null,
+): Promise<ProductAnalysis[]> {
   if (inputs.length === 0) {
     return [];
   }
@@ -611,8 +614,9 @@ export async function analyzeBatch(inputs: ProductInput[]): Promise<ProductAnaly
     while (nextIndex < inputs.length) {
       const currentIndex = nextIndex;
       nextIndex += 1;
-      // Keep a modest pool to improve throughput without excessive API throttling.
-      results[currentIndex] = await analyzeProduct(inputs[currentIndex]);
+      // Pass the shared client — avoids creating a new SpApiClient (and
+      // re-doing token exchange / STS assume-role) for every product row.
+      results[currentIndex] = await analyzeProduct(inputs[currentIndex], client);
     }
   }
 

@@ -827,8 +827,12 @@ export class SpApiClient {
       parentSet.add(anchor.asin.toUpperCase());
     }
 
-    for (const parentAsin of [...parentSet]) {
-      const parentItem = await this.fetchCatalogItem(parentAsin).catch(() => null);
+    // Fetch all parents concurrently — the sequential loop added full round-trip
+    // latency for each parent ASIN before any child discovery could start.
+    const parentItems = await Promise.all(
+      [...parentSet].map((parentAsin) => this.fetchCatalogItem(parentAsin).catch(() => null)),
+    );
+    for (const parentItem of parentItems) {
       if (!parentItem) continue;
       for (const c of parentItem.childAsins ?? []) {
         const asin = c.toUpperCase();
@@ -1488,19 +1492,21 @@ export class SpApiClient {
     if (UPC_EAN_REGEX.test(digits)) {
       const identifierCandidates = buildNumericIdentifierCandidates(digits);
       for (const candidate of identifierCandidates) {
-      const identifierTypes: Array<"UPC" | "EAN" | "GTIN"> =
-        candidate.length === 13
-          ? ["EAN", "GTIN", "UPC"]
-          : candidate.length === 12
-            ? ["UPC", "GTIN", "EAN"]
-            : ["GTIN", "UPC", "EAN"];
+        // Pick the single most-likely type for this digit count — covers 99%+ of
+        // supplier data without paying for sequential fallback calls upfront.
+        const primaryType: "UPC" | "EAN" | "GTIN" =
+          candidate.length === 13 ? "EAN" : candidate.length === 12 ? "UPC" : "GTIN";
 
-        for (const identifierType of identifierTypes) {
-          // Sequential tries improve reliability for mixed UPC/EAN supplier data.
-          const match = await this.searchCatalogByIdentifier(identifierType, candidate).catch(() => null);
-          if (match) {
-            return match;
-          }
+        const primary = await this.searchCatalogByIdentifier(primaryType, candidate).catch(() => null);
+        if (primary) return primary;
+
+        // One cross-type fallback: some suppliers encode EAN-12 as 12-digit or
+        // pad a UPC to 13 digits — worth a single extra attempt, not three.
+        const fallbackType: "UPC" | "EAN" | null =
+          primaryType === "UPC" ? "EAN" : primaryType === "EAN" ? "UPC" : null;
+        if (fallbackType) {
+          const fallback = await this.searchCatalogByIdentifier(fallbackType, candidate).catch(() => null);
+          if (fallback) return fallback;
         }
       }
     }

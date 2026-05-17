@@ -99,7 +99,9 @@ export async function extractAmazonSalesVolume(
         "Sec-Fetch-User": "?1",
         "Upgrade-Insecure-Requests": "1",
       },
-      signal: AbortSignal.timeout(10000),
+      // Keep this tight: this call races alongside SP-API calls in a Promise.all.
+      // A blocked/captcha response wastes the entire group's latency budget.
+      signal: AbortSignal.timeout(Number(process.env.AMAZON_SCRAPE_TIMEOUT_MS ?? 3500)),
     });
     if (!res.ok) return null;
     const html = await res.text();
