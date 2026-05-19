@@ -225,10 +225,10 @@ function LeftNavWithCategories({
           <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Menu</p>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain">
-          <NavLink href="/" active={pathname === "/"} icon="◆" onNavigate={onCloseMobileMenu}>
+          <NavLink href="/dashboard" active={pathname === "/dashboard"} icon="◆" onNavigate={onCloseMobileMenu}>
             Explorer
           </NavLink>
-          {pathname === "/" && ctx && (
+          {pathname === "/dashboard" && ctx && (
             <>
               <button
                 type="button"

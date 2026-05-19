@@ -138,7 +138,7 @@ export function SubscribeContent({
       <div className="rounded-2xl border border-slate-600/80 bg-slate-800/80 p-8 text-slate-200 shadow-xl backdrop-blur">
         <p className="text-lg font-semibold text-teal-300">Billing checks are disabled</p>
         <p className="mt-2 text-sm text-slate-400">Set BILLING_DISABLED=false in production.</p>
-        <Link href="/" className="mt-6 inline-block text-teal-400 underline">
+        <Link href="/dashboard" className="mt-6 inline-block text-teal-400 underline">
           Back to dashboard
         </Link>
       </div>
@@ -169,7 +169,7 @@ export function SubscribeContent({
             {portalLoading ? "Opening…" : "Manage billing"}
           </button>
         ) : null}
-        <Link href="/" className="mt-4 block text-sm text-teal-400 underline">
+        <Link href="/dashboard" className="mt-4 block text-sm text-teal-400 underline">
           Back to dashboard
         </Link>
       </div>
@@ -239,7 +239,7 @@ export function SubscribeContent({
             Billing signup is currently paused in testing mode. Payment will be available here once checkout is enabled.
           </p>
         ) : null}
-        <Link href="/" className="mt-4 block text-sm text-teal-400 underline">
+        <Link href="/dashboard" className="mt-4 block text-sm text-teal-400 underline">
           Back to dashboard
         </Link>
       </div>

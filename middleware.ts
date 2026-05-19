@@ -12,6 +12,7 @@ export default auth((req) => {
   }
 
   const isPublicPage =
+    path === "/" ||
     path.startsWith("/login") ||
     path.startsWith("/signup") ||
     path.startsWith("/get-access") ||

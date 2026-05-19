@@ -37,7 +37,7 @@ export default async function SettingsPage({
       <header className="shrink-0 border-b border-slate-200 bg-white/80 backdrop-blur px-6 py-4 shadow-sm">
         <div className="flex items-center justify-between">
           <Link
-            href="/"
+            href="/dashboard"
             className="text-sm font-semibold text-teal-600 hover:text-teal-500 hover:underline"
           >
             ← Back to dashboard

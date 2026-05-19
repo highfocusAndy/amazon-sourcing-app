@@ -58,7 +58,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         <div className="relative mx-auto flex max-w-[1400px] flex-wrap items-center justify-between gap-3 px-4 py-3.5">
           <div className="flex flex-wrap items-center gap-3">
             <Link
-              href="/"
+              href="/dashboard"
               prefetch={false}
               className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 transition-colors hover:text-slate-200"
             >
