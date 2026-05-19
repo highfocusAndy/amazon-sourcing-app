@@ -275,10 +275,10 @@ export function LoginForm({ supportEmail }: LoginFormProps) {
           (e.currentTarget as HTMLAnchorElement).style.background = "rgba(255,255,255,0.03)";
         }}
       >
-        Pay or use a promo code
+        Create account
       </Link>
       <p className="text-center text-[12px] leading-snug text-slate-600">
-        New here? Subscribe or enter an invite code on the next page.
+        New here? Subscribe or enter an invite code to get started.
       </p>
 
       {supportEmail ? <SupportContactHint email={supportEmail} /> : null}

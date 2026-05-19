@@ -9,7 +9,7 @@ import { GetAccessContent } from "./GetAccessContent";
 export default async function GetAccessPage() {
   const session = await auth();
   if (session?.user) {
-    redirect("/");
+    redirect("/dashboard");
   }
 
   const subscriptionTrialDays = defaultTrialDays();

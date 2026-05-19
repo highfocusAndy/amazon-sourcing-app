@@ -174,7 +174,7 @@ function LandingNav() {
             Sign In
           </Link>
           <Link
-            href="/register"
+            href="/get-access"
             className="lp-btn-g lp-b rounded-xl px-5 py-2.5 text-sm font-bold text-black"
           >
             Start Free Trial
@@ -243,7 +243,7 @@ function HeroSection() {
         {/* CTAs */}
         <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
           <Link
-            href="/register"
+            href="/get-access"
             className="lp-btn-g lp-b inline-flex items-center gap-2.5 rounded-xl px-9 py-4 text-[15px] font-bold text-black"
           >
             Start Free Trial <span aria-hidden>→</span>
@@ -459,7 +459,7 @@ function PricingSection() {
         "Export to spreadsheet",
       ],
       cta: "Start Free",
-      href: "/register",
+      href: "/get-access",
     },
     {
       name: "Pro",
@@ -477,7 +477,7 @@ function PricingSection() {
         "Priority support",
       ],
       cta: "Get Pro →",
-      href: "/register",
+      href: "/get-access",
       pro: true,
       badge: "Most Popular",
     },
@@ -497,7 +497,7 @@ function PricingSection() {
         "API access",
       ],
       cta: "Contact Sales",
-      href: "/register",
+      href: "/get-access",
     },
   ];
 
@@ -622,7 +622,7 @@ function CtaSection() {
               </p>
               <div className="mt-9 flex flex-col items-center justify-center gap-4 sm:flex-row">
                 <Link
-                  href="/register"
+                  href="/get-access"
                   className="lp-btn-g lp-b inline-flex items-center gap-2.5 rounded-xl px-10 py-4 text-base font-bold text-black"
                 >
                   Create Free Account →
