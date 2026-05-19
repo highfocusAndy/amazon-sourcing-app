@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import type { FormEvent } from "react";
-import Link from "next/link";
 import { SupportContactHint } from "@/app/components/SupportContactHint";
 import { useSearchParams, useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
@@ -245,40 +244,6 @@ export function LoginForm({ supportEmail }: LoginFormProps) {
       </button>
       <p className="text-center text-[12px] leading-snug text-slate-600">
         Face ID, fingerprint, or device PIN — add a passkey in Account settings first.
-      </p>
-
-      {/* Second divider */}
-      <div className="relative py-1 text-center">
-        <div
-          className="absolute inset-x-0 top-1/2 h-px"
-          style={{ background: "rgba(255,255,255,0.07)" }}
-        />
-        <span className="relative px-3 text-[12px] uppercase tracking-wider text-slate-600">
-          or
-        </span>
-      </div>
-
-      {/* Get access — gold outline */}
-      <Link
-        href="/get-access"
-        className="flex w-full items-center justify-center rounded-xl px-4 py-3.5 text-center text-[15px] font-semibold text-slate-300 transition hover:text-white"
-        style={{
-          background: "rgba(255,255,255,0.03)",
-          border: "1px solid rgba(255,255,255,0.1)",
-        }}
-        onMouseEnter={(e) => {
-          (e.currentTarget as HTMLAnchorElement).style.borderColor = "rgba(201,168,76,0.4)";
-          (e.currentTarget as HTMLAnchorElement).style.background = "rgba(201,168,76,0.05)";
-        }}
-        onMouseLeave={(e) => {
-          (e.currentTarget as HTMLAnchorElement).style.borderColor = "rgba(255,255,255,0.1)";
-          (e.currentTarget as HTMLAnchorElement).style.background = "rgba(255,255,255,0.03)";
-        }}
-      >
-        Create account
-      </Link>
-      <p className="text-center text-[12px] leading-snug text-slate-600">
-        New here? Subscribe or enter an invite code to get started.
       </p>
 
       {supportEmail ? <SupportContactHint email={supportEmail} /> : null}
