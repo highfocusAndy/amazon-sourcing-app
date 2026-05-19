@@ -13,7 +13,7 @@ export default async function CompleteRecoveryPage({
 }) {
   const session = await auth();
   if (session?.user) {
-    redirect("/");
+    redirect("/dashboard");
   }
 
   const sp = searchParams != null ? await searchParams : {};

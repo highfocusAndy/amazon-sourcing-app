@@ -15,7 +15,7 @@ export default async function SignupCompletePage({
 }) {
   const session = await auth();
   if (session?.user) {
-    redirect("/");
+    redirect("/dashboard");
   }
 
   const sp = searchParams != null ? await searchParams : {};

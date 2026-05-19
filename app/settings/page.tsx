@@ -26,10 +26,10 @@ export default async function SettingsPage({
   const amazonConnected = sp.amazon_connected;
   const amazonError = sp.amazon_error;
   if (amazonConnected === "1") {
-    redirect("/");
+    redirect("/dashboard");
   }
   if (typeof amazonError === "string" && amazonError) {
-    redirect("/");
+    redirect("/dashboard");
   }
 
   return (
