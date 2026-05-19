@@ -1,6 +1,8 @@
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import { Cormorant_Garamond, Montserrat } from "next/font/google";
+import { ScrollReveal } from "@/app/components/ScrollReveal";
 
 export const metadata = {
   title: "HIGH FOCUS Sourcing — Amazon FBA Wholesale Research Tool",
@@ -8,46 +10,172 @@ export const metadata = {
     "Upload your supplier list. Pull live SP-API data. Get instant BUY / PASS decisions with FBA profit, ROI, and competition analysis.",
 };
 
-// ─── Shared style tokens ─────────────────────────────────────────────────────
-const GOLD = "#c9a034";
-const GOLD_LIGHT = "#e8c060";
-const GOLD_DIM = "rgba(201,160,52,0.12)";
-const GOLD_BORDER = "rgba(201,160,52,0.28)";
-const CARD_BG = "rgba(255,255,255,0.03)";
-const CARD_BORDER = "rgba(255,255,255,0.07)";
+// ── Google Fonts ──────────────────────────────────────────────────────────────
+const cormorant = Cormorant_Garamond({
+  subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700"],
+  style: ["normal", "italic"],
+  variable: "--font-cormorant",
+  display: "swap",
+});
 
-// ─── Nav ──────────────────────────────────────────────────────────────────────
+const montserrat = Montserrat({
+  subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700"],
+  variable: "--font-montserrat",
+  display: "swap",
+});
+
+// ── Design tokens ─────────────────────────────────────────────────────────────
+const G       = "#C9A84C";           // primary gold
+const G_L     = "#E8CC7A";           // light gold
+const G_DIM   = "rgba(201,168,76,0.08)";
+const G_GLOW  = "rgba(201,168,76,0.18)";
+const G_BORD  = "rgba(201,168,76,0.28)";
+const CARD    = "rgba(255,255,255,0.028)";
+const C_BORD  = "rgba(255,255,255,0.065)";
+
+// ── Injected CSS (keyframes, utility classes) ─────────────────────────────────
+function LandingStyles() {
+  return (
+    <style>{`
+      .lp-h  { font-family: var(--font-cormorant), Georgia, serif; }
+      .lp-b  { font-family: var(--font-montserrat), Arial, sans-serif; }
+
+      /* ── Grid overlay ───────────────────────────────────── */
+      .lp-grid-bg {
+        background-image:
+          linear-gradient(rgba(201,168,76,0.045) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(201,168,76,0.045) 1px, transparent 1px);
+        background-size: 58px 58px;
+      }
+
+      /* ── Floating orbs ──────────────────────────────────── */
+      @keyframes lp-float-a {
+        0%,100% { transform: translate(0,0) scale(1); }
+        35%     { transform: translate(14px,-26px) scale(1.03); }
+        70%     { transform: translate(-9px,-14px) scale(0.98); }
+      }
+      @keyframes lp-float-b {
+        0%,100% { transform: translate(0,0) scale(1); }
+        50%     { transform: translate(-18px,-30px) scale(1.04); }
+      }
+      @keyframes lp-float-c {
+        0%,100% { transform: translate(0,0); }
+        45%     { transform: translate(11px,-20px); }
+        80%     { transform: translate(-7px,-10px); }
+      }
+      .lp-orb-a { animation: lp-float-a 11s ease-in-out infinite; }
+      .lp-orb-b { animation: lp-float-b 15s ease-in-out infinite 3s; }
+      .lp-orb-c { animation: lp-float-c  9s ease-in-out infinite 6s; }
+
+      /* ── Scroll reveal ──────────────────────────────────── */
+      .lp-reveal {
+        opacity: 0;
+        transform: translateY(30px);
+        transition: opacity 0.82s cubic-bezier(0.16,1,0.3,1),
+                    transform 0.82s cubic-bezier(0.16,1,0.3,1);
+      }
+      .lp-reveal.lp-revealed { opacity: 1; transform: translateY(0); }
+
+      /* ── Feature card hover ─────────────────────────────── */
+      .lp-feat {
+        position: relative;
+        overflow: hidden;
+        transition: border-color .3s ease, box-shadow .3s ease;
+      }
+      .lp-feat::before {
+        content: '';
+        position: absolute; top: 0; left: 0; right: 0; height: 1px;
+        background: linear-gradient(90deg, transparent, ${G}, transparent);
+        opacity: 0;
+        transition: opacity .3s ease;
+      }
+      .lp-feat:hover::before { opacity: 1; }
+      .lp-feat:hover {
+        border-color: ${G_BORD} !important;
+        box-shadow: 0 0 44px -14px ${G_GLOW};
+      }
+
+      /* ── Buttons ────────────────────────────────────────── */
+      .lp-btn-g {
+        background: linear-gradient(135deg, ${G_L} 0%, ${G} 55%, #9A7830 100%);
+        transition: opacity .2s ease, transform .2s ease, box-shadow .3s ease;
+      }
+      .lp-btn-g:hover {
+        opacity: .9;
+        transform: translateY(-1px);
+        box-shadow: 0 0 38px -6px rgba(201,168,76,.55);
+      }
+      .lp-btn-o {
+        border: 1px solid ${G_BORD};
+        transition: border-color .2s ease, background .2s ease, transform .2s ease;
+      }
+      .lp-btn-o:hover {
+        border-color: rgba(201,168,76,.6);
+        background: ${G_DIM};
+        transform: translateY(-1px);
+      }
+
+      /* ── Misc ───────────────────────────────────────────── */
+      .lp-divider {
+        height: 1px;
+        background: linear-gradient(to right, transparent, ${G_BORD}, transparent);
+      }
+      .lp-gold-text {
+        background: linear-gradient(135deg, ${G_L} 0%, ${G} 55%, #A07828 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+      .lp-pro-glow {
+        box-shadow: 0 0 70px -20px rgba(201,168,76,.32), 0 0 0 1px ${G_BORD};
+      }
+    `}</style>
+  );
+}
+
+// ── Label pill ────────────────────────────────────────────────────────────────
+function Label({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="mb-5 flex justify-center">
+      <span
+        className="lp-b inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.24em]"
+        style={{ border: `1px solid ${G_BORD}`, background: G_DIM, color: G }}
+      >
+        <span className="h-1.5 w-1.5 rounded-full" style={{ background: G }} aria-hidden />
+        {children}
+      </span>
+    </div>
+  );
+}
+
+// ── Nav ───────────────────────────────────────────────────────────────────────
 function LandingNav() {
   return (
     <header
-      className="sticky top-0 z-50 w-full border-b backdrop-blur-xl"
-      style={{ background: "rgba(7,7,15,0.85)", borderColor: CARD_BORDER }}
+      className="lp-b sticky top-0 z-50 border-b"
+      style={{ background: "rgba(2,2,2,0.88)", borderColor: C_BORD, backdropFilter: "blur(22px)" }}
     >
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-3.5">
-        {/* Logo */}
-        <div className="flex items-center gap-2.5">
+      <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+        <div className="flex items-center gap-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/HF_LOGO.png" alt="HF" className="h-7 w-7 rounded-md object-contain" />
-          <span className="text-[15px] font-bold tracking-tight text-white">
+          <img src="/HF_LOGO.png" alt="HIGH FOCUS" className="h-8 w-8 rounded-lg object-contain" />
+          <span className="lp-h text-[17px] font-semibold tracking-tight text-white">
             HIGH FOCUS{" "}
-            <span className="font-normal" style={{ color: GOLD }}>
+            <span className="lp-b text-[11px] font-medium uppercase tracking-[0.22em]" style={{ color: G }}>
               Sourcing
             </span>
           </span>
         </div>
 
-        {/* Auth buttons */}
-        <div className="flex items-center gap-3">
-          <Link
-            href="/login"
-            className="rounded-lg px-4 py-2 text-sm font-medium text-slate-400 transition hover:text-white"
-          >
+        <div className="flex items-center gap-4">
+          <Link href="/login" className="lp-b text-sm font-medium text-slate-400 transition hover:text-white">
             Sign In
           </Link>
           <Link
             href="/register"
-            className="rounded-xl px-4 py-2 text-sm font-semibold text-black transition hover:opacity-90"
-            style={{ background: `linear-gradient(135deg, ${GOLD_LIGHT} 0%, ${GOLD} 100%)` }}
+            className="lp-btn-g lp-b rounded-xl px-5 py-2.5 text-sm font-bold text-black"
           >
             Start Free Trial
           </Link>
@@ -57,93 +185,94 @@ function LandingNav() {
   );
 }
 
-// ─── Hero ─────────────────────────────────────────────────────────────────────
+// ── Hero ──────────────────────────────────────────────────────────────────────
 function HeroSection() {
   return (
-    <section className="relative overflow-hidden px-5 pb-24 pt-20 text-center sm:pt-28">
-      {/* Ambient gold glow behind the hero */}
+    <section
+      className="lp-grid-bg relative flex min-h-[92vh] flex-col items-center justify-center overflow-hidden px-6 pb-20 pt-16 text-center"
+    >
+      {/* Floating orbs */}
       <div
-        className="pointer-events-none absolute inset-x-0 top-0 h-[480px]"
-        style={{
-          background: `radial-gradient(ellipse 70% 55% at 50% -5%, rgba(201,160,52,0.18) 0%, transparent 65%)`,
-        }}
+        className="lp-orb-a pointer-events-none absolute left-[5%] top-[12%] h-[560px] w-[560px] rounded-full"
+        style={{ background: `radial-gradient(circle, ${G_GLOW} 0%, transparent 68%)`, filter: "blur(48px)" }}
+        aria-hidden
+      />
+      <div
+        className="lp-orb-b pointer-events-none absolute right-[4%] top-[8%] h-[420px] w-[420px] rounded-full"
+        style={{ background: `radial-gradient(circle, rgba(201,168,76,0.11) 0%, transparent 65%)`, filter: "blur(56px)" }}
+        aria-hidden
+      />
+      <div
+        className="lp-orb-c pointer-events-none absolute bottom-[8%] left-1/2 h-[320px] w-[320px] -translate-x-1/2 rounded-full"
+        style={{ background: `radial-gradient(circle, rgba(201,168,76,0.09) 0%, transparent 65%)`, filter: "blur(64px)" }}
         aria-hidden
       />
 
-      <div className="relative mx-auto max-w-4xl">
+      <div className="relative z-10 mx-auto max-w-5xl">
         {/* Badge */}
-        <div className="mb-6 flex justify-center">
-          <span
-            className="inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[11px] font-bold uppercase tracking-[0.18em]"
-            style={{ background: GOLD_DIM, border: `1px solid ${GOLD_BORDER}`, color: GOLD }}
-          >
-            ✦ Amazon FBA Sourcing Tool
-          </span>
-        </div>
+        <Label>Professional Sourcing Platform</Label>
 
         {/* Headline */}
-        <h1 className="text-4xl font-extrabold leading-[1.08] tracking-[-0.03em] text-white sm:text-5xl lg:text-[3.75rem]">
-          Turn Supplier Lists Into{" "}
-          <span
-            className="block"
-            style={{
-              backgroundImage: `linear-gradient(135deg, ${GOLD_LIGHT} 0%, ${GOLD} 55%, #a07820 100%)`,
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-              backgroundClip: "text",
-            }}
-          >
-            Instant Profit Decisions
-          </span>
+        <h1
+          className="lp-h text-white"
+          style={{
+            fontSize: "clamp(3.2rem, 9vw, 7.5rem)",
+            lineHeight: 1.05,
+            fontStyle: "italic",
+            fontWeight: 600,
+            letterSpacing: "-0.02em",
+          }}
+        >
+          Find Profitable Products.
+          <br />
+          <span className="lp-gold-text">At Scale.</span>
         </h1>
 
-        {/* Subtext */}
-        <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-slate-400">
-          Upload your wholesale Excel or CSV. We pull{" "}
-          <span className="font-medium text-slate-200">live Amazon SP-API data</span> — Buy Box
-          prices, FBA fees, competition, restrictions — and return a color-coded{" "}
-          <span className="font-medium text-slate-200">BUY / PASS decision</span> for every row.
-          In minutes.
+        {/* Body */}
+        <p
+          className="lp-b mx-auto mt-8 max-w-2xl leading-relaxed text-slate-400"
+          style={{ fontSize: "1.075rem" }}
+        >
+          Upload your wholesale file. Pull{" "}
+          <span className="font-semibold text-slate-200">live Amazon SP-API data</span> — Buy Box
+          prices, FBA fees, competition, and restrictions. Get a{" "}
+          <span className="font-semibold text-slate-200">color-coded BUY / PASS decision</span>{" "}
+          for every product in minutes.
         </p>
 
         {/* CTAs */}
-        <div className="mt-10 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
+        <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
           <Link
             href="/register"
-            className="inline-flex items-center gap-2 rounded-xl px-7 py-3.5 text-base font-bold text-black shadow-lg transition hover:opacity-90 active:scale-[0.98]"
-            style={{
-              background: `linear-gradient(135deg, ${GOLD_LIGHT} 0%, ${GOLD} 100%)`,
-              boxShadow: `0 0 32px -6px rgba(201,160,52,0.5)`,
-            }}
+            className="lp-btn-g lp-b inline-flex items-center gap-2.5 rounded-xl px-9 py-4 text-[15px] font-bold text-black"
           >
-            Start Free Trial
-            <span aria-hidden>→</span>
+            Start Free Trial <span aria-hidden>→</span>
           </Link>
           <Link
             href="/login"
-            className="inline-flex items-center gap-2 rounded-xl border px-7 py-3.5 text-base font-semibold text-slate-300 transition hover:border-slate-500 hover:text-white"
-            style={{ borderColor: CARD_BORDER }}
+            className="lp-btn-o lp-b inline-flex items-center gap-2.5 rounded-xl px-9 py-4 text-[15px] font-semibold text-slate-300"
           >
             Sign In
           </Link>
         </div>
 
-        <p className="mt-4 text-[13px] text-slate-600">
+        <p className="lp-b mt-5 text-[13px]" style={{ color: "rgba(148,163,184,0.55)" }}>
           No credit card required · 14-day free trial
         </p>
 
         {/* Decision badges */}
-        <div className="mt-12 flex flex-wrap justify-center gap-2">
+        <div className="mt-14 flex flex-wrap justify-center gap-2.5">
           {[
-            { label: "BUY", bg: "rgba(34,197,94,0.12)", border: "rgba(34,197,94,0.3)", text: "#4ade80" },
-            { label: "WORTH UNGATING", bg: "rgba(99,102,241,0.12)", border: "rgba(99,102,241,0.35)", text: "#a5b4fc" },
-            { label: "LOW MARGIN", bg: "rgba(251,191,36,0.1)", border: "rgba(251,191,36,0.3)", text: "#fde68a" },
-            { label: "PASS", bg: "rgba(239,68,68,0.1)", border: "rgba(239,68,68,0.25)", text: "#fca5a5" },
-          ].map(({ label, bg, border, text }) => (
+            { label: "BUY",            c: "#4ade80", bg: "rgba(74,222,128,0.08)",   b: "rgba(74,222,128,0.22)"   },
+            { label: "WORTH UNGATING", c: "#a78bfa", bg: "rgba(167,139,250,0.08)",  b: "rgba(167,139,250,0.22)"  },
+            { label: "LOW MARGIN",     c: "#fbbf24", bg: "rgba(251,191,36,0.08)",   b: "rgba(251,191,36,0.22)"   },
+            { label: "NO MARGIN",      c: "#f97316", bg: "rgba(249,115,22,0.08)",   b: "rgba(249,115,22,0.22)"   },
+            { label: "PASS",           c: "#f87171", bg: "rgba(248,113,113,0.08)",  b: "rgba(248,113,113,0.22)"  },
+          ].map(({ label, c, bg, b }) => (
             <span
               key={label}
-              className="rounded-full px-3.5 py-1 text-[11px] font-bold uppercase tracking-widest"
-              style={{ background: bg, border: `1px solid ${border}`, color: text }}
+              className="lp-b rounded-full px-3.5 py-1 text-[10px] font-bold uppercase tracking-[0.2em]"
+              style={{ color: c, background: bg, border: `1px solid ${b}` }}
             >
               {label}
             </span>
@@ -154,29 +283,25 @@ function HeroSection() {
   );
 }
 
-// ─── Stats bar ────────────────────────────────────────────────────────────────
+// ── Stats bar ─────────────────────────────────────────────────────────────────
 function StatsBar() {
-  const stats = [
-    { value: "200", label: "Products per batch" },
-    { value: "Live", label: "SP-API data" },
-    { value: "FBA", label: "Fee calculator" },
-    { value: "XLSX / CSV", label: "Upload formats" },
-  ];
   return (
-    <div
-      className="border-y px-5 py-5"
-      style={{ borderColor: CARD_BORDER, background: "rgba(255,255,255,0.015)" }}
-    >
-      <div className="mx-auto grid max-w-4xl grid-cols-2 gap-4 sm:grid-cols-4">
-        {stats.map(({ value, label }) => (
-          <div key={label} className="flex flex-col items-center gap-1 text-center">
+    <div className="lp-b border-y px-6 py-7" style={{ borderColor: C_BORD, background: "rgba(255,255,255,0.015)" }}>
+      <div className="mx-auto grid max-w-4xl grid-cols-2 gap-y-7 sm:grid-cols-4">
+        {[
+          { v: "200",       l: "Products per batch" },
+          { v: "Live",      l: "SP-API data"        },
+          { v: "FBA",       l: "Fee calculator"     },
+          { v: "XLSX · CSV",l: "Upload formats"     },
+        ].map(({ v, l }) => (
+          <div key={l} className="flex flex-col items-center gap-1 text-center">
             <span
-              className="text-xl font-bold tabular-nums"
-              style={{ color: GOLD }}
+              className="lp-h text-2xl font-semibold"
+              style={{ color: G, fontStyle: "italic" }}
             >
-              {value}
+              {v}
             </span>
-            <span className="text-[11px] uppercase tracking-wider text-slate-500">{label}</span>
+            <span className="text-[10px] uppercase tracking-[0.18em] text-slate-600">{l}</span>
           </div>
         ))}
       </div>
@@ -184,81 +309,58 @@ function StatsBar() {
   );
 }
 
-// ─── Features ─────────────────────────────────────────────────────────────────
+// ── Features ──────────────────────────────────────────────────────────────────
 function FeaturesSection() {
-  const features = [
-    {
-      icon: "📦",
-      title: "Bulk Upload",
-      desc: "Drop your supplier's .xlsx, .xls, or .csv. Smart header detection handles any column layout. Analyze up to 200 products per batch.",
-    },
-    {
-      icon: "📊",
-      title: "Live Amazon Data",
-      desc: "Buy Box prices, seller offer counts, BSR, FBA fees, and listing restrictions — pulled fresh from SP-API, never from a cached database.",
-    },
-    {
-      icon: "🚦",
-      title: "Smart Decisions",
-      desc: "Every product gets a color-coded verdict: BUY · WORTH UNGATING · LOW MARGIN · PASS — calibrated to your ROI and margin targets.",
-    },
-    {
-      icon: "💰",
-      title: "Profit Engine",
-      desc: "FBA fee preview, landed cost, net profit per unit, and ROI calculated automatically. See exactly what you make before you buy.",
-    },
-    {
-      icon: "🔍",
-      title: "Catalog Explorer",
-      desc: "Browse Amazon categories and search by keyword to find wholesale opportunities. Filter by BSR, restriction status, and ROI floor.",
-    },
-    {
-      icon: "🔑",
-      title: "Your Amazon Account",
-      desc: "Connect your Seller Central via official SP-API OAuth. Each user has their own credentials — your tokens never leave your account.",
-    },
+  const cards = [
+    { n: "01", icon: "📦", title: "Bulk Upload",       desc: "Drop your supplier's .xlsx, .xls, or .csv. Auto-detects headers. Analyze up to 200 products per run." },
+    { n: "02", icon: "📊", title: "Live SP-API Data",  desc: "Buy Box prices, offer counts, BSR, FBA fees, and restrictions — pulled fresh from Amazon, never cached." },
+    { n: "03", icon: "🚦", title: "Smart Decisions",   desc: "BUY · WORTH UNGATING · LOW MARGIN · PASS. Color-coded verdicts calibrated to your ROI and margin floor." },
+    { n: "04", icon: "💰", title: "Profit Engine",     desc: "FBA fee preview, net profit per unit, and ROI for every row. Know exactly what you earn before you buy." },
+    { n: "05", icon: "🔍", title: "Catalog Explorer",  desc: "Browse Amazon categories and search by keyword. Filter by BSR, restriction status, and minimum ROI." },
+    { n: "06", icon: "🔑", title: "Secure OAuth",      desc: "Connect via official SP-API OAuth. Per-user tokens. Your Seller Central credentials never leave your account." },
   ];
 
   return (
-    <section className="px-5 py-20">
+    <section className="px-6 py-24">
       <div className="mx-auto max-w-6xl">
-        {/* Section label */}
-        <div className="mb-3 flex justify-center">
-          <span
-            className="rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em]"
-            style={{ background: GOLD_DIM, border: `1px solid ${GOLD_BORDER}`, color: GOLD }}
+        <ScrollReveal>
+          <Label>Features</Label>
+          <h2
+            className="lp-h mb-4 text-center text-white"
+            style={{ fontSize: "clamp(2rem, 5vw, 3.2rem)", fontStyle: "italic", fontWeight: 600 }}
           >
-            Features
-          </span>
-        </div>
-        <h2 className="mb-3 text-center text-3xl font-bold tracking-tight text-white">
-          Everything you need to source smarter
-        </h2>
-        <p className="mx-auto mb-12 max-w-xl text-center text-slate-500">
-          One tool replaces your spreadsheet, fee calculator, and Keepa research — with live data direct from Amazon.
-        </p>
+            Everything you need to source smarter
+          </h2>
+          <p className="lp-b mx-auto mb-14 max-w-lg text-center text-slate-500">
+            One tool replaces your fee calculator, Keepa research, and manual spreadsheet work.
+          </p>
+        </ScrollReveal>
 
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {features.map(({ icon, title, desc }) => (
-            <div
-              key={title}
-              className="group rounded-2xl p-6 transition-all duration-200 hover:scale-[1.01]"
-              style={{ background: CARD_BG, border: `1px solid ${CARD_BORDER}` }}
-            >
+          {cards.map(({ n, icon, title, desc }, i) => (
+            <ScrollReveal key={n} delay={i * 65}>
               <div
-                className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl text-xl"
-                style={{ background: GOLD_DIM, border: `1px solid ${GOLD_BORDER}` }}
+                className="lp-feat lp-b flex h-full flex-col rounded-2xl border p-7"
+                style={{ background: CARD, borderColor: C_BORD }}
               >
-                {icon}
+                <div className="mb-5 flex items-start justify-between">
+                  <span
+                    className="lp-b text-[11px] font-bold uppercase tracking-[0.24em]"
+                    style={{ color: G }}
+                  >
+                    {n}
+                  </span>
+                  <span className="text-[22px]" aria-hidden>{icon}</span>
+                </div>
+                <h3
+                  className="lp-h mb-2.5 text-[19px] font-semibold text-white"
+                  style={{ fontStyle: "normal" }}
+                >
+                  {title}
+                </h3>
+                <p className="mt-auto pt-2 text-[13.5px] leading-relaxed text-slate-500">{desc}</p>
               </div>
-              <h3
-                className="mb-2 text-[15px] font-semibold"
-                style={{ color: GOLD_LIGHT }}
-              >
-                {title}
-              </h3>
-              <p className="text-sm leading-relaxed text-slate-500">{desc}</p>
-            </div>
+            </ScrollReveal>
           ))}
         </div>
       </div>
@@ -266,7 +368,7 @@ function FeaturesSection() {
   );
 }
 
-// ─── How It Works ─────────────────────────────────────────────────────────────
+// ── How It Works ──────────────────────────────────────────────────────────────
 function HowItWorksSection() {
   const steps = [
     {
@@ -277,277 +379,309 @@ function HowItWorksSection() {
     {
       n: "02",
       title: "We Fetch the Data",
-      desc: "For every row, we hit SP-API: catalog lookup, live pricing, FBA fee preview, offers count, and listing restrictions — all in parallel.",
+      desc: "For every row, SP-API fires: catalog lookup, live pricing, FBA fee preview, offer count, and listing restrictions — all in parallel.",
     },
     {
       n: "03",
-      title: "You Make the Call",
-      desc: "Get a color-coded dashboard and exportable spreadsheet. Every product shows profit, ROI, competition, and a clear BUY or PASS verdict.",
+      title: "Make Your Move",
+      desc: "Get a color-coded dashboard and exportable spreadsheet. Every product shows profit, ROI, competition level, and a clear verdict.",
     },
   ];
 
   return (
-    <section className="px-5 py-20">
+    <section className="px-6 py-24">
       <div className="mx-auto max-w-6xl">
-        <div
-          className="rounded-3xl p-10 sm:p-14"
-          style={{ background: "rgba(255,255,255,0.02)", border: `1px solid ${CARD_BORDER}` }}
-        >
-          <div className="mb-3 flex justify-center">
-            <span
-              className="rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em]"
-              style={{ background: GOLD_DIM, border: `1px solid ${GOLD_BORDER}`, color: GOLD }}
-            >
-              How It Works
-            </span>
-          </div>
-          <h2 className="mb-12 text-center text-3xl font-bold tracking-tight text-white">
+        <div className="lp-divider mb-20" />
+
+        <ScrollReveal>
+          <Label>How It Works</Label>
+          <h2
+            className="lp-h mb-16 text-center text-white"
+            style={{ fontSize: "clamp(2rem, 5vw, 3.2rem)", fontStyle: "italic", fontWeight: 600 }}
+          >
             Three steps from upload to decision
           </h2>
+        </ScrollReveal>
 
-          <div className="grid gap-10 sm:grid-cols-3">
-            {steps.map(({ n, title, desc }, i) => (
-              <div key={n} className="flex flex-col items-center text-center sm:items-start sm:text-left">
-                {/* Number + connector */}
-                <div className="mb-5 flex items-center gap-3">
-                  <span
-                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-extrabold"
-                    style={{
-                      background: `linear-gradient(135deg, ${GOLD_LIGHT} 0%, ${GOLD} 100%)`,
-                      color: "#1a0e00",
-                    }}
-                  >
-                    {n}
-                  </span>
-                  {i < steps.length - 1 && (
-                    <div
-                      className="hidden h-px flex-1 sm:block"
-                      style={{ background: `linear-gradient(to right, ${GOLD_BORDER}, transparent)` }}
-                    />
-                  )}
+        <div className="grid gap-14 sm:grid-cols-3">
+          {steps.map(({ n, title, desc }, i) => (
+            <ScrollReveal key={n} delay={i * 120}>
+              <div>
+                {/* Large italic step number */}
+                <div
+                  className="lp-gold-text lp-h mb-5 text-[5rem] font-bold leading-none"
+                  style={{ fontStyle: "italic" }}
+                >
+                  {n}
                 </div>
-                <h3 className="mb-2 text-base font-semibold text-white">{title}</h3>
-                <p className="text-sm leading-relaxed text-slate-500">{desc}</p>
+                <h3
+                  className="lp-h mb-3 text-xl font-semibold text-white"
+                  style={{ fontStyle: "italic" }}
+                >
+                  {title}
+                </h3>
+                <p className="lp-b text-[13.5px] leading-relaxed text-slate-500">{desc}</p>
               </div>
-            ))}
-          </div>
+            </ScrollReveal>
+          ))}
         </div>
+
+        <div className="lp-divider mt-20" />
       </div>
     </section>
   );
 }
 
-// ─── Pricing ──────────────────────────────────────────────────────────────────
+// ── Pricing ───────────────────────────────────────────────────────────────────
 function PricingSection() {
+  const plans: Array<{
+    name: string;
+    price: string;
+    period: string;
+    desc: string;
+    features: string[];
+    cta: string;
+    href: string;
+    pro?: boolean;
+    badge?: string;
+  }> = [
+    {
+      name: "Free",
+      price: "$0",
+      period: "14-day trial",
+      desc: "No credit card required.",
+      features: [
+        "50 product analyses",
+        "Bulk upload (200 rows)",
+        "Live SP-API pricing & fees",
+        "Catalog & keyword explorer",
+        "BUY / PASS decision engine",
+        "Export to spreadsheet",
+      ],
+      cta: "Start Free",
+      href: "/register",
+    },
+    {
+      name: "Pro",
+      price: "$29",
+      period: "/ month",
+      desc: "Full access. No analysis limits.",
+      features: [
+        "Unlimited analyses",
+        "Bulk upload (200 rows)",
+        "Live SP-API pricing & fees",
+        "Full catalog & keyword search",
+        "BUY / PASS decision engine",
+        "Export to spreadsheet",
+        "Amazon OAuth per user",
+        "Priority support",
+      ],
+      cta: "Get Pro →",
+      href: "/register",
+      pro: true,
+      badge: "Most Popular",
+    },
+    {
+      name: "Enterprise",
+      price: "$99",
+      period: "/ month",
+      desc: "For teams and power sourcing.",
+      features: [
+        "Everything in Pro",
+        "Multiple user seats",
+        "Custom marketplace settings",
+        "Advanced filtering & export",
+        "Dedicated onboarding call",
+        "SLA-backed support",
+        "Custom branding options",
+        "API access",
+      ],
+      cta: "Contact Sales",
+      href: "/register",
+    },
+  ];
+
   return (
-    <section className="px-5 py-20">
+    <section className="px-6 py-24">
       <div className="mx-auto max-w-6xl">
-        <div className="mb-3 flex justify-center">
-          <span
-            className="rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em]"
-            style={{ background: GOLD_DIM, border: `1px solid ${GOLD_BORDER}`, color: GOLD }}
+        <ScrollReveal>
+          <Label>Pricing</Label>
+          <h2
+            className="lp-h mb-3 text-center text-white"
+            style={{ fontSize: "clamp(2rem, 5vw, 3.2rem)", fontStyle: "italic", fontWeight: 600 }}
           >
-            Pricing
-          </span>
-        </div>
-        <h2 className="mb-3 text-center text-3xl font-bold tracking-tight text-white">
-          Simple, honest pricing
-        </h2>
-        <p className="mx-auto mb-12 max-w-sm text-center text-slate-500">
-          Start free. Upgrade when you're ready to scale.
-        </p>
+            Simple, honest pricing
+          </h2>
+          <p className="lp-b mx-auto mb-14 max-w-sm text-center text-slate-500">
+            Start free. Upgrade when you&apos;re ready to scale.
+          </p>
+        </ScrollReveal>
 
-        <div className="mx-auto grid max-w-3xl gap-6 sm:grid-cols-2">
-          {/* Free Trial */}
-          <div
-            className="flex flex-col rounded-2xl p-8"
-            style={{ background: CARD_BG, border: `1px solid ${CARD_BORDER}` }}
-          >
-            <p className="mb-1 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
-              Free Trial
-            </p>
-            <p className="text-4xl font-extrabold text-white">
-              $0
-              <span className="ml-1.5 text-base font-normal text-slate-500">/ 14 days</span>
-            </p>
-            <p className="mt-2 text-sm text-slate-500">
-              No credit card required. Cancel anytime.
-            </p>
-
-            <ul className="mt-6 flex-1 space-y-3 text-sm">
-              {[
-                "50 product analyses / month",
-                "Bulk upload up to 200 rows",
-                "Live SP-API pricing & fees",
-                "Catalog & keyword explorer",
-                "BUY / PASS decision engine",
-                "Export to spreadsheet",
-              ].map((f) => (
-                <li key={f} className="flex items-start gap-2.5">
-                  <span className="mt-0.5 shrink-0 text-xs" style={{ color: GOLD }}>✓</span>
-                  <span className="text-slate-400">{f}</span>
-                </li>
-              ))}
-            </ul>
-
-            <Link
-              href="/register"
-              className="mt-8 block rounded-xl border py-3 text-center text-sm font-semibold text-white transition hover:bg-white/[0.06]"
-              style={{ borderColor: CARD_BORDER }}
-            >
-              Start Free Trial
-            </Link>
-          </div>
-
-          {/* Pro */}
-          <div
-            className="flex flex-col rounded-2xl p-8"
-            style={{
-              background: `linear-gradient(160deg, rgba(201,160,52,0.09) 0%, rgba(201,160,52,0.04) 100%)`,
-              border: `1px solid ${GOLD_BORDER}`,
-              boxShadow: `0 0 48px -16px rgba(201,160,52,0.25)`,
-            }}
-          >
-            <div className="mb-3 flex items-center justify-between">
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em]" style={{ color: GOLD }}>
-                Pro
-              </p>
-              <span
-                className="rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider"
-                style={{ background: GOLD_DIM, border: `1px solid ${GOLD_BORDER}`, color: GOLD }}
-              >
-                Most popular
-              </span>
-            </div>
-            <p className="text-4xl font-extrabold text-white">
-              $29
-              <span className="ml-1.5 text-base font-normal text-slate-400">/ month</span>
-            </p>
-            <p className="mt-2 text-sm text-slate-400">
-              Full access. No analysis limits.
-            </p>
-
-            <ul className="mt-6 flex-1 space-y-3 text-sm">
-              {[
-                "Unlimited product analyses",
-                "Bulk upload up to 200 rows",
-                "Live SP-API pricing & fees",
-                "Full catalog & keyword search",
-                "BUY / PASS decision engine",
-                "Export to spreadsheet",
-                "Per-user Amazon OAuth",
-                "Priority support",
-              ].map((f) => (
-                <li key={f} className="flex items-start gap-2.5">
-                  <span className="mt-0.5 shrink-0 text-xs" style={{ color: GOLD }}>✓</span>
-                  <span className="text-slate-300">{f}</span>
-                </li>
-              ))}
-            </ul>
-
-            <Link
-              href="/register"
-              className="mt-8 block rounded-xl py-3 text-center text-sm font-bold text-black transition hover:opacity-90"
-              style={{
-                background: `linear-gradient(135deg, ${GOLD_LIGHT} 0%, ${GOLD} 100%)`,
-              }}
-            >
-              Get Started →
-            </Link>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// ─── Final CTA ────────────────────────────────────────────────────────────────
-function CtaSection() {
-  return (
-    <section className="px-5 py-20">
-      <div className="mx-auto max-w-3xl">
-        <div
-          className="relative overflow-hidden rounded-3xl px-8 py-16 text-center"
-          style={{ background: GOLD_DIM, border: `1px solid ${GOLD_BORDER}` }}
-        >
-          <div
-            className="pointer-events-none absolute inset-0"
-            style={{
-              background: `radial-gradient(ellipse 80% 60% at 50% -10%, rgba(201,160,52,0.25), transparent 60%)`,
-            }}
-            aria-hidden
-          />
-          <div className="relative">
-            <h2 className="text-3xl font-extrabold tracking-tight text-white sm:text-4xl">
-              Start sourcing smarter today
-            </h2>
-            <p className="mx-auto mt-4 max-w-md text-slate-400">
-              14-day free trial. No credit card required. Your first upload takes less than a minute.
-            </p>
-            <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
-              <Link
-                href="/register"
-                className="inline-flex items-center gap-2 rounded-xl px-8 py-3.5 text-base font-bold text-black transition hover:opacity-90"
+        <div className="grid gap-6 sm:grid-cols-3">
+          {plans.map(({ name, price, period, desc, features, cta, href, pro, badge }, i) => (
+            <ScrollReveal key={name} delay={i * 90}>
+              <div
+                className={`relative flex h-full flex-col rounded-2xl p-8 ${pro ? "lp-pro-glow" : ""}`}
                 style={{
-                  background: `linear-gradient(135deg, ${GOLD_LIGHT} 0%, ${GOLD} 100%)`,
-                  boxShadow: `0 0 32px -6px rgba(201,160,52,0.5)`,
+                  background: pro
+                    ? `linear-gradient(160deg, rgba(201,168,76,0.11) 0%, rgba(201,168,76,0.04) 100%)`
+                    : CARD,
+                  border: `1px solid ${pro ? G_BORD : C_BORD}`,
                 }}
               >
-                Create Free Account →
-              </Link>
-              <Link
-                href="/login"
-                className="text-sm font-medium text-slate-400 hover:text-white"
-              >
-                Already have an account? Sign in
-              </Link>
-            </div>
-          </div>
+                {/* "Most Popular" badge floats above the card */}
+                {badge && (
+                  <div className="absolute -top-4 left-0 right-0 flex justify-center">
+                    <span
+                      className="lp-b rounded-full px-4 py-1 text-[10px] font-bold uppercase tracking-[0.2em]"
+                      style={{ background: G, color: "#0a0800" }}
+                    >
+                      {badge}
+                    </span>
+                  </div>
+                )}
+
+                {/* Plan header */}
+                <div className="mb-6">
+                  <p
+                    className="lp-b mb-2 text-[10px] font-bold uppercase tracking-[0.24em]"
+                    style={{ color: pro ? G : "rgb(100 116 139)" }}
+                  >
+                    {name}
+                  </p>
+                  <div className="flex items-end gap-1.5">
+                    <span
+                      className="lp-h text-5xl font-bold leading-none text-white"
+                      style={{ fontStyle: "italic" }}
+                    >
+                      {price}
+                    </span>
+                    <span className="lp-b mb-1.5 text-sm text-slate-500">{period}</span>
+                  </div>
+                  <p className="lp-b mt-2 text-[13px] text-slate-500">{desc}</p>
+                </div>
+
+                {/* Features list */}
+                <ul className="mb-8 flex-1 space-y-3">
+                  {features.map((f) => (
+                    <li key={f} className="lp-b flex items-start gap-2.5 text-[13px]">
+                      <span className="mt-0.5 shrink-0" style={{ color: G }}>✓</span>
+                      <span className={pro ? "text-slate-300" : "text-slate-400"}>{f}</span>
+                    </li>
+                  ))}
+                </ul>
+
+                {/* CTA */}
+                <Link
+                  href={href}
+                  className={`lp-b block rounded-xl py-3.5 text-center text-sm font-bold transition ${
+                    pro ? "lp-btn-g text-black" : "lp-btn-o text-slate-300"
+                  }`}
+                >
+                  {cta}
+                </Link>
+              </div>
+            </ScrollReveal>
+          ))}
         </div>
       </div>
     </section>
   );
 }
 
-// ─── Footer ───────────────────────────────────────────────────────────────────
+// ── Final CTA ─────────────────────────────────────────────────────────────────
+function CtaSection() {
+  return (
+    <section className="px-6 py-24">
+      <div className="mx-auto max-w-4xl">
+        <ScrollReveal>
+          <div
+            className="lp-grid-bg relative overflow-hidden rounded-3xl px-8 py-20 text-center"
+            style={{
+              background: `linear-gradient(160deg, rgba(201,168,76,0.09) 0%, rgba(201,168,76,0.03) 100%)`,
+              border: `1px solid ${G_BORD}`,
+            }}
+          >
+            {/* Ambient glow */}
+            <div
+              className="pointer-events-none absolute inset-x-0 top-0 h-72"
+              style={{
+                background: "radial-gradient(ellipse 80% 60% at 50% -15%, rgba(201,168,76,0.24), transparent 60%)",
+              }}
+              aria-hidden
+            />
+            <div className="relative z-10">
+              <h2
+                className="lp-h text-white"
+                style={{ fontSize: "clamp(2rem, 5vw, 3.5rem)", fontStyle: "italic", fontWeight: 600 }}
+              >
+                Start sourcing smarter today
+              </h2>
+              <p className="lp-b mx-auto mt-5 max-w-md text-slate-400">
+                14-day free trial. No credit card. Your first upload takes less than 60 seconds.
+              </p>
+              <div className="mt-9 flex flex-col items-center justify-center gap-4 sm:flex-row">
+                <Link
+                  href="/register"
+                  className="lp-btn-g lp-b inline-flex items-center gap-2.5 rounded-xl px-10 py-4 text-base font-bold text-black"
+                >
+                  Create Free Account →
+                </Link>
+                <Link href="/login" className="lp-b text-sm text-slate-500 transition hover:text-slate-300">
+                  Already have an account? Sign in
+                </Link>
+              </div>
+            </div>
+          </div>
+        </ScrollReveal>
+      </div>
+    </section>
+  );
+}
+
+// ── Footer ────────────────────────────────────────────────────────────────────
 function LandingFooter() {
   return (
-    <footer
-      className="border-t px-5 py-8"
-      style={{ borderColor: CARD_BORDER }}
-    >
-      <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 sm:flex-row">
-        <span className="text-[13px] font-medium text-slate-600">
-          © {new Date().getFullYear()} HIGH FOCUS. All rights reserved.
-        </span>
-        <div className="flex items-center gap-5">
-          <Link href="/terms" className="text-[13px] text-slate-600 hover:text-slate-400 transition">
-            Terms
-          </Link>
-          <Link href="/privacy" className="text-[13px] text-slate-600 hover:text-slate-400 transition">
-            Privacy
-          </Link>
-          <Link href="/login" className="text-[13px] text-slate-600 hover:text-slate-400 transition">
-            Sign In
-          </Link>
+    <footer className="lp-b border-t px-6 py-10" style={{ borderColor: C_BORD }}>
+      <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-5 sm:flex-row">
+        <div className="flex items-center gap-2.5">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/HF_LOGO.png" alt="" className="h-6 w-6 rounded-md object-contain opacity-60" aria-hidden />
+          <span className="text-[13px] text-slate-600">
+            © {new Date().getFullYear()} HIGH FOCUS. All rights reserved.
+          </span>
+        </div>
+        <div className="flex items-center gap-6">
+          {[
+            { label: "Terms",   href: "/terms"   },
+            { label: "Privacy", href: "/privacy" },
+            { label: "Sign In", href: "/login"   },
+          ].map(({ label, href }) => (
+            <Link
+              key={href}
+              href={href}
+              className="text-[13px] text-slate-600 transition hover:text-slate-400"
+            >
+              {label}
+            </Link>
+          ))}
         </div>
       </div>
     </footer>
   );
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
+// ── Page ──────────────────────────────────────────────────────────────────────
 export default async function HomePage() {
   const session = await auth();
-  if (session?.user?.id) {
-    redirect("/dashboard");
-  }
+  if (session?.user?.id) redirect("/dashboard");
 
   return (
     <div
-      className="min-h-screen antialiased"
-      style={{ background: "#07070f", color: "#f1f5f9" }}
+      className={`${cormorant.variable} ${montserrat.variable} min-h-screen`}
+      style={{ background: "#020202", color: "#f1f5f9" }}
     >
+      <LandingStyles />
       <LandingNav />
       <HeroSection />
       <StatsBar />
