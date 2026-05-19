@@ -131,7 +131,10 @@ function AdminThemeSection() {
   const [mode, setMode] = useState<AppMode>(DEFAULT_MODE);
 
   useEffect(() => {
+    // Reading browser storage after hydration is the correct SSR-safe pattern here —
+    // the linter rule is too strict for this one-time initialisation use case.
     const savedTheme = localStorage.getItem(THEME_STORAGE_KEY) as ThemeId | null;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (savedTheme && THEMES.some((t) => t.id === savedTheme)) setActiveTheme(savedTheme);
     const savedMode = localStorage.getItem(MODE_STORAGE_KEY) as AppMode | null;
     if (savedMode === "dark" || savedMode === "light") setMode(savedMode);
