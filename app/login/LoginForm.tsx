@@ -17,7 +17,7 @@ type LoginFormProps = {
 export function LoginForm({ supportEmail }: LoginFormProps) {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const callbackUrl = searchParams.get("callbackUrl") ?? "/";
+  const callbackUrl = searchParams.get("callbackUrl") ?? "/dashboard";
   const emailParam = searchParams.get("email") ?? "";
   const errorParam = searchParams.get("error") ?? "";
   const [email, setEmail] = useState(() =>
@@ -132,20 +132,28 @@ export function LoginForm({ supportEmail }: LoginFormProps) {
     }
   }
 
+  const inputCls =
+    "mt-1.5 w-full rounded-xl px-3.5 py-3 text-[15px] text-slate-100 outline-none transition placeholder:text-slate-600";
+  const inputStyle = {
+    background: "rgba(255,255,255,0.04)",
+    border: "1px solid rgba(255,255,255,0.10)",
+  };
   return (
-    <form onSubmit={handleSubmit} className="mt-4 flex flex-col gap-2.5 sm:mt-5 sm:gap-3">
+    <form onSubmit={handleSubmit} className="mt-5 flex flex-col gap-3">
       <input type="hidden" name="callbackUrl" value={callbackUrl} />
-      {error && (
-        <p className="rounded-lg bg-red-50 px-3 py-2.5 text-base text-red-700">
-          {error}
+
+      {/* Error messages */}
+      {(error || (errorParam && !error)) && (
+        <p
+          className="rounded-xl px-3.5 py-2.5 text-[13px] text-red-300"
+          style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.22)" }}
+        >
+          {error ?? "Invalid email or password."}
         </p>
       )}
-      {errorParam && !error && (
-        <p className="rounded-lg bg-red-50 px-3 py-2.5 text-base text-red-700">
-          Invalid email or password.
-        </p>
-      )}
-      <label className="text-base font-medium text-slate-700">
+
+      {/* Email */}
+      <label className="text-[13px] font-semibold uppercase tracking-wide text-slate-400">
         Email
         <input
           type="email"
@@ -154,11 +162,22 @@ export function LoginForm({ supportEmail }: LoginFormProps) {
           onChange={(e) => setEmail(e.target.value)}
           required
           autoComplete="email"
-          className="mt-1.5 w-full rounded-lg border border-slate-300 px-3.5 py-3 text-base outline-none focus:ring-2 focus:ring-teal-500/50 focus:border-teal-500"
           placeholder="you@example.com"
+          className={inputCls}
+          style={inputStyle}
+          onFocus={(e) => {
+            e.target.style.border = "1px solid rgba(201,168,76,0.55)";
+            e.target.style.boxShadow = "0 0 0 3px rgba(201,168,76,0.12)";
+          }}
+          onBlur={(e) => {
+            e.target.style.border = inputStyle.border;
+            e.target.style.boxShadow = "";
+          }}
         />
       </label>
-      <label className="text-base font-medium text-slate-700">
+
+      {/* Password */}
+      <label className="text-[13px] font-semibold uppercase tracking-wide text-slate-400">
         Password
         <input
           type="password"
@@ -166,42 +185,102 @@ export function LoginForm({ supportEmail }: LoginFormProps) {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           autoComplete="current-password"
-          className="mt-1.5 w-full rounded-lg border border-slate-300 px-3.5 py-3 text-base outline-none focus:ring-2 focus:ring-teal-500/50 focus:border-teal-500"
+          className={inputCls}
+          style={inputStyle}
+          onFocus={(e) => {
+            e.target.style.border = "1px solid rgba(201,168,76,0.55)";
+            e.target.style.boxShadow = "0 0 0 3px rgba(201,168,76,0.12)";
+          }}
+          onBlur={(e) => {
+            e.target.style.border = inputStyle.border;
+            e.target.style.boxShadow = "";
+          }}
         />
       </label>
+
+      {/* Primary CTA — gold gradient */}
       <button
         type="submit"
         disabled={loading || passkeyLoading}
-        className="w-full rounded-xl bg-gradient-to-r from-teal-500 to-cyan-600 px-4 py-3.5 text-base font-semibold text-white shadow-lg shadow-teal-500/25 hover:from-teal-400 hover:to-cyan-500 transition-all disabled:opacity-50"
+        className="mt-1 w-full rounded-xl px-4 py-3.5 text-[15px] font-bold text-black transition disabled:cursor-not-allowed disabled:opacity-50"
+        style={{
+          background: "linear-gradient(135deg, #E8CC7A 0%, #C9A84C 55%, #9A7830 100%)",
+          boxShadow: loading ? "none" : "0 0 28px -6px rgba(201,168,76,0.45)",
+        }}
       >
-        {loading ? "Signing in..." : "Sign in"}
+        {loading ? "Signing in…" : "Sign in"}
       </button>
-      <div className="relative py-0.5 text-center text-sm text-slate-400 before:absolute before:inset-x-0 before:top-1/2 before:h-px before:bg-slate-200">
-        <span className="relative bg-white px-2">or</span>
+
+      {/* Divider */}
+      <div className="relative py-1 text-center">
+        <div
+          className="absolute inset-x-0 top-1/2 h-px"
+          style={{ background: "rgba(255,255,255,0.07)" }}
+        />
+        <span className="relative px-3 text-[12px] uppercase tracking-wider text-slate-600">
+          or
+        </span>
       </div>
+
+      {/* Passkey button — gold outline */}
       <button
         type="button"
         onClick={() => void handlePasskeySignIn()}
         disabled={loading || passkeyLoading}
-        className="w-full rounded-xl border-2 border-slate-300 bg-white px-4 py-3.5 text-base font-semibold text-slate-800 shadow-sm hover:border-teal-500/60 hover:bg-teal-50/50 transition-all disabled:opacity-50"
+        className="w-full rounded-xl px-4 py-3.5 text-[15px] font-semibold text-slate-300 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+        style={{
+          background: "rgba(255,255,255,0.03)",
+          border: "1px solid rgba(201,168,76,0.28)",
+        }}
+        onMouseEnter={(e) => {
+          (e.currentTarget as HTMLButtonElement).style.background = "rgba(201,168,76,0.07)";
+          (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(201,168,76,0.5)";
+        }}
+        onMouseLeave={(e) => {
+          (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.03)";
+          (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(201,168,76,0.28)";
+        }}
       >
-        {passkeyLoading ? "Waiting for device…" : "Sign in with passkey"}
+        {passkeyLoading ? "Waiting for device…" : "🔑 Sign in with passkey"}
       </button>
-      <p className="text-center text-sm leading-snug text-slate-500">
-        Face ID, fingerprint, or device PIN — after you add a passkey in Account settings (password sign-in once).
+      <p className="text-center text-[12px] leading-snug text-slate-600">
+        Face ID, fingerprint, or device PIN — add a passkey in Account settings first.
       </p>
-      <div className="relative py-0.5 text-center text-sm text-slate-400 before:absolute before:inset-x-0 before:top-1/2 before:h-px before:bg-slate-200">
-        <span className="relative bg-white px-2">or</span>
+
+      {/* Second divider */}
+      <div className="relative py-1 text-center">
+        <div
+          className="absolute inset-x-0 top-1/2 h-px"
+          style={{ background: "rgba(255,255,255,0.07)" }}
+        />
+        <span className="relative px-3 text-[12px] uppercase tracking-wider text-slate-600">
+          or
+        </span>
       </div>
+
+      {/* Get access — gold outline */}
       <Link
         href="/get-access"
-        className="flex w-full items-center justify-center rounded-xl border-2 border-slate-300 bg-white px-4 py-3.5 text-center text-base font-semibold text-slate-800 shadow-sm hover:border-teal-500/60 hover:bg-teal-50/50 transition-all"
+        className="flex w-full items-center justify-center rounded-xl px-4 py-3.5 text-center text-[15px] font-semibold text-slate-300 transition hover:text-white"
+        style={{
+          background: "rgba(255,255,255,0.03)",
+          border: "1px solid rgba(255,255,255,0.1)",
+        }}
+        onMouseEnter={(e) => {
+          (e.currentTarget as HTMLAnchorElement).style.borderColor = "rgba(201,168,76,0.4)";
+          (e.currentTarget as HTMLAnchorElement).style.background = "rgba(201,168,76,0.05)";
+        }}
+        onMouseLeave={(e) => {
+          (e.currentTarget as HTMLAnchorElement).style.borderColor = "rgba(255,255,255,0.1)";
+          (e.currentTarget as HTMLAnchorElement).style.background = "rgba(255,255,255,0.03)";
+        }}
       >
         Pay or use a promo code
       </Link>
-      <p className="text-center text-sm leading-snug text-slate-500">
+      <p className="text-center text-[12px] leading-snug text-slate-600">
         New here? Subscribe or enter an invite code on the next page.
       </p>
+
       {supportEmail ? <SupportContactHint email={supportEmail} /> : null}
     </form>
   );
