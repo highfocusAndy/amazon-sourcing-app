@@ -158,16 +158,15 @@ async function fetchLwaAccessToken(clientId: string, clientSecret: string): Prom
   if (_tokenCache && _tokenCache.expiresAt > now + 30_000) {
     return _tokenCache.token;
   }
-  const body = new URLSearchParams({
-    grant_type: "client_credentials",
-    client_id: clientId,
-    client_secret: clientSecret,
-    scope: LWA_SCOPE_PA_API,
-  });
   const res = await fetch(LWA_TOKEN_ENDPOINT, {
     method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: body.toString(),
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "client_credentials",
+      client_id: clientId,
+      client_secret: clientSecret,
+      scope: LWA_SCOPE_PA_API,
+    }),
     cache: "no-store",
   });
   const raw = await res.text();
