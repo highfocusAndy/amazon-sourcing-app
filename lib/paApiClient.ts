@@ -3,14 +3,17 @@
  * Used exclusively to fetch WebsiteSalesRank — the "main-category BSR" that matches
  * what Amazon shows on the product page. SP-API only returns sub-category ranks.
  *
- * Requires PA_API_ACCESS_KEY, PA_API_SECRET_KEY, PA_API_PARTNER_TAG in env.
+ * Requires PA_API_ACCESS_KEY (LWA client ID), PA_API_SECRET_KEY (LWA client secret),
+ * and PA_API_PARTNER_TAG in env. Authenticates via OAuth 2.0 client credentials (LWA).
  * When not configured or if the request fails, callers fall back to the SP-API catalog rank.
  */
 
-import aws4 from "aws4";
-
 const PA_API_GET_ITEMS_TARGET = "com.amazon.paapi5.v1.ProductAdvertisingAPIv1.GetItems";
 const PA_API_SEARCH_TARGET = "com.amazon.paapi5.v1.ProductAdvertisingAPIv1.SearchItems";
+const LWA_TOKEN_ENDPOINT = "https://api.amazon.com/auth/o2/token";
+
+/** In-process token cache — avoids fetching a new token on every PA-API call (tokens last 1 hour). */
+let _tokenCache: { token: string; expiresAt: number } | null = null;
 
 const MARKETPLACE_TO_PA_HOST_REGION: Record<string, { host: string; region: string }> = {
   ATVPDKIKX0DER: { host: "webservices.amazon.com", region: "us-east-1" },
@@ -60,6 +63,51 @@ export interface PaApiSearchResult {
   items: PaApiCatalogItem[];
 }
 
+export type PaApiCallResult<T> =
+  | { ok: true; data: T }
+  | { ok: false; error: string };
+
+/** Explorer category label → PA-API SearchIndex (US marketplace). */
+const CATEGORY_TO_PA_SEARCH_INDEX: Record<string, string> = {
+  Appliances: "Appliances",
+  "Apps & Games": "MobileApps",
+  "Arts, Crafts & Sewing": "ArtsAndCrafts",
+  Automotive: "Automotive",
+  Baby: "Baby",
+  "Beauty & Personal Care": "Beauty",
+  Books: "Books",
+  "Camera & Photo": "Electronics",
+  "CDs & Vinyl": "Music",
+  "Cell Phones & Accessories": "Wireless",
+  "Clothing, Shoes & Jewelry": "Fashion",
+  "Collectibles & Fine Art": "Collectibles",
+  "Computers & Accessories": "Computers",
+  Electronics: "Electronics",
+  "Grocery & Gourmet Food": "Grocery",
+  "Handmade Products": "Handmade",
+  "Health & Household": "HealthPersonalCare",
+  "Home & Kitchen": "HomeGarden",
+  "Industrial & Scientific": "Industrial",
+  "Kindle Store": "KindleStore",
+  "Luggage & Travel Gear": "Luggage",
+  "Movies & TV": "MoviesAndTV",
+  "Musical Instruments": "MusicalInstruments",
+  "Office Products": "OfficeProducts",
+  "Patio, Lawn & Garden": "Lawngarden",
+  "Pet Supplies": "PetSupplies",
+  Software: "Software",
+  "Sports & Outdoors": "SportingGoods",
+  "Tools & Home Improvement": "Tools",
+  "Toys & Games": "ToysAndGames",
+  "Video Games": "VideoGames",
+  Watches: "Watches",
+};
+
+function looksLikeLwaClientId(key: string): boolean {
+  // Accept amzn1.application-oa2-client.* OAuth client IDs and plain keys of sufficient length.
+  return key.trim().length >= 10;
+}
+
 function readNumber(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string") {
@@ -84,7 +132,87 @@ export function isPaApiConfigured(): boolean {
   const key = process.env.PA_API_ACCESS_KEY?.trim();
   const secret = process.env.PA_API_SECRET_KEY?.trim();
   const tag = process.env.PA_API_PARTNER_TAG?.trim();
-  return Boolean(key && secret && tag);
+  return Boolean(key && secret && tag && looksLikeLwaClientId(key));
+}
+
+/** Human-readable reason PA-API env vars are present but unusable. */
+export function getPaApiConfigurationIssue(): string | null {
+  const key = process.env.PA_API_ACCESS_KEY?.trim();
+  const secret = process.env.PA_API_SECRET_KEY?.trim();
+  const tag = process.env.PA_API_PARTNER_TAG?.trim();
+  if (!key || !secret || !tag) return null;
+  if (!looksLikeLwaClientId(key)) {
+    return "PA_API_ACCESS_KEY is missing or too short — expected an LWA client ID (amzn1.application-oa2-client.*).";
+  }
+  return null;
+}
+
+/** Fetch (or return cached) an LWA OAuth access token using client credentials. */
+async function fetchLwaAccessToken(clientId: string, clientSecret: string): Promise<string> {
+  const now = Date.now();
+  if (_tokenCache && _tokenCache.expiresAt > now + 30_000) {
+    return _tokenCache.token;
+  }
+  const body = new URLSearchParams({
+    grant_type: "client_credentials",
+    client_id: clientId,
+    client_secret: clientSecret,
+  });
+  const res = await fetch(LWA_TOKEN_ENDPOINT, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: body.toString(),
+    cache: "no-store",
+  });
+  const raw = await res.text();
+  let json: Record<string, unknown>;
+  try {
+    json = JSON.parse(raw);
+  } catch {
+    throw new Error(`LWA token endpoint returned invalid JSON (${res.status})`);
+  }
+  if (!res.ok) {
+    const msg = typeof json.error_description === "string"
+      ? json.error_description
+      : typeof json.error === "string"
+      ? json.error
+      : `LWA token request failed (${res.status})`;
+    throw new Error(msg);
+  }
+  const token = typeof json.access_token === "string" ? json.access_token : "";
+  const expiresIn = typeof json.expires_in === "number" ? json.expires_in : 3600;
+  if (!token) throw new Error("LWA token response missing access_token");
+  _tokenCache = { token, expiresAt: now + expiresIn * 1000 };
+  return token;
+}
+
+export function resolvePaApiSearchParams(options: {
+  category?: string | null;
+  subcategory?: string | null;
+  keyword?: string | null;
+  fallbackQuery?: string;
+}): { keywords: string; searchIndex: string } {
+  const keywordParts: string[] = [];
+  if (options.subcategory && options.subcategory !== "All") keywordParts.push(options.subcategory);
+  if (options.keyword?.trim()) keywordParts.push(options.keyword.trim());
+
+  const searchIndex =
+    options.category && CATEGORY_TO_PA_SEARCH_INDEX[options.category]
+      ? CATEGORY_TO_PA_SEARCH_INDEX[options.category]
+      : "All";
+
+  if (keywordParts.length > 0) {
+    return { keywords: keywordParts.join(" "), searchIndex };
+  }
+
+  if (options.category) {
+    return { keywords: options.category, searchIndex };
+  }
+
+  return {
+    keywords: options.fallbackQuery?.trim() || "best seller",
+    searchIndex: "All",
+  };
 }
 
 function getPaApiConfig(): {
@@ -197,40 +325,64 @@ function parseCatalogItems(json: unknown): PaApiCatalogItem[] {
 async function paApiPost(
   target: string,
   body: Record<string, unknown>,
-): Promise<unknown | null> {
-  if (!isPaApiConfigured()) return null;
-  const { accessKey, secretKey, partnerTag, host, region } = getPaApiConfig();
+): Promise<PaApiCallResult<unknown>> {
+  if (!isPaApiConfigured()) {
+    return { ok: false, error: "PA-API is not configured." };
+  }
+  const configIssue = getPaApiConfigurationIssue();
+  if (configIssue) {
+    return { ok: false, error: configIssue };
+  }
+  const { accessKey, secretKey, partnerTag, host } = getPaApiConfig();
+
+  let accessToken: string;
+  try {
+    accessToken = await fetchLwaAccessToken(accessKey, secretKey);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to obtain LWA access token.";
+    console.error("PA-API OAuth token error:", message);
+    return { ok: false, error: message };
+  }
+
   const bodyStr = JSON.stringify({ ...body, PartnerTag: partnerTag, PartnerType: "Associates" });
-  const signed = aws4.sign(
-    {
-      service: "ProductAdvertisingAPIv1",
-      region,
-      host,
-      method: "POST",
-      path: "/",
-      headers: {
-        host,
-        "content-type": "application/json; charset=utf-8",
-        "content-encoding": "amz-1.0",
-        "x-amz-target": target,
-      },
-      body: bodyStr,
-    },
-    { accessKeyId: accessKey, secretAccessKey: secretKey },
-  );
   const response = await fetch(`https://${host}/`, {
     method: "POST",
-    headers: signed.headers as Record<string, string>,
+    headers: {
+      "authorization": `Bearer ${accessToken}`,
+      "content-type": "application/json; charset=utf-8",
+      "content-encoding": "amz-1.0",
+      "x-amz-target": target,
+    },
     body: bodyStr,
     cache: "no-store",
   });
   const raw = await response.text();
   let json: unknown = {};
-  try { json = raw ? JSON.parse(raw) : {}; } catch { return null; }
-  if (!response.ok) return null;
-  const errors = (json as Record<string, unknown>).Errors;
-  if (Array.isArray(errors) && errors.length > 0) return null;
-  return json;
+  try {
+    json = raw ? JSON.parse(raw) : {};
+  } catch {
+    return { ok: false, error: "PA-API returned invalid JSON." };
+  }
+  if (!response.ok) {
+    const root = asObject(json);
+    const errors = Array.isArray(root?.Errors) ? root.Errors : [];
+    const first = asObject(errors[0]);
+    const message =
+      readString(first?.Message) ??
+      readString(root?.message) ??
+      `PA-API request failed (${response.status}).`;
+    console.error("PA-API HTTP error:", response.status, message);
+    return { ok: false, error: message };
+  }
+  const root = asObject(json);
+  const errors = Array.isArray(root?.Errors) ? root.Errors : [];
+  if (errors.length > 0) {
+    const first = asObject(errors[0]);
+    const message = readString(first?.Message) ?? "PA-API returned an error.";
+    console.error("PA-API error payload:", message);
+    return { ok: false, error: message };
+  }
+  return { ok: true, data: json };
 }
 
 /**
@@ -248,8 +400,8 @@ export async function fetchMainBsr(asin: string): Promise<PaApiMainBsrResult | n
     Marketplace: host === "webservices.amazon.com" ? "www.amazon.com" : undefined,
     Resources: ["BrowseNodeInfo.WebsiteSalesRank", "BrowseNodeInfo.BrowseNodes.SalesRank", "DetailPageURL"],
   });
-  if (!json) return null;
-  return parseGetItemsResponse(json);
+  if (!json.ok) return null;
+  return parseGetItemsResponse(json.data);
 }
 
 /**
@@ -259,13 +411,17 @@ export async function fetchMainBsr(asin: string): Promise<PaApiMainBsrResult | n
  */
 export async function fetchCatalogItemsFromPaApi(
   asins: string[],
-): Promise<PaApiCatalogItem[] | null> {
-  if (!isPaApiConfigured()) return null;
+): Promise<PaApiCallResult<PaApiCatalogItem[]>> {
+  if (!isPaApiConfigured()) {
+    return { ok: false, error: "PA-API is not configured." };
+  }
   const normalizedAsins = asins
     .map((a) => a.trim().toUpperCase())
     .filter((a) => a.length === 10)
     .slice(0, 10);
-  if (normalizedAsins.length === 0) return null;
+  if (normalizedAsins.length === 0) {
+    return { ok: false, error: "No valid ASINs provided." };
+  }
   const { host } = getPaApiConfig();
   const json = await paApiPost(PA_API_GET_ITEMS_TARGET, {
     ItemIds: normalizedAsins,
@@ -273,8 +429,8 @@ export async function fetchCatalogItemsFromPaApi(
     Marketplace: host === "webservices.amazon.com" ? "www.amazon.com" : undefined,
     Resources: CATALOG_ITEM_RESOURCES,
   });
-  if (!json) return null;
-  return parseCatalogItems(json);
+  if (!json.ok) return json;
+  return { ok: true, data: parseCatalogItems(json.data) };
 }
 
 /**
@@ -285,20 +441,23 @@ export async function fetchCatalogItemsFromPaApi(
 export async function searchCatalogByKeywordPaApi(
   keyword: string,
   maxResults = 10,
-): Promise<PaApiSearchResult | null> {
-  if (!isPaApiConfigured()) return null;
+  searchIndex = "All",
+): Promise<PaApiCallResult<PaApiSearchResult>> {
+  if (!isPaApiConfigured()) {
+    return { ok: false, error: "PA-API is not configured." };
+  }
   const { host } = getPaApiConfig();
   const json = await paApiPost(PA_API_SEARCH_TARGET, {
     Keywords: keyword.trim().slice(0, 250),
-    SearchIndex: "All",
+    SearchIndex: searchIndex,
     ItemCount: Math.min(10, Math.max(1, maxResults)),
     Marketplace: host === "webservices.amazon.com" ? "www.amazon.com" : undefined,
     Resources: CATALOG_ITEM_RESOURCES,
   });
-  if (!json) return null;
-  const root = asObject(json);
+  if (!json.ok) return json;
+  const root = asObject(json.data);
   const searchResult = asObject(root?.SearchResult);
   const rawItems = Array.isArray(searchResult?.Items) ? searchResult.Items : [];
   const fakeGetItems = { ItemsResult: { Items: rawItems } };
-  return { items: parseCatalogItems(fakeGetItems) };
+  return { ok: true, data: { items: parseCatalogItems(fakeGetItems) } };
 }
