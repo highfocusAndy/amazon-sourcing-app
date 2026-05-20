@@ -39,6 +39,25 @@ function parsePositiveInput(raw: string): number | null {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
+function buildCatalogSearchQuery(options: {
+  category?: string | null;
+  subcategory?: string | null;
+  keyword?: string;
+  pageSize: number;
+  pageToken?: string | null;
+}): string {
+  const params = new URLSearchParams();
+  params.set("pageSize", String(options.pageSize));
+  if (options.category) params.set("category", options.category);
+  if (options.subcategory) params.set("subcategory", options.subcategory);
+  if (options.keyword?.trim()) params.set("keyword", options.keyword.trim());
+  if (!options.category && !options.subcategory && !options.keyword?.trim()) {
+    params.set("q", "best seller");
+  }
+  if (options.pageToken) params.set("pageToken", options.pageToken);
+  return params.toString();
+}
+
 export default function ExplorerPage() {
   const { addProduct, getByAsin } = useSavedProducts();
   const {
@@ -143,7 +162,7 @@ export default function ExplorerPage() {
     setDetailPanelCost("");
     try {
       const res = await fetch(
-        `/api/catalog/search?q=${encodeURIComponent("best seller")}&pageSize=${catalogFetchSize}`,
+        `/api/catalog/search?${buildCatalogSearchQuery({ pageSize: catalogFetchSize })}`,
         { credentials: "include", signal: controller.signal },
       );
       const json = (await res.json()) as {
@@ -179,11 +198,6 @@ export default function ExplorerPage() {
     catalogAbortRef.current?.abort();
     const controller = new AbortController();
     catalogAbortRef.current = controller;
-    const parts: string[] = [];
-    if (selectedCategory) parts.push(selectedCategory);
-    if (selectedSubcategory) parts.push(selectedSubcategory);
-    if (keyword.trim()) parts.push(keyword.trim());
-    const q = parts.length > 0 ? parts.join(" ") : "best seller";
     setCatalogLoading(true);
     setError(null);
     setAnalyzeRequiresAuth(false);
@@ -194,7 +208,12 @@ export default function ExplorerPage() {
     autoLoadMoreCountRef.current = 0;
     try {
       const res = await fetch(
-        `/api/catalog/search?q=${encodeURIComponent(q)}&pageSize=${catalogFetchSize}`,
+        `/api/catalog/search?${buildCatalogSearchQuery({
+          category: selectedCategory,
+          subcategory: selectedSubcategory,
+          keyword,
+          pageSize: catalogFetchSize,
+        })}`,
         { credentials: "include", signal: controller.signal },
       );
       const json = (await res.json()) as {
@@ -228,18 +247,19 @@ export default function ExplorerPage() {
     catalogAbortRef.current?.abort();
     const controller = new AbortController();
     catalogAbortRef.current = controller;
-    const parts: string[] = [];
-    if (selectedCategory) parts.push(selectedCategory);
-    if (selectedSubcategory) parts.push(selectedSubcategory);
-    if (keyword.trim()) parts.push(keyword.trim());
-    const q = parts.length > 0 ? parts.join(" ") : "best seller";
     const token = catalogNextPageToken;
     if (!token) return;
     setLoadMoreLoading(true);
     setError(null);
     try {
       const res = await fetch(
-        `/api/catalog/search?q=${encodeURIComponent(q)}&pageSize=${catalogFetchSize}&pageToken=${encodeURIComponent(token)}`,
+        `/api/catalog/search?${buildCatalogSearchQuery({
+          category: selectedCategory,
+          subcategory: selectedSubcategory,
+          keyword,
+          pageSize: catalogFetchSize,
+          pageToken: token,
+        })}`,
         { credentials: "include", signal: controller.signal },
       );
       const json = (await res.json()) as {
@@ -1158,18 +1178,20 @@ const handleProductClick = useCallback(
                 : (selectedProduct.sellerDetails ?? []).filter((s) => s.channel === sellerModal.filter)
               ).map((s, i) => (
                 <li key={`${s.sellerId}-${i}`} className="mb-2 last:mb-0">
-                  <a
-                    href={amazonSellerStorefrontUrl(marketplaceDomain, s.sellerId)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex flex-col gap-1 rounded-lg border border-slate-600/80 bg-slate-700/50 px-3 py-2 text-xs outline-none transition hover:border-slate-500 hover:bg-slate-600/45 focus-visible:ring-2 focus-visible:ring-teal-400"
-                              title={`View products from seller ${s.sellerId} on Amazon`}
-                    onClick={(e) => e.stopPropagation()}
-                  >
+                  <div className="flex flex-col gap-1 rounded-lg border border-slate-600/80 bg-slate-700/50 px-3 py-2 text-xs transition hover:border-slate-500 hover:bg-slate-600/45">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
                         {s.sellerDisplayName ? (
-                          <span className="block truncate font-medium text-slate-100">{s.sellerDisplayName}</span>
+                          <a
+                            href={amazonSellerStorefrontUrl(marketplaceDomain, s.sellerId)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block truncate font-medium text-slate-100 underline decoration-slate-500 underline-offset-2 hover:text-teal-300 hover:decoration-teal-400"
+                            title={`View ${s.sellerDisplayName} storefront on Amazon`}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {s.sellerDisplayName}
+                          </a>
                         ) : null}
                         <span
                           className={
@@ -1195,9 +1217,15 @@ const handleProductClick = useCallback(
                         )}
                         {s.feedbackCount == null && s.feedbackPercent == null && <span>—</span>}
                       </span>
-                                <span className="shrink-0 text-[10px] font-medium text-teal-400/90">All listings ↗</span>
+                      <Link
+                        href={`/seller/${s.sellerId}`}
+                        className="shrink-0 text-[10px] font-medium text-teal-400/90 hover:text-teal-300"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        All listings ↗
+                      </Link>
                     </div>
-                  </a>
+                  </div>
                 </li>
               ))}
             </ul>

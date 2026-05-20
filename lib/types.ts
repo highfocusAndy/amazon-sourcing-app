@@ -111,6 +111,10 @@ export interface ProductAnalysis {
    * Includes the partner tag (cherenfantand-20) when PA-API is configured; null otherwise.
    */
   affiliateUrl?: string | null;
+  /** Average customer star rating (1–5) from PA-API CustomerReviews; null when unavailable. */
+  starRating?: number | null;
+  /** Number of customer reviews from PA-API CustomerReviews; null when unavailable. */
+  reviewCount?: number | null;
 }
 
 export interface ParsedUploadRow {

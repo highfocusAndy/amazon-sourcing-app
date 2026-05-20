@@ -1474,6 +1474,46 @@ export class SpApiClient {
     };
   }
 
+  /** Fetches one page of catalog items listed by a specific seller. */
+  async searchCatalogBySellerPage(
+    sellerId: string,
+    pageToken?: string | null,
+    pageSize: number = 20,
+  ): Promise<{ items: CatalogItem[]; nextPageToken: string | null }> {
+    const id = sellerId.trim();
+    if (!id) {
+      return { items: [], nextPageToken: null };
+    }
+
+    const queryParams: Record<string, string> = {
+      marketplaceIds: this.config.marketplaceId,
+      sellerId: id,
+      includedData: "summaries,salesRanks,identifiers,images,relationships",
+      pageSize: String(Math.min(pageSize, 20)),
+    };
+    if (pageToken) {
+      queryParams.pageToken = pageToken;
+    }
+
+    const response = await this.request<unknown>("GET", "/catalog/2022-04-01/items", {
+      query: queryParams,
+    });
+
+    const root = asObject(response);
+    const rawItems = asArray(root?.items);
+    const parsedItems = rawItems
+      .map((item) => this.extractCatalogItem(item))
+      .filter((item): item is CatalogItem => Boolean(item));
+
+    const pagination = asObject(getField(root, ["pagination", "Pagination"]));
+    const nextToken = readString(getField(pagination, ["nextToken", "NextToken"]));
+
+    return {
+      items: parsedItems,
+      nextPageToken: nextToken || null,
+    };
+  }
+
   async resolveCatalogItem(identifier: string): Promise<CatalogItem | null> {
     const normalized = normalizeIdentifier(identifier);
     if (!normalized) {

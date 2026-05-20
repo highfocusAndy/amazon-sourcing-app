@@ -10,13 +10,18 @@
 import { extractAmazonSalesVolume } from "@/lib/amazonSalesVolume";
 import { getServerEnv } from "@/lib/env";
 import { getListingTypeFromTitle } from "@/lib/listingLabel";
-import { fetchMainBsr } from "@/lib/paApiClient";
+import {
+  fetchCatalogItemsFromPaApi,
+  fetchMainBsr,
+  isPaApiConfigured,
+  type PaApiCatalogItem,
+} from "@/lib/paApiClient";
 import {
   analysisCacheKey,
   getAnalysisResultCache,
   setAnalysisResultCache,
 } from "@/lib/spApiResponseCache";
-import { SpApiClient, tryReadSpApiConfig } from "@/lib/spApiClient";
+import { SpApiClient } from "@/lib/spApiClient";
 import type { CatalogItem } from "@/lib/spApiClient";
 import { estimateMonthlySalesFromBsr } from "@/lib/salesEstimate";
 import { approvalRequiredEffective } from "@/lib/sourcingIntelligence";
@@ -353,6 +358,105 @@ export function buildAnalysisForOffer(
   return evaluateDecision(copy, projectedMonthlyUnits);
 }
 
+/** Map PA-API public catalog data into a ProductAnalysis (no SP-API fields). */
+export function buildProductAnalysisFromPaApi(
+  item: PaApiCatalogItem,
+  input: ProductInput,
+): ProductAnalysis {
+  const result = buildCatalogOnlyResult(
+    {
+      asin: item.asin,
+      title: item.title,
+      brand: item.brand,
+      rank: item.salesRank,
+      imageUrl: item.imageUrl,
+    },
+    input.identifier.trim(),
+  );
+  result.wholesalePrice = normalizeNumber(input.wholesalePrice);
+  result.sellerType = normalizeSellerType(input.sellerType);
+  result.shippingCost =
+    normalizeSellerType(input.sellerType) === "FBM" ? Math.max(0, normalizeNumber(input.shippingCost)) : 0;
+  result.buyBoxPrice = item.price;
+  result.salesRank = item.salesRank;
+  result.salesRankCategory = item.salesRankCategory;
+  result.affiliateUrl = item.affiliateUrl;
+  result.starRating = item.starRating;
+  result.reviewCount = item.reviewCount;
+  if (item.salesRank != null) {
+    result.estimatedMonthlySales = estimateMonthlySalesFromBsr(item.salesRank, item.salesRankCategory);
+  }
+  return result;
+}
+
+/**
+ * Public-only product lookup via PA-API — no SP-API calls.
+ * Used when the user has not connected their Amazon seller account.
+ */
+export async function analyzeProductPublicOnly(input: ProductInput): Promise<ProductAnalysis> {
+  const result = buildBaseResult(input);
+  const identifier = input.identifier?.trim() ?? "";
+
+  if (!identifier) {
+    result.error = "ASIN, UPC, or EAN required.";
+    result.reasons = ["Provide an ASIN (10 chars), UPC, or EAN."];
+    return result;
+  }
+
+  if (!isPaApiConfigured()) {
+    result.error = "Connect your Amazon seller account to unlock full product analysis.";
+    result.reasons = [result.error];
+    return result;
+  }
+
+  if (!ASIN_REGEX.test(identifier)) {
+    result.error = "Connect your Amazon seller account to analyze UPC/EAN identifiers.";
+    result.reasons = ["Public catalog lookup supports ASIN only until Amazon is connected."];
+    return result;
+  }
+
+  const asin = identifier.toUpperCase();
+  try {
+    const items = await fetchCatalogItemsFromPaApi([asin]);
+    if (!items.ok) {
+      result.error = items.error;
+      result.reasons = [items.error];
+      return result;
+    }
+    const item = items.data[0];
+    if (!item) {
+      result.error = "No product found for this ASIN.";
+      result.reasons = ["Could not resolve product from public catalog."];
+      return result;
+    }
+
+    const merged = buildProductAnalysisFromPaApi(item, input);
+    if (!merged.salesRankCategory) {
+      try {
+        const mainBsr = await fetchMainBsr(asin);
+        if (mainBsr) {
+          merged.salesRank = mainBsr.salesRank ?? merged.salesRank;
+          merged.salesRankCategory = mainBsr.categoryName;
+          if (mainBsr.affiliateUrl) merged.affiliateUrl = mainBsr.affiliateUrl;
+          if (merged.salesRank != null) {
+            merged.estimatedMonthlySales = estimateMonthlySalesFromBsr(
+              merged.salesRank,
+              merged.salesRankCategory,
+            );
+          }
+        }
+      } catch {
+        // PA-API BSR enrichment optional
+      }
+    }
+    return merged;
+  } catch (error) {
+    result.error = error instanceof Error ? error.message : "Public catalog lookup failed.";
+    result.reasons = [result.error];
+    return result;
+  }
+}
+
 // ── Entry Points ──────────────────────────────────────────────────────────────
 export async function analyzeProduct(
   input: ProductInput,
@@ -360,15 +464,10 @@ export async function analyzeProduct(
   options?: { skipRestrictions?: boolean },
 ): Promise<ProductAnalysis> {
   const result = buildBaseResult(input);
-  const spApiClient =
-    client ??
-    (() => {
-      const cfg = tryReadSpApiConfig();
-      return cfg ? new SpApiClient(cfg) : null;
-    })();
+  const spApiClient = client ?? null;
   if (!spApiClient) {
     result.error =
-      "Amazon SP-API is not configured. Connect Amazon (OAuth) in the app or set SP_API_* and AWS credentials on the server.";
+      "Amazon SP-API is not available. Connect your seller account in settings to unlock full analysis.";
     result.reasons = [result.error];
     return result;
   }

@@ -44,7 +44,6 @@ function roundToTwo(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
-const AMAZON_SELLER_ID = "ATVPDKIKX0DER";
 
 function roundToClean(n: number): number {
   if (n < 50) return Math.max(1, Math.round(n));
@@ -212,21 +211,23 @@ export function ProductIntelPanelContent({
     return null;
   }, [selectedProduct.estimatedMonthlySales, selectedProduct.salesRank, selectedProduct.salesRankCategory]);
 
-  const amazonOnListing = useMemo((): "yes" | "no" | "unknown" => {
+  const amazonOnListing = useMemo((): { entity: string } | "no" | "unknown" => {
     const ids = selectedProduct.sellerIds ?? [];
     const details = selectedProduct.sellerDetails ?? [];
-    // Confirmed present
-    if (ids.includes(AMAZON_SELLER_ID) || details.some((d) => d.sellerId === AMAZON_SELLER_ID)) return "yes";
-    // Seller-level IDs available — Amazon is not among them
+    const match = (id: string) => ids.includes(id) || details.some((d) => d.sellerId === id);
+    if (match("ATVPDKIKX0DER")) return { entity: "Amazon.com" };
+    if (match("A2R2RITDJNWIQ5")) return { entity: "Amazon Warehouse" };
+    if (match("A3ODHND3J0WMC8")) return { entity: "Amazon Renewed" };
+    if (match("A1AT7TNMFUTZL3")) return { entity: "Amazon Fresh" };
+    if (match("AUSPT0H4XKVI7")) return { entity: "Amazon Pantry" };
     if (ids.length > 0 || details.length > 0) return "no";
-    // No sellers on the listing at all → Amazon cannot be selling
     if (selectedProduct.offerCount === 0) return "no";
-    // Offer count exists but no seller IDs — can't confirm either way
     return "unknown";
   }, [selectedProduct.sellerIds, selectedProduct.sellerDetails, selectedProduct.offerCount]);
 
   const amazonListingUrl =
     selectedProduct.asin ? amazonOfferListingUrl(marketplaceDomain, selectedProduct.asin) : null;
+  const productUrl = selectedProduct.affiliateUrl ?? amazonListingUrl;
 
   const sellersLine = (
     <>
@@ -332,9 +333,9 @@ export function ProductIntelPanelContent({
           <div className="shrink-0 sm:w-[7.75rem]">
             <div className="relative overflow-hidden rounded-[13px] border border-white/[0.09] bg-gradient-to-b from-slate-700/35 to-slate-900/80 p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_14px_40px_-18px_rgba(0,0,0,0.75)] ring-1 ring-black/25 transition-[box-shadow,border-color] duration-200 hover:border-white/[0.12] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_18px_48px_-14px_rgba(0,0,0,0.8)] motion-reduce:transition-none">
               {selectedProduct.imageUrl ? (
-                selectedProduct.asin && amazonListingUrl ? (
+                productUrl ? (
                   <a
-                    href={amazonListingUrl}
+                    href={productUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     title="Open this product on Amazon (use Buying options / Other sellers there to compare offers)"
@@ -364,9 +365,9 @@ export function ProductIntelPanelContent({
           </div>
 
           <div className="min-w-0 flex-1 space-y-2">
-                {amazonListingUrl ? (
+                {productUrl ? (
                   <a
-                    href={amazonListingUrl}
+                    href={productUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     title="Open this product on Amazon (use Buying options / Other sellers there to compare offers)"
@@ -390,6 +391,19 @@ export function ProductIntelPanelContent({
                 {selectedProduct.asin ? <p className="text-xs text-slate-500">ASIN: {selectedProduct.asin}</p> : null}
                 {selectedProduct.salesRankCategory ? (
                   <p className="text-xs text-slate-500">Category: {selectedProduct.salesRankCategory}</p>
+                ) : null}
+                {selectedProduct.starRating != null || selectedProduct.reviewCount != null ? (
+                  <div className="flex items-center gap-1.5 text-[11px]">
+                    {selectedProduct.starRating != null ? (
+                      <span className="font-semibold text-amber-400">{"★".repeat(Math.round(selectedProduct.starRating))}{"☆".repeat(5 - Math.round(selectedProduct.starRating))}</span>
+                    ) : null}
+                    {selectedProduct.starRating != null ? (
+                      <span className="text-slate-300">{selectedProduct.starRating.toFixed(1)}</span>
+                    ) : null}
+                    {selectedProduct.reviewCount != null ? (
+                      <span className="text-slate-500">({selectedProduct.reviewCount.toLocaleString()} reviews)</span>
+                    ) : null}
+                  </div>
                 ) : null}
 
             <div className="flex flex-wrap items-center gap-2">
@@ -628,17 +642,20 @@ export function ProductIntelPanelContent({
       </div>
 
       <IntelSection eyebrow="Competition">
+        {/* Amazon on listing — always shown; locked state shows prompt instead of blurring */}
+        <div className={HF_INNER_CARD_STATIC}>
+          <p className={HF_KPI_LABEL}>Amazon on listing</p>
+          {isLocked ? (
+            <p className="mt-0.5 text-[11px] text-slate-500">Connect Amazon to check</p>
+          ) : typeof amazonOnListing === "object" ? (
+            <p className="mt-0.5 text-sm font-bold text-rose-400">⚠️ YES — {amazonOnListing.entity}</p>
+          ) : amazonOnListing === "no" ? (
+            <p className="mt-0.5 text-sm font-bold text-emerald-400">✅ NO</p>
+          ) : (
+            <p className="mt-0.5 text-sm text-slate-500">— Unable to confirm</p>
+          )}
+        </div>
         <LockedFieldGroup isLocked={isLocked}>
-          <div className={HF_INNER_CARD_STATIC}>
-            <p className={HF_KPI_LABEL}>Amazon on listing</p>
-            {amazonOnListing === "yes" ? (
-              <p className="mt-0.5 text-sm font-bold text-rose-400">⚠️ YES</p>
-            ) : amazonOnListing === "no" ? (
-              <p className="mt-0.5 text-sm font-bold text-emerald-400">✅ NO</p>
-            ) : (
-              <p className="mt-0.5 text-sm text-slate-500">— Unable to confirm</p>
-            )}
-          </div>
           {selectedProduct.amazonSalesVolumeLabel ? (
             <div className="rounded-lg border border-slate-600 bg-emerald-900/30 px-3 py-2">
               <p className="text-xs text-slate-500">Product sells (from Amazon)</p>

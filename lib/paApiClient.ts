@@ -57,6 +57,10 @@ export interface PaApiCatalogItem {
   salesRankCategory: string | null;
   /** Affiliate-tagged Amazon product URL (DetailPageURL); null when not returned. */
   affiliateUrl: string | null;
+  /** Average customer star rating (1–5); null when not returned. */
+  starRating: number | null;
+  /** Number of customer reviews; null when not returned. */
+  reviewCount: number | null;
 }
 
 /** Lightweight result set from a PA-API keyword search. */
@@ -267,6 +271,8 @@ const CATALOG_ITEM_RESOURCES = [
   "Offers.Listings.Price",
   "BrowseNodeInfo.WebsiteSalesRank",
   "DetailPageURL",
+  "CustomerReviews.StarRatings",
+  "CustomerReviews.Count",
 ];
 
 function parseCatalogItems(json: unknown): PaApiCatalogItem[] {
@@ -315,7 +321,13 @@ function parseCatalogItems(json: unknown): PaApiCatalogItem[] {
       readString(websiteSalesRank?.DisplayName) ?? readString(websiteSalesRank?.ContextFreeName);
 
     const affiliateUrl = readString(item.DetailPageURL);
-    results.push({ asin, title, brand, imageUrl, price, salesRank, salesRankCategory, affiliateUrl });
+
+    const reviewsObj = asObject(item.CustomerReviews);
+    const starRatingObj = asObject(reviewsObj?.StarRatings);
+    const starRating = readNumber(starRatingObj?.DisplayValue ?? starRatingObj?.Value);
+    const reviewCount = readNumber(reviewsObj?.Count);
+
+    results.push({ asin, title, brand, imageUrl, price, salesRank, salesRankCategory, affiliateUrl, starRating, reviewCount });
   }
   return results;
 }
