@@ -8,6 +8,7 @@ import { NextResponse } from "next/server";
 import { requireAdminAccess } from "@/app/api/admin/guard";
 import { prisma } from "@/lib/db";
 import { tryReadSpApiConfig } from "@/lib/spApiClient";
+import { isPaApiConfigured } from "@/lib/paApiClient";
 
 export const runtime = "nodejs";
 
@@ -30,6 +31,7 @@ export async function GET(): Promise<NextResponse> {
     openaiConfigured,
     keepaEnv,
     spConfigured,
+    paApiConfigured,
     estimatedStarterUsd,
     estimatedProUsd,
   ] = await Promise.all([
@@ -67,6 +69,7 @@ export async function GET(): Promise<NextResponse> {
     Promise.resolve(Boolean(process.env.OPENAI_API_KEY?.trim())),
     Promise.resolve(Boolean(process.env.KEEPA_API_KEY?.trim())),
     Promise.resolve(tryReadSpApiConfig()),
+    Promise.resolve(isPaApiConfigured()),
     Promise.resolve(Number(process.env.ADMIN_ESTIMATE_STARTER_USD ?? "29") || 29),
     Promise.resolve(Number(process.env.ADMIN_ESTIMATE_PRO_USD ?? "79") || 79),
   ]);
@@ -121,6 +124,7 @@ export async function GET(): Promise<NextResponse> {
       openaiConfigured,
       imageSearchEnabled: openaiConfigured,
       keepaConfigured: keepaEnv,
+      paApiConfigured,
       uptimeSeconds: Math.floor(process.uptime()),
     },
     generatedAt: now.toISOString(),

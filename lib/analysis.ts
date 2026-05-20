@@ -454,12 +454,13 @@ export async function analyzeProduct(
       return result;
     }
 
-    // Prefer main product-page BSR from PA-API when configured; otherwise keep SP-API catalog rank.
+    // Prefer main product-page BSR from PA-API when configured; also captures affiliate URL.
     try {
       const mainBsr = await fetchMainBsr(resolvedAsin);
       if (mainBsr) {
         result.salesRank = mainBsr.salesRank;
         result.salesRankCategory = mainBsr.categoryName;
+        if (mainBsr.affiliateUrl) result.affiliateUrl = mainBsr.affiliateUrl;
       }
     } catch {
       // PA-API optional; keep existing result.salesRank from catalog if any.

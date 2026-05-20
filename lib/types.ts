@@ -106,6 +106,11 @@ export interface ProductAnalysis {
   matchReason?: string | null;
   /** Bucket for grouping scan results in the UI. Only set by the scan/photo flow. */
   matchGroup?: "exact" | "variation" | "multipack" | "possible_related" | null;
+  /**
+   * Affiliate-tagged Amazon product page URL from PA-API DetailPageURL.
+   * Includes the partner tag (cherenfantand-20) when PA-API is configured; null otherwise.
+   */
+  affiliateUrl?: string | null;
 }
 
 export interface ParsedUploadRow {

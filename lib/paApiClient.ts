@@ -37,6 +37,8 @@ const MARKETPLACE_TO_PA_HOST_REGION: Record<string, { host: string; region: stri
 export interface PaApiMainBsrResult {
   salesRank: number;
   categoryName: string | null;
+  /** Affiliate-tagged Amazon product URL when DetailPageURL resource was requested; null otherwise. */
+  affiliateUrl: string | null;
 }
 
 /** Public catalog data for a known ASIN — returned from PA-API so no SP-API seller quota used. */
@@ -49,6 +51,8 @@ export interface PaApiCatalogItem {
   price: number | null;
   salesRank: number | null;
   salesRankCategory: string | null;
+  /** Affiliate-tagged Amazon product URL (DetailPageURL); null when not returned. */
+  affiliateUrl: string | null;
 }
 
 /** Lightweight result set from a PA-API keyword search. */
@@ -76,7 +80,7 @@ function asObject(value: unknown): Record<string, unknown> | null {
   return value as Record<string, unknown>;
 }
 
-function isPaApiConfigured(): boolean {
+export function isPaApiConfigured(): boolean {
   const key = process.env.PA_API_ACCESS_KEY?.trim();
   const secret = process.env.PA_API_SECRET_KEY?.trim();
   const tag = process.env.PA_API_PARTNER_TAG?.trim();
@@ -121,9 +125,11 @@ function parseGetItemsResponse(json: unknown): PaApiMainBsrResult | null {
   if (rank === null || rank < 1) return null;
 
   const displayName = readString(websiteSalesRank.DisplayName) ?? readString(websiteSalesRank.ContextFreeName);
+  const affiliateUrl = readString(first.DetailPageURL);
   return {
     salesRank: rank,
     categoryName: displayName,
+    affiliateUrl,
   };
 }
 
@@ -134,6 +140,7 @@ const CATALOG_ITEM_RESOURCES = [
   "Images.Primary.Medium",
   "Offers.Listings.Price",
   "BrowseNodeInfo.WebsiteSalesRank",
+  "DetailPageURL",
 ];
 
 function parseCatalogItems(json: unknown): PaApiCatalogItem[] {
@@ -181,7 +188,8 @@ function parseCatalogItems(json: unknown): PaApiCatalogItem[] {
     const salesRankCategory =
       readString(websiteSalesRank?.DisplayName) ?? readString(websiteSalesRank?.ContextFreeName);
 
-    results.push({ asin, title, brand, imageUrl, price, salesRank, salesRankCategory });
+    const affiliateUrl = readString(item.DetailPageURL);
+    results.push({ asin, title, brand, imageUrl, price, salesRank, salesRankCategory, affiliateUrl });
   }
   return results;
 }
@@ -238,7 +246,7 @@ export async function fetchMainBsr(asin: string): Promise<PaApiMainBsrResult | n
     ItemIds: [normalizedAsin],
     ItemIdType: "ASIN",
     Marketplace: host === "webservices.amazon.com" ? "www.amazon.com" : undefined,
-    Resources: ["BrowseNodeInfo.WebsiteSalesRank", "BrowseNodeInfo.BrowseNodes.SalesRank"],
+    Resources: ["BrowseNodeInfo.WebsiteSalesRank", "BrowseNodeInfo.BrowseNodes.SalesRank", "DetailPageURL"],
   });
   if (!json) return null;
   return parseGetItemsResponse(json);

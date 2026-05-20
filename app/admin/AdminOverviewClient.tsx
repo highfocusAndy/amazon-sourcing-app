@@ -39,6 +39,7 @@ type OverviewResponse = {
     openaiConfigured: boolean;
     imageSearchEnabled: boolean;
     keepaConfigured: boolean;
+    paApiConfigured: boolean;
     uptimeSeconds: number;
   };
 };
@@ -547,6 +548,7 @@ export function AdminOverviewClient() {
                   <HealthRow label="App server" tier="operational" detail={h?.uptimeSeconds !== undefined ? `Up ${formatUptime(h.uptimeSeconds)}` : "Running"} />
                   <HealthRow label="Database" tier={h?.database === "ok" ? "operational" : "attention"} />
                   <HealthRow label="SP-API configuration" tier={h?.spApiConfigured ? "operational" : "attention"} />
+                  <HealthRow label="PA-API (Product Advertising)" tier={h?.paApiConfigured ? "operational" : "idle"} detail={h?.paApiConfigured ? "Main-category BSR · Affiliate URLs" : "Set PA_API_ACCESS_KEY / SECRET_KEY / PARTNER_TAG"} />
                   <HealthRow label="OpenAI vision (image scans)" tier={h?.imageSearchEnabled ? "operational" : "idle"} />
                   <HealthRow label="Keepa API token" tier={h?.keepaConfigured ? "operational" : "idle"} />
                 </div>
