@@ -8,10 +8,12 @@
  * When not configured or if the request fails, callers fall back to the SP-API catalog rank.
  */
 
-const PA_API_PATH_GET_ITEMS = "/paapi5/getitems";
-const PA_API_PATH_SEARCH_ITEMS = "/paapi5/searchitems";
+const CREATORS_API_BASE = "https://creatorsapi.amazon/catalog/v1";
+const CREATORS_API_PATH_GET_ITEMS = "/getItems";
+const CREATORS_API_PATH_SEARCH_ITEMS = "/searchItems";
 const LWA_TOKEN_ENDPOINT = "https://api.amazon.com/auth/o2/token";
-const LWA_SCOPE_PA_API = "paapi";
+/** LWA v3 Creators API scope (double colon). Override with PA_API_OAUTH_SCOPE if needed. */
+const DEFAULT_LWA_SCOPE = "creatorsapi::default";
 
 /** In-process token cache — avoids fetching a new token on every PA-API call (tokens last 1 hour). */
 let _tokenCache: { token: string; expiresAt: number } | null = null;
@@ -108,6 +110,33 @@ const CATEGORY_TO_PA_SEARCH_INDEX: Record<string, string> = {
   Watches: "Watches",
 };
 
+function lwaScope(): string {
+  return process.env.PA_API_OAUTH_SCOPE?.trim() || DEFAULT_LWA_SCOPE;
+}
+
+function marketplaceWebDomain(host: string): string {
+  if (host === "webservices.amazon.ca") return "www.amazon.ca";
+  if (host === "webservices.amazon.com.mx") return "www.amazon.com.mx";
+  if (host === "webservices.amazon.com.br") return "www.amazon.com.br";
+  if (host === "webservices.amazon.co.uk") return "www.amazon.co.uk";
+  if (host === "webservices.amazon.de") return "www.amazon.de";
+  if (host === "webservices.amazon.fr") return "www.amazon.fr";
+  if (host === "webservices.amazon.es") return "www.amazon.es";
+  if (host === "webservices.amazon.it") return "www.amazon.it";
+  if (host === "webservices.amazon.co.jp") return "www.amazon.co.jp";
+  if (host === "webservices.amazon.com.au") return "www.amazon.com.au";
+  return "www.amazon.com";
+}
+
+/** Read a field that may be PascalCase (PA-API v5) or camelCase (Creators API). */
+function getField(obj: Record<string, unknown> | null, names: string[]): unknown {
+  if (!obj) return undefined;
+  for (const name of names) {
+    if (name in obj) return obj[name];
+  }
+  return undefined;
+}
+
 function looksLikeLwaClientId(key: string): boolean {
   // Accept amzn1.application-oa2-client.* OAuth client IDs and plain keys of sufficient length.
   return key.trim().length >= 10;
@@ -158,15 +187,16 @@ async function fetchLwaAccessToken(clientId: string, clientSecret: string): Prom
   if (_tokenCache && _tokenCache.expiresAt > now + 30_000) {
     return _tokenCache.token;
   }
+  const formBody = new URLSearchParams({
+    grant_type: "client_credentials",
+    client_id: clientId,
+    client_secret: clientSecret,
+    scope: lwaScope(),
+  });
   const res = await fetch(LWA_TOKEN_ENDPOINT, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "client_credentials",
-      client_id: clientId,
-      client_secret: clientSecret,
-      scope: LWA_SCOPE_PA_API,
-    }),
+    body: formBody.toString(),
     cache: "no-store",
   });
   const raw = await res.text();
@@ -177,11 +207,12 @@ async function fetchLwaAccessToken(clientId: string, clientSecret: string): Prom
     throw new Error(`LWA token endpoint returned invalid JSON (${res.status})`);
   }
   if (!res.ok) {
-    const msg = typeof json.error_description === "string"
-      ? json.error_description
-      : typeof json.error === "string"
-      ? json.error
-      : `LWA token request failed (${res.status})`;
+    const msg =
+      typeof json.error_description === "string"
+        ? json.error_description
+        : typeof json.error === "string"
+          ? json.error
+          : `LWA token request failed (${res.status})`;
     throw new Error(msg);
   }
   const token = typeof json.access_token === "string" ? json.access_token : "";
@@ -225,6 +256,7 @@ function getPaApiConfig(): {
   secretKey: string;
   partnerTag: string;
   host: string;
+  marketplaceDomain: string;
 } {
   const accessKey = process.env.PA_API_ACCESS_KEY?.trim();
   const secretKey = process.env.PA_API_SECRET_KEY?.trim();
@@ -234,27 +266,38 @@ function getPaApiConfig(): {
   }
   const marketplaceId = (process.env.MARKETPLACE_ID ?? process.env.SP_API_MARKETPLACE_ID ?? "ATVPDKIKX0DER").trim().toUpperCase();
   const { host } = MARKETPLACE_TO_PA_HOST_REGION[marketplaceId] ?? { host: "webservices.amazon.com" };
-  return { accessKey, secretKey, partnerTag, host };
+  return { accessKey, secretKey, partnerTag, host, marketplaceDomain: marketplaceWebDomain(host) };
+}
+
+function extractItemsArray(json: unknown): unknown[] {
+  const root = asObject(json);
+  const itemsResult = asObject(getField(root, ["itemsResult", "ItemsResult"]));
+  const searchResult = asObject(getField(root, ["searchResult", "SearchResult"]));
+  const fromItems = getField(itemsResult, ["items", "Items"]);
+  if (Array.isArray(fromItems)) return fromItems;
+  const fromSearch = getField(searchResult, ["items", "Items"]);
+  if (Array.isArray(fromSearch)) return fromSearch;
+  return [];
 }
 
 function parseGetItemsResponse(json: unknown): PaApiMainBsrResult | null {
-  const root = asObject(json);
-  const itemsResult = asObject(root?.ItemsResult);
-  const items = Array.isArray(itemsResult?.Items) ? itemsResult.Items : [];
+  const items = extractItemsArray(json);
   const first = asObject(items[0]);
   if (!first) return null;
 
-  const browseNodeInfo = asObject(first.BrowseNodeInfo);
+  const browseNodeInfo = asObject(getField(first, ["browseNodeInfo", "BrowseNodeInfo"]));
   if (!browseNodeInfo) return null;
 
-  const websiteSalesRank = asObject(browseNodeInfo.WebsiteSalesRank);
+  const websiteSalesRank = asObject(getField(browseNodeInfo, ["websiteSalesRank", "WebsiteSalesRank"]));
   if (!websiteSalesRank) return null;
 
-  const rank = readNumber(websiteSalesRank.SalesRank);
+  const rank = readNumber(getField(websiteSalesRank, ["salesRank", "SalesRank"]));
   if (rank === null || rank < 1) return null;
 
-  const displayName = readString(websiteSalesRank.DisplayName) ?? readString(websiteSalesRank.ContextFreeName);
-  const affiliateUrl = readString(first.DetailPageURL);
+  const displayName =
+    readString(getField(websiteSalesRank, ["displayName", "DisplayName"])) ??
+    readString(getField(websiteSalesRank, ["contextFreeName", "ContextFreeName"]));
+  const affiliateUrl = readString(getField(first, ["detailPageURL", "DetailPageURL"]));
   return {
     salesRank: rank,
     categoryName: displayName,
@@ -262,69 +305,72 @@ function parseGetItemsResponse(json: unknown): PaApiMainBsrResult | null {
   };
 }
 
-/** Resources needed to populate PaApiCatalogItem. */
+/** Creators API resource names (lowerCamelCase). */
 const CATALOG_ITEM_RESOURCES = [
-  "ItemInfo.Title",
-  "ItemInfo.ByLineInfo",
-  "Images.Primary.Medium",
-  "Offers.Listings.Price",
-  "BrowseNodeInfo.WebsiteSalesRank",
-  "DetailPageURL",
-  "CustomerReviews.StarRatings",
-  "CustomerReviews.Count",
+  "itemInfo.title",
+  "itemInfo.byLineInfo",
+  "images.primary.medium",
+  "offersV2.listings.price",
+  "browseNodeInfo.websiteSalesRank",
+  "customerReviews.starRating",
+  "customerReviews.count",
 ];
 
 function parseCatalogItems(json: unknown): PaApiCatalogItem[] {
-  const root = asObject(json);
-  const itemsResult = asObject(root?.ItemsResult);
-  const rawItems = Array.isArray(itemsResult?.Items) ? itemsResult.Items : [];
+  const rawItems = extractItemsArray(json);
   const results: PaApiCatalogItem[] = [];
 
   for (const raw of rawItems) {
     const item = asObject(raw);
     if (!item) continue;
-    const asin = readString(item.ASIN);
+    const asin = readString(getField(item, ["asin", "ASIN"]));
     if (!asin) continue;
 
-    const itemInfo = asObject(item.ItemInfo);
-    const titleObj = asObject(itemInfo?.Title);
-    const title = readString(titleObj?.DisplayValue) ?? "";
+    const itemInfo = asObject(getField(item, ["itemInfo", "ItemInfo"]));
+    const titleObj = asObject(getField(itemInfo, ["title", "Title"]));
+    const title = readString(getField(titleObj, ["displayValue", "DisplayValue"])) ?? "";
 
-    const byLineInfo = asObject(itemInfo?.ByLineInfo);
-    const brandArr = Array.isArray(byLineInfo?.Brand) ? byLineInfo.Brand : [];
-    const brandObj = asObject(brandArr[0] ?? byLineInfo?.Brand);
-    const brand = readString(brandObj?.DisplayValue) ?? "";
+    const byLineInfo = asObject(getField(itemInfo, ["byLineInfo", "ByLineInfo"]));
+    const brandRaw = getField(byLineInfo, ["brand", "Brand"]);
+    const brandArr = Array.isArray(brandRaw) ? brandRaw : [];
+    const brandObj = asObject(brandArr[0] ?? brandRaw);
+    const brand = readString(getField(brandObj, ["displayValue", "DisplayValue"])) ?? "";
 
-    const imagesObj = asObject(item.Images);
-    const primaryObj = asObject(imagesObj?.Primary);
-    const mediumObj = asObject(primaryObj?.Medium);
-    const imageUrl = readString(mediumObj?.URL);
+    const imagesObj = asObject(getField(item, ["images", "Images"]));
+    const primaryObj = asObject(getField(imagesObj, ["primary", "Primary"]));
+    const mediumObj = asObject(getField(primaryObj, ["medium", "Medium"]));
+    const imageUrl = readString(getField(mediumObj, ["url", "URL"]));
 
-    const offersObj = asObject(item.Offers);
-    const listings = Array.isArray(offersObj?.Listings) ? offersObj.Listings : [];
+    const offersV2 = asObject(getField(item, ["offersV2", "OffersV2"]));
+    const offersLegacy = asObject(getField(item, ["offers", "Offers"]));
+    const listingsRaw = getField(offersV2, ["listings", "Listings"]) ?? getField(offersLegacy, ["listings", "Listings"]);
+    const listings = Array.isArray(listingsRaw) ? listingsRaw : [];
     let price: number | null = null;
     for (const listing of listings) {
       const l = asObject(listing);
-      const priceObj = asObject(l?.Price);
-      const amount = readNumber(priceObj?.Amount);
+      const priceObj = asObject(getField(l, ["price", "Price"]));
+      const amount = readNumber(getField(priceObj, ["amount", "Amount"]));
       if (amount !== null && amount > 0) {
         price = amount;
         break;
       }
     }
 
-    const browseNodeInfo = asObject(item.BrowseNodeInfo);
-    const websiteSalesRank = asObject(browseNodeInfo?.WebsiteSalesRank);
-    const salesRank = readNumber(websiteSalesRank?.SalesRank);
+    const browseNodeInfo = asObject(getField(item, ["browseNodeInfo", "BrowseNodeInfo"]));
+    const websiteSalesRank = asObject(getField(browseNodeInfo, ["websiteSalesRank", "WebsiteSalesRank"]));
+    const salesRank = readNumber(getField(websiteSalesRank, ["salesRank", "SalesRank"]));
     const salesRankCategory =
-      readString(websiteSalesRank?.DisplayName) ?? readString(websiteSalesRank?.ContextFreeName);
+      readString(getField(websiteSalesRank, ["displayName", "DisplayName"])) ??
+      readString(getField(websiteSalesRank, ["contextFreeName", "ContextFreeName"]));
 
-    const affiliateUrl = readString(item.DetailPageURL);
+    const affiliateUrl = readString(getField(item, ["detailPageURL", "DetailPageURL"]));
 
-    const reviewsObj = asObject(item.CustomerReviews);
-    const starRatingObj = asObject(reviewsObj?.StarRatings);
-    const starRating = readNumber(starRatingObj?.DisplayValue ?? starRatingObj?.Value);
-    const reviewCount = readNumber(reviewsObj?.Count);
+    const reviewsObj = asObject(getField(item, ["customerReviews", "CustomerReviews"]));
+    const starRatingObj = asObject(getField(reviewsObj, ["starRating", "StarRatings", "starRatings"]));
+    const starRating = readNumber(
+      getField(starRatingObj, ["displayValue", "DisplayValue", "value", "Value"]),
+    );
+    const reviewCount = readNumber(getField(reviewsObj, ["count", "Count"]));
 
     results.push({ asin, title, brand, imageUrl, price, salesRank, salesRankCategory, affiliateUrl, starRating, reviewCount });
   }
@@ -342,7 +388,7 @@ async function paApiPost(
   if (configIssue) {
     return { ok: false, error: configIssue };
   }
-  const { accessKey, secretKey, partnerTag, host } = getPaApiConfig();
+  const { accessKey, secretKey, partnerTag, marketplaceDomain } = getPaApiConfig();
 
   let accessToken: string;
   try {
@@ -353,12 +399,13 @@ async function paApiPost(
     return { ok: false, error: message };
   }
 
-  const bodyStr = JSON.stringify({ ...body, PartnerTag: partnerTag, PartnerType: "Associates" });
-  const response = await fetch(`https://${host}${path}`, {
+  const bodyStr = JSON.stringify({ ...body, partnerTag, partnerType: "Associates" });
+  const response = await fetch(`${CREATORS_API_BASE}${path}`, {
     method: "POST",
     headers: {
-      "authorization": `Bearer ${accessToken}`,
-      "content-type": "application/json; charset=utf-8",
+      authorization: `Bearer ${accessToken}`,
+      "content-type": "application/json",
+      "x-marketplace": marketplaceDomain,
     },
     body: bodyStr,
     cache: "no-store",
@@ -368,25 +415,29 @@ async function paApiPost(
   try {
     json = raw ? JSON.parse(raw) : {};
   } catch {
-    return { ok: false, error: "PA-API returned invalid JSON." };
+    return { ok: false, error: "Creators API returned invalid JSON." };
   }
   if (!response.ok) {
     const root = asObject(json);
     const errors = Array.isArray(root?.Errors) ? root.Errors : [];
     const first = asObject(errors[0]);
-    const message =
+    let message =
       readString(first?.Message) ??
       readString(root?.message) ??
-      `PA-API request failed (${response.status}).`;
-    console.error("PA-API HTTP error:", response.status, message);
+      `Creators API request failed (${response.status}).`;
+    if (root?.reason === "AssociateNotEligible") {
+      message =
+        "Your Amazon Associates account does not meet Creators API eligibility requirements (typically 10+ qualifying sales in the last 30 days).";
+    }
+    console.error("Creators API HTTP error:", response.status, message);
     return { ok: false, error: message };
   }
   const root = asObject(json);
   const errors = Array.isArray(root?.Errors) ? root.Errors : [];
   if (errors.length > 0) {
     const first = asObject(errors[0]);
-    const message = readString(first?.Message) ?? "PA-API returned an error.";
-    console.error("PA-API error payload:", message);
+    const message = readString(first?.Message) ?? "Creators API returned an error.";
+    console.error("Creators API error payload:", message);
     return { ok: false, error: message };
   }
   return { ok: true, data: json };
@@ -400,10 +451,10 @@ export async function fetchMainBsr(asin: string): Promise<PaApiMainBsrResult | n
   if (!isPaApiConfigured()) return null;
   const normalizedAsin = asin.trim().toUpperCase();
   if (!normalizedAsin || normalizedAsin.length !== 10) return null;
-  const json = await paApiPost(PA_API_PATH_GET_ITEMS, {
-    ItemIds: [normalizedAsin],
-    ItemIdType: "ASIN",
-    Resources: ["BrowseNodeInfo.WebsiteSalesRank", "BrowseNodeInfo.BrowseNodes.SalesRank", "DetailPageURL"],
+  const json = await paApiPost(CREATORS_API_PATH_GET_ITEMS, {
+    itemIds: [normalizedAsin],
+    itemIdType: "ASIN",
+    resources: ["browseNodeInfo.websiteSalesRank", "browseNodeInfo.browseNodes.salesRank"],
   });
   if (!json.ok) return null;
   return parseGetItemsResponse(json.data);
@@ -427,10 +478,10 @@ export async function fetchCatalogItemsFromPaApi(
   if (normalizedAsins.length === 0) {
     return { ok: false, error: "No valid ASINs provided." };
   }
-  const json = await paApiPost(PA_API_PATH_GET_ITEMS, {
-    ItemIds: normalizedAsins,
-    ItemIdType: "ASIN",
-    Resources: CATALOG_ITEM_RESOURCES,
+  const json = await paApiPost(CREATORS_API_PATH_GET_ITEMS, {
+    itemIds: normalizedAsins,
+    itemIdType: "ASIN",
+    resources: CATALOG_ITEM_RESOURCES,
   });
   if (!json.ok) return json;
   return { ok: true, data: parseCatalogItems(json.data) };
@@ -449,16 +500,12 @@ export async function searchCatalogByKeywordPaApi(
   if (!isPaApiConfigured()) {
     return { ok: false, error: "PA-API is not configured." };
   }
-  const json = await paApiPost(PA_API_PATH_SEARCH_ITEMS, {
-    Keywords: keyword.trim().slice(0, 250),
-    SearchIndex: searchIndex,
-    ItemCount: Math.min(10, Math.max(1, maxResults)),
-    Resources: CATALOG_ITEM_RESOURCES,
+  const json = await paApiPost(CREATORS_API_PATH_SEARCH_ITEMS, {
+    keywords: keyword.trim().slice(0, 250),
+    searchIndex,
+    itemCount: Math.min(10, Math.max(1, maxResults)),
+    resources: CATALOG_ITEM_RESOURCES,
   });
   if (!json.ok) return json;
-  const root = asObject(json.data);
-  const searchResult = asObject(root?.SearchResult);
-  const rawItems = Array.isArray(searchResult?.Items) ? searchResult.Items : [];
-  const fakeGetItems = { ItemsResult: { Items: rawItems } };
-  return { ok: true, data: { items: parseCatalogItems(fakeGetItems) } };
+  return { ok: true, data: { items: parseCatalogItems(json.data) } };
 }

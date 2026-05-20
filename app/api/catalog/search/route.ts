@@ -102,7 +102,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       const result = await fetchCatalogItemsFromPaApi([q]);
       if (!result.ok) {
         return NextResponse.json(
-          { error: CATALOG_UNAVAILABLE, items: [], nextPageToken: null },
+          { error: result.error || CATALOG_UNAVAILABLE, items: [], nextPageToken: null },
           { status: 503 },
         );
       }
@@ -118,7 +118,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const result = await searchCatalogByKeywordPaApi(keywords, size, searchIndex);
     if (!result.ok) {
       return NextResponse.json(
-        { error: CATALOG_UNAVAILABLE, items: [], nextPageToken: null },
+        { error: result.error || CATALOG_UNAVAILABLE, items: [], nextPageToken: null },
         { status: 503 },
       );
     }

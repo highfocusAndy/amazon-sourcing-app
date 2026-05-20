@@ -8,7 +8,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { userRestrictionsLimit } from "@/lib/apiRateLimit";
 import { requireAppAccess } from "@/lib/billing/requireAppAccess";
 import {
-  getSpApiClientForUserOrGlobal,
+  getSpApiClientForUser,
   hasConnectedAmazonAccount,
   SP_API_UNAVAILABLE_USER_MESSAGE,
 } from "@/lib/amazonAccount";
@@ -72,7 +72,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         { status: 429 },
       );
     }
-    const client = await getSpApiClientForUserOrGlobal(gate.userId);
+    const client = await getSpApiClientForUser(gate.userId);
     if (!client) {
       return NextResponse.json(
         { error: SP_API_UNAVAILABLE_USER_MESSAGE, asin, gated: null },

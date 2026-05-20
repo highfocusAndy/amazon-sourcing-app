@@ -9,7 +9,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { userAnalyzeLimit } from "@/lib/apiRateLimit";
 import { requireAppAccess } from "@/lib/billing/requireAppAccess";
 import {
-  getSpApiClientForUserOrGlobal,
+  CONNECT_AMAZON_FOR_SP_API_MESSAGE,
+  getSpApiClientForUser,
+  hasConnectedAmazonAccount,
   SP_API_UNAVAILABLE_USER_MESSAGE,
 } from "@/lib/amazonAccount";
 import { buildCatalogOnlyResult } from "@/lib/analysis";
@@ -56,7 +58,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         { status: 429 },
       );
     }
-    const client = await getSpApiClientForUserOrGlobal(gate.userId);
+    const hasAmazon = await hasConnectedAmazonAccount(gate.userId);
+    if (!hasAmazon) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: CONNECT_AMAZON_FOR_SP_API_MESSAGE,
+          results: [],
+        },
+        { status: 403 },
+      );
+    }
+    const client = await getSpApiClientForUser(gate.userId);
     if (!client) {
       return NextResponse.json(
         {

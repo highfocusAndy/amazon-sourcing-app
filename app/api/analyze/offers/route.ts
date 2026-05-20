@@ -9,7 +9,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { userAnalyzeLimit } from "@/lib/apiRateLimit";
 import { requireAppAccess } from "@/lib/billing/requireAppAccess";
 import {
-  getSpApiClientForUserOrGlobal,
+  CONNECT_AMAZON_FOR_SP_API_MESSAGE,
+  getSpApiClientForUser,
   hasConnectedAmazonAccount,
   SP_API_UNAVAILABLE_USER_MESSAGE,
 } from "@/lib/amazonAccount";
@@ -74,7 +75,27 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
     const hasAmazon = await hasConnectedAmazonAccount(gate.userId);
-    const client = await getSpApiClientForUserOrGlobal(gate.userId);
+    if (!hasAmazon) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: CONNECT_AMAZON_FOR_SP_API_MESSAGE,
+          results: [],
+        },
+        { status: 403 },
+      );
+    }
+    const client = await getSpApiClientForUser(gate.userId);
+    if (!client) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: SP_API_UNAVAILABLE_USER_MESSAGE,
+          results: [],
+        },
+        { status: 503 },
+      );
+    }
     const wholesalePrice = Number(body.wholesalePrice ?? 0);
     const projectedMonthlyUnits = Number(body.projectedMonthlyUnits ?? 1) || 1;
     const sellerType = body.sellerType === "FBM" ? "FBM" : "FBA";
@@ -90,7 +111,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         shippingCost,
       },
       client,
-      { skipRestrictions: !hasAmazon },
+      undefined,
     );
 
     if (baseResult.error || !baseResult.asin) {

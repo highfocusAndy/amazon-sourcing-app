@@ -8,8 +8,8 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { userAnalyzeLimit } from "@/lib/apiRateLimit";
 import { requireAppAccess } from "@/lib/billing/requireAppAccess";
-import { getSpApiClientForUserOrGlobal, hasConnectedAmazonAccount } from "@/lib/amazonAccount";
-import { analyzeProduct } from "@/lib/analysis";
+import { getSpApiClientForUser, hasConnectedAmazonAccount } from "@/lib/amazonAccount";
+import { analyzeProduct, analyzeProductPublicOnly } from "@/lib/analysis";
 import type { ProductAnalysis } from "@/lib/types";
 import { consumeMonthlyUsage } from "@/lib/usageQuota";
 
@@ -100,19 +100,26 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
     const hasAmazon = await hasConnectedAmazonAccount(gate.userId);
-    const client = await getSpApiClientForUserOrGlobal(gate.userId);
-    const result = await analyzeProduct(
-      {
-        identifier: body.identifier,
-        wholesalePrice: Number(body.wholesalePrice ?? 0),
-        brand: body.brand,
-        projectedMonthlyUnits: Number(body.projectedMonthlyUnits ?? 0),
-        sellerType: body.sellerType === "FBM" ? "FBM" : "FBA",
-        shippingCost: Number(body.shippingCost ?? 0),
-      },
-      client,
-      { skipRestrictions: !hasAmazon },
-    );
+    const result = hasAmazon
+      ? await analyzeProduct(
+          {
+            identifier: body.identifier,
+            wholesalePrice: Number(body.wholesalePrice ?? 0),
+            brand: body.brand,
+            projectedMonthlyUnits: Number(body.projectedMonthlyUnits ?? 0),
+            sellerType: body.sellerType === "FBM" ? "FBM" : "FBA",
+            shippingCost: Number(body.shippingCost ?? 0),
+          },
+          await getSpApiClientForUser(gate.userId),
+        )
+      : await analyzeProductPublicOnly({
+          identifier: body.identifier,
+          wholesalePrice: Number(body.wholesalePrice ?? 0),
+          brand: body.brand,
+          projectedMonthlyUnits: Number(body.projectedMonthlyUnits ?? 0),
+          sellerType: body.sellerType === "FBM" ? "FBM" : "FBA",
+          shippingCost: Number(body.shippingCost ?? 0),
+        });
 
     return NextResponse.json({
       ok: !result.error,

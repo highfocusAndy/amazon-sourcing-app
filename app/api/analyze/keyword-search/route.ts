@@ -1,7 +1,7 @@
 /**
  * POST /api/analyze/keyword-search
  * Searches Amazon's catalog by keyword and returns enriched product listings.
- * Used by the Analyzer page to browse ASINs without needing an explicit ASIN.
+ * PA-API when available; SP-API only after Connect Amazon.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -9,16 +9,19 @@ import { NextRequest, NextResponse } from "next/server";
 import { userKeywordSearchLimit } from "@/lib/apiRateLimit";
 import { requireAppAccess } from "@/lib/billing/requireAppAccess";
 import {
-  getSpApiClientForUserOrGlobal,
+  CONNECT_AMAZON_FOR_SP_API_MESSAGE,
+  getSpApiClientForUser,
+  hasConnectedAmazonAccount,
   SP_API_UNAVAILABLE_USER_MESSAGE,
 } from "@/lib/amazonAccount";
-import { buildCatalogOnlyResult } from "@/lib/analysis";
+import { buildCatalogOnlyResult, buildProductAnalysisFromPaApi } from "@/lib/analysis";
 import {
   getKeywordSearchCache,
   setKeywordSearchCache,
 } from "@/lib/spApiResponseCache";
 import type { ProductAnalysis } from "@/lib/types";
 import { consumeMonthlyUsage } from "@/lib/usageQuota";
+import { isPaApiConfigured, resolvePaApiSearchParams, searchCatalogByKeywordPaApi } from "@/lib/paApiClient";
 
 export const runtime = "nodejs";
 
@@ -59,7 +62,45 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         { status: 429 },
       );
     }
-    const client = await getSpApiClientForUserOrGlobal(gate.userId);
+
+    const hasAmazon = await hasConnectedAmazonAccount(gate.userId);
+
+    if (isPaApiConfigured()) {
+      try {
+        const { keywords, searchIndex } = resolvePaApiSearchParams({ fallbackQuery: q });
+        const paResult = await searchCatalogByKeywordPaApi(keywords, pageSize, searchIndex);
+        if (!paResult.ok) {
+          if (!hasAmazon) {
+            return NextResponse.json(
+              { ok: false, error: paResult.error, results: [] },
+              { status: 503 },
+            );
+          }
+        } else {
+          const results: ProductAnalysis[] = paResult.data.items.map((item) =>
+            buildProductAnalysisFromPaApi(item, { identifier: item.asin, wholesalePrice: 0 }),
+          );
+          return NextResponse.json({ ok: true, results });
+        }
+      } catch (e) {
+        console.error("PA-API keyword search error:", e);
+        if (!hasAmazon) {
+          return NextResponse.json(
+            { ok: false, error: CONNECT_AMAZON_FOR_SP_API_MESSAGE, results: [] },
+            { status: 503 },
+          );
+        }
+      }
+    }
+
+    if (!hasAmazon) {
+      return NextResponse.json(
+        { ok: false, error: CONNECT_AMAZON_FOR_SP_API_MESSAGE, results: [] },
+        { status: 503 },
+      );
+    }
+
+    const client = await getSpApiClientForUser(gate.userId);
     if (!client) {
       return NextResponse.json(
         {

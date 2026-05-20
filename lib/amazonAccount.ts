@@ -18,6 +18,9 @@ import { getOAuthAuthSecret } from "@/lib/amazonOAuth";
 export const SP_API_UNAVAILABLE_USER_MESSAGE =
   "Amazon SP-API is not available. Connect your seller account in settings (Connect Amazon) or set SP_API_* and AWS credentials in the server environment.";
 
+export const CONNECT_AMAZON_FOR_SP_API_MESSAGE =
+  "Connect your Amazon seller account to unlock SP-API analysis (fees, restrictions, offers, and profit).";
+
 const GLOBAL_SP_API_FALLBACK_ENV = "REQUIRE_AMAZON_OAUTH_FOR_SP_API";
 
 /**

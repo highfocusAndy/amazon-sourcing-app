@@ -3,7 +3,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { userKeywordSearchLimit } from "@/lib/apiRateLimit";
 import { requireAppAccess } from "@/lib/billing/requireAppAccess";
 import {
-  getSpApiClientForUserOrGlobal,
+  CONNECT_AMAZON_FOR_SP_API_MESSAGE,
+  getSpApiClientForUser,
+  hasConnectedAmazonAccount,
   SP_API_UNAVAILABLE_USER_MESSAGE,
 } from "@/lib/amazonAccount";
 import type { CatalogItem } from "@/lib/spApiClient";
@@ -374,7 +376,19 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const client = await getSpApiClientForUserOrGlobal(gate.userId);
+    const hasAmazon = await hasConnectedAmazonAccount(gate.userId);
+    if (!hasAmazon) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: CONNECT_AMAZON_FOR_SP_API_MESSAGE,
+          results: [],
+        },
+        { status: 403 },
+      );
+    }
+
+    const client = await getSpApiClientForUser(gate.userId);
     if (!client) {
       return NextResponse.json(
         {
@@ -792,7 +806,7 @@ function pickFamilySeed(items: CatalogItem[], parse: VisionProductFamilyParse): 
  *    with a strict same-line filter (0.68 Jaccard) to avoid cross-product brand noise.
  */
 async function collectFamilyResults(opts: {
-  client: Awaited<ReturnType<typeof getSpApiClientForUserOrGlobal>>;
+  client: Awaited<ReturnType<typeof getSpApiClientForUser>>;
   parse: VisionProductFamilyParse;
   seed: CatalogItem;
   seedReason: string;

@@ -10,7 +10,11 @@ import { userUploadLimit } from "@/lib/apiRateLimit";
 import { requireAppAccess } from "@/lib/billing/requireAppAccess";
 import { analyzeBatch } from "@/lib/analysis";
 import { parseSourcingFile } from "@/lib/upload-parser";
-import { getSpApiClientForUserOrGlobal } from "@/lib/amazonAccount";
+import {
+  CONNECT_AMAZON_FOR_SP_API_MESSAGE,
+  getSpApiClientForUser,
+  hasConnectedAmazonAccount,
+} from "@/lib/amazonAccount";
 import type { ProductInput } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -57,9 +61,24 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       shippingCost,
     }));
 
+    // Bulk analysis requires a connected seller account (SP-API only).
+    const hasAmazon = await hasConnectedAmazonAccount(gate.userId);
+    if (!hasAmazon) {
+      return NextResponse.json(
+        { error: CONNECT_AMAZON_FOR_SP_API_MESSAGE },
+        { status: 403 },
+      );
+    }
+
     // Resolve once — reused across all concurrent workers instead of
     // creating a new SpApiClient (+ token refresh) for every product row.
-    const client = await getSpApiClientForUserOrGlobal(gate.userId);
+    const client = await getSpApiClientForUser(gate.userId);
+    if (!client) {
+      return NextResponse.json(
+        { error: CONNECT_AMAZON_FOR_SP_API_MESSAGE },
+        { status: 503 },
+      );
+    }
     const results = await analyzeBatch(batchInput, client);
     return NextResponse.json({
       results,
