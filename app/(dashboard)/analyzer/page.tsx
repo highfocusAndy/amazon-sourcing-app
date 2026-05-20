@@ -390,6 +390,7 @@ function AnalyzerPageContent() {
   const [showAmazonAccountModal, setShowAmazonAccountModal] = useState(false);
   const [amazonHeaderConnected, setAmazonHeaderConnected] = useState(false);
   const [amazonHeaderTitle, setAmazonHeaderTitle] = useState<string | null>(null);
+  const [subscriptionPaid, setSubscriptionPaid] = useState<boolean | undefined>(undefined);
   const [bulkUploadEnabled, setBulkUploadEnabled] = useState(false);
   const [pendingProductId, setPendingProductId] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -484,9 +485,28 @@ function AnalyzerPageContent() {
   useEffect(() => {
     fetch("/api/billing/status", { credentials: "same-origin" })
       .then((res) => (res.ok ? res.json() : null))
-      .then((overview: { proBulkEntitled?: boolean } | null) => {
-        setBulkUploadEnabled(Boolean(overview?.proBulkEntitled));
-      })
+      .then(
+        (overview: {
+          proBulkEntitled?: boolean;
+          subscriptionStatus?: string;
+          appOwnerAccess?: boolean;
+          billingDisabled?: boolean;
+          testingBillingPass?: boolean;
+          promoDaysLeft?: number;
+        } | null) => {
+          setBulkUploadEnabled(Boolean(overview?.proBulkEntitled));
+          if (overview) {
+            const paid =
+              overview.appOwnerAccess ||
+              overview.billingDisabled ||
+              overview.testingBillingPass ||
+              overview.subscriptionStatus === "active" ||
+              overview.subscriptionStatus === "trialing" ||
+              (typeof overview.promoDaysLeft === "number" && overview.promoDaysLeft > 0);
+            setSubscriptionPaid(Boolean(paid));
+          }
+        },
+      )
       .catch(() => {
         setBulkUploadEnabled(false);
       });
@@ -1701,12 +1721,27 @@ function AnalyzerPageContent() {
         onProjectedMonthlyUnitsChange={setProjectedMonthlyUnits}
         openSellerModal={openSellerModal}
         variationDetail="analyzer"
+        amazonConnected={amazonHeaderConnected}
+        onConnectAmazon={() => {
+          if (subscriptionPaid === false) {
+            window.location.href = "/billing";
+          } else {
+            setShowAmazonAccountModal(true);
+          }
+        }}
+        isPaidPlan={subscriptionPaid}
       >
         <ProductInsightBlurb
           product={selectedProduct}
           sessionSignedIn={Boolean(session?.user)}
           amazonConnected={amazonHeaderConnected}
-          onConnectAmazon={() => setShowAmazonAccountModal(true)}
+          onConnectAmazon={() => {
+            if (subscriptionPaid === false) {
+              window.location.href = "/billing";
+            } else {
+              setShowAmazonAccountModal(true);
+            }
+          }}
           openaiConfigured={photoSearchAvailable}
           llmInsight={llmInsight}
           llmLoading={llmLoading}
@@ -1809,7 +1844,10 @@ function AnalyzerPageContent() {
         </div>
       )}
       {showAmazonAccountModal && (
-        <AmazonAccountModal onClose={() => setShowAmazonAccountModal(false)} />
+        <AmazonAccountModal
+          onClose={() => setShowAmazonAccountModal(false)}
+          isPaidPlan={subscriptionPaid}
+        />
       )}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
       <main className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto overflow-x-hidden overscroll-y-contain p-4 pb-[calc(4.75rem+env(safe-area-inset-bottom,0px))] sm:gap-6 sm:p-6 sm:pb-[calc(4.75rem+env(safe-area-inset-bottom,0px))] lg:overflow-hidden lg:pb-6">

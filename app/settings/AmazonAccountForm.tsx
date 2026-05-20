@@ -10,11 +10,14 @@ const BTN_OUTLINE =
 export function AmazonAccountForm({
   className = "",
   onStatusChange,
+  isPaidPlan,
 }: {
   className?: string;
   onStatusChange?: (
     status: { connected: boolean; emailMasked?: string; connectionLabel?: string } | null,
   ) => void;
+  /** When explicitly false, Connect redirects to /billing for upgrade. */
+  isPaidPlan?: boolean;
 }) {
   const [status, setStatus] = useState<{
     connected: boolean;
@@ -61,6 +64,10 @@ export function AmazonAccountForm({
   function startOAuth() {
     setError(null);
     setSuccess(null);
+    if (isPaidPlan === false) {
+      window.location.href = "/billing";
+      return;
+    }
     window.location.href = "/api/amazon/oauth/start";
   }
 
@@ -127,7 +134,7 @@ export function AmazonAccountForm({
           </button>
         ) : (
           <button type="button" onClick={startOAuth} className={BTN_PRIMARY}>
-            Connect Amazon
+            {isPaidPlan === false ? "Upgrade to connect Amazon" : "Connect Amazon"}
           </button>
         )}
       </div>

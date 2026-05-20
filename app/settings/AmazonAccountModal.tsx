@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { AmazonAccountForm } from "./AmazonAccountForm";
 
-export function AmazonAccountModal({ onClose }: { onClose: () => void }) {
+export function AmazonAccountModal({ onClose, isPaidPlan }: { onClose: () => void; isPaidPlan?: boolean }) {
   const [status, setStatus] = useState<{
     connected: boolean;
     emailMasked?: string;
@@ -67,7 +67,7 @@ export function AmazonAccountModal({ onClose }: { onClose: () => void }) {
             Central (it can be a different email than your HIGH FOCUS login). After you connect, this app can show live
             prices, offers, and eligibility for products you research.
           </p>
-          <AmazonAccountForm onStatusChange={setStatus} />
+          <AmazonAccountForm onStatusChange={setStatus} isPaidPlan={isPaidPlan} />
         </div>
       </div>
     </div>

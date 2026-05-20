@@ -11,8 +11,14 @@ import {
   getSpApiClientForUserOrGlobal,
   SP_API_UNAVAILABLE_USER_MESSAGE,
 } from "@/lib/amazonAccount";
+import type { CatalogItem } from "@/lib/spApiClient";
 import { getCatalogSearchPageCache, setCatalogSearchPageCache } from "@/lib/spApiResponseCache";
 import { consumeMonthlyUsage } from "@/lib/usageQuota";
+import {
+  isPaApiConfigured,
+  fetchCatalogItemsFromPaApi,
+  searchCatalogByKeywordPaApi,
+} from "@/lib/paApiClient";
 
 /** True only if the query looks like a real ASIN (10 alphanumeric with both letter and digit). */
 function isAsinQuery(q: string): boolean {
@@ -65,15 +71,48 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   try {
     const client = await getSpApiClientForUserOrGlobal(gate.userId);
+
+    // PA-API fallback when SP-API is unavailable and PA-API is configured
     if (!client) {
-      return NextResponse.json(
-        {
-          error: SP_API_UNAVAILABLE_USER_MESSAGE,
-          items: [],
-          nextPageToken: null,
-        },
-        { status: 503 },
-      );
+      if (!isPaApiConfigured()) {
+        return NextResponse.json(
+          {
+            error: SP_API_UNAVAILABLE_USER_MESSAGE,
+            items: [],
+            nextPageToken: null,
+          },
+          { status: 503 },
+        );
+      }
+      try {
+        let paItems: CatalogItem[] = [];
+        if (isAsinQuery(q)) {
+          const results = await fetchCatalogItemsFromPaApi([q]);
+          paItems = (results ?? []).map((p) => ({
+            asin: p.asin,
+            title: p.title,
+            brand: p.brand,
+            rank: p.salesRank,
+            imageUrl: p.imageUrl,
+          }));
+        } else {
+          const result = await searchCatalogByKeywordPaApi(q, size);
+          paItems = (result?.items ?? []).map((p) => ({
+            asin: p.asin,
+            title: p.title,
+            brand: p.brand,
+            rank: p.salesRank,
+            imageUrl: p.imageUrl,
+          }));
+        }
+        return NextResponse.json({ items: paItems, nextPageToken: null });
+      } catch (e) {
+        console.error("PA-API catalog fallback error:", e);
+        return NextResponse.json(
+          { error: SP_API_UNAVAILABLE_USER_MESSAGE, items: [], nextPageToken: null },
+          { status: 503 },
+        );
+      }
     }
 
     const marketplaceId = client.marketplaceId;

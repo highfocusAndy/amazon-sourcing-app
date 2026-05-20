@@ -445,6 +445,7 @@ export default function ExplorerPage() {
   const [showAmazonAccountModal, setShowAmazonAccountModal] = useState(false);
   const [amazonHeaderConnected, setAmazonHeaderConnected] = useState(false);
   const [amazonHeaderTitle, setAmazonHeaderTitle] = useState<string | null>(null);
+  const [subscriptionPaid, setSubscriptionPaid] = useState<boolean | undefined>(undefined);
   const prevAmazonHeaderConnectedRef = useRef<boolean | null>(null);
 
   const productTableContainerRef = useRef<HTMLElement>(null);
@@ -589,6 +590,32 @@ const handleProductClick = useCallback(
   }, [refreshAmazonHeaderStatus]);
 
   useEffect(() => {
+    if (!session?.user) return;
+    fetch("/api/billing/status", { credentials: "same-origin" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then(
+        (overview: {
+          subscriptionStatus?: string;
+          appOwnerAccess?: boolean;
+          billingDisabled?: boolean;
+          testingBillingPass?: boolean;
+          promoDaysLeft?: number;
+        } | null) => {
+          if (!overview) return;
+          const paid =
+            overview.appOwnerAccess ||
+            overview.billingDisabled ||
+            overview.testingBillingPass ||
+            overview.subscriptionStatus === "active" ||
+            overview.subscriptionStatus === "trialing" ||
+            (typeof overview.promoDaysLeft === "number" && overview.promoDaysLeft > 0);
+          setSubscriptionPaid(Boolean(paid));
+        },
+      )
+      .catch(() => {});
+  }, [session?.user]);
+
+  useEffect(() => {
     const prev = prevAmazonHeaderConnectedRef.current;
     prevAmazonHeaderConnectedRef.current = amazonHeaderConnected;
     if (prev === true && !amazonHeaderConnected) {
@@ -646,6 +673,7 @@ const handleProductClick = useCallback(
             setShowAmazonAccountModal(false);
             refreshAmazonHeaderStatus();
           }}
+          isPaidPlan={subscriptionPaid}
         />
       )}
       <Suspense fallback={null}>
@@ -1052,6 +1080,15 @@ const handleProductClick = useCallback(
               onProjectedMonthlyUnitsChange={setProjectedMonthlyUnits}
               openSellerModal={openSellerModal}
               variationDetail="explorer"
+              amazonConnected={amazonHeaderConnected}
+              onConnectAmazon={() => {
+                if (subscriptionPaid === false) {
+                  window.location.href = "/billing";
+                } else {
+                  setShowAmazonAccountModal(true);
+                }
+              }}
+              isPaidPlan={subscriptionPaid}
             />
           )}
             </div>

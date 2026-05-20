@@ -146,7 +146,35 @@ export type ProductIntelPanelContentProps = {
   variationDetail?: "explorer" | "analyzer";
   /** Optional content after structured sections (e.g. legacy ProductInsightBlurb) */
   children?: ReactNode;
+  /** When false, advanced sections (fees, restrictions, competition) are locked. */
+  amazonConnected?: boolean;
+  onConnectAmazon?: () => void;
+  /** True when user has an active paid subscription (controls CTA destination). */
+  isPaidPlan?: boolean;
 };
+
+function LockedFieldGroup({ isLocked, children }: { isLocked: boolean; children: ReactNode }) {
+  if (!isLocked) return <>{children}</>;
+  return (
+    <div className="relative">
+      <div
+        className="pointer-events-none select-none overflow-hidden rounded-[13px]"
+        aria-hidden="true"
+        style={{ filter: "blur(5px)", opacity: 0.28 }}
+      >
+        {children}
+      </div>
+      <div className="absolute inset-0 flex items-center justify-center rounded-[13px] bg-slate-900/20">
+        <div
+          className="flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-semibold text-slate-300"
+          style={{ background: "rgba(10,15,30,0.9)", border: "1px solid rgba(255,255,255,0.09)" }}
+        >
+          🔒 Connect Amazon to unlock
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function ProductIntelPanelContent({
   product: selectedProduct,
@@ -162,7 +190,11 @@ export function ProductIntelPanelContent({
   openSellerModal,
   variationDetail = "explorer",
   children,
+  amazonConnected,
+  onConnectAmazon,
+  isPaidPlan,
 }: ProductIntelPanelContentProps) {
+  const isLocked = amazonConnected === false;
   const competitionThresholds = useCompetitionThresholds();
 
   const detailEconomics = useMemo(
@@ -261,6 +293,40 @@ export function ProductIntelPanelContent({
         </span>
       </div>
 
+      {isLocked ? (
+        <div
+          className="rounded-[16px] px-4 py-3.5 text-center"
+          style={{
+            background: "linear-gradient(135deg, rgba(201,168,76,0.1) 0%, rgba(201,168,76,0.04) 100%)",
+            border: "1px solid rgba(201,168,76,0.28)",
+          }}
+        >
+          <p className="text-[13px] font-semibold text-amber-200/90">
+            Connect your Amazon account to unlock full analysis
+          </p>
+          <p className="mt-1 text-[11px] text-slate-500">
+            FBA fees · Listing restrictions · Profit calculator · Seller competition
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              if (isPaidPlan === false) {
+                window.location.href = "/billing";
+              } else {
+                onConnectAmazon?.();
+              }
+            }}
+            className="mt-3 inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-[12px] font-bold text-slate-900 transition hover:opacity-90 active:scale-[0.98]"
+            style={{
+              background: "linear-gradient(135deg, #E8CC7A 0%, #C9A84C 60%)",
+              boxShadow: "0 2px 18px -4px rgba(201,168,76,0.5)",
+            }}
+          >
+            {isPaidPlan === false ? "Upgrade to unlock →" : "Connect Amazon →"}
+          </button>
+        </div>
+      ) : null}
+
       <IntelSection eyebrow="Product">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
           <div className="shrink-0 sm:w-[7.75rem]">
@@ -340,319 +406,329 @@ export function ProductIntelPanelContent({
           </div>
         </div>
 
-        <div className={HF_INNER_CARD_STATIC}>
-          <p className={HF_KPI_LABEL}>Gated / eligible</p>
-          <div className="mt-1.5 flex flex-wrap gap-1.5">
-            {approvalRequiredEffective(selectedProduct) ? (
-              <span className="rounded-full border border-amber-400/35 bg-amber-950/50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_0_16px_-8px_rgba(251,191,36,0.2)] ring-1 ring-inset ring-amber-400/12">
-                Approval required
-              </span>
-            ) : selectedProduct.approvalRequired === false ? (
-              <span className="rounded-full border border-white/12 bg-slate-950/50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-300 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-                No approval required
-              </span>
-            ) : null}
-            {selectedProduct.listingRestricted === true ? (
-              <span className="rounded-full border border-amber-400/35 bg-amber-950/50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_0_16px_-8px_rgba(251,191,36,0.2)] ring-1 ring-inset ring-amber-400/12">
-                Listing restricted
-              </span>
-            ) : selectedProduct.listingRestricted === false ? (
-              <span className="rounded-full border border-white/12 bg-slate-950/50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-300 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-                Not restricted
-              </span>
-            ) : null}
-            {approvalEligibilityUnset(selectedProduct) && selectedProduct.listingRestricted == null ? (
-              <span className="text-[11px] text-slate-500">—</span>
-            ) : null}
+        <LockedFieldGroup isLocked={isLocked}>
+          <div className={HF_INNER_CARD_STATIC}>
+            <p className={HF_KPI_LABEL}>Gated / eligible</p>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {approvalRequiredEffective(selectedProduct) ? (
+                <span className="rounded-full border border-amber-400/35 bg-amber-950/50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_0_16px_-8px_rgba(251,191,36,0.2)] ring-1 ring-inset ring-amber-400/12">
+                  Approval required
+                </span>
+              ) : selectedProduct.approvalRequired === false ? (
+                <span className="rounded-full border border-white/12 bg-slate-950/50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-300 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+                  No approval required
+                </span>
+              ) : null}
+              {selectedProduct.listingRestricted === true ? (
+                <span className="rounded-full border border-amber-400/35 bg-amber-950/50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_0_16px_-8px_rgba(251,191,36,0.2)] ring-1 ring-inset ring-amber-400/12">
+                  Listing restricted
+                </span>
+              ) : selectedProduct.listingRestricted === false ? (
+                <span className="rounded-full border border-white/12 bg-slate-950/50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-300 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+                  Not restricted
+                </span>
+              ) : null}
+              {approvalEligibilityUnset(selectedProduct) && selectedProduct.listingRestricted == null ? (
+                <span className="text-[11px] text-slate-500">—</span>
+              ) : null}
+            </div>
           </div>
-        </div>
+        </LockedFieldGroup>
       </IntelSection>
 
       <div className="border-t border-white/[0.06] pt-3">
         <IntelSection eyebrow="Profitability">
-          <div className="space-y-2 rounded-[14px] border border-teal-500/18 bg-gradient-to-b from-slate-900/88 to-slate-900/48 p-2.5 shadow-[inset_0_1px_0_rgba(45,212,191,0.06),0_20px_56px_-30px_rgba(0,0,0,0.65)]">
-            <p className="border-b border-white/[0.05] pb-1.5 text-[10px] font-semibold uppercase tracking-wide text-teal-400/90">
-              Sourcing snapshot
-            </p>
+          {/* Public pricing — always visible */}
+          <div className="grid grid-cols-2 gap-1.5">
+            <div className={HF_INNER_CARD}>
+              <p className={HF_KPI_LABEL}>
+                BSR
+                {selectedProduct.salesRankCategory ? ` · ${selectedProduct.salesRankCategory}` : ""}
+              </p>
+              <p className="mt-0.5 text-xl font-extrabold tabular-nums tracking-tight text-slate-50">
+                {selectedProduct.salesRank != null ? formatNumber(selectedProduct.salesRank) : "—"}
+              </p>
+            </div>
+            <div className={HF_INNER_CARD}>
+              <p className={HF_KPI_LABEL}>Buy box</p>
+              <p className="mt-0.5 text-xl font-extrabold tabular-nums tracking-tight text-slate-50">
+                {formatCurrency(selectedProduct.buyBoxPrice)}
+              </p>
+            </div>
+            {salesEstimate != null && salesEstimate > 0 ? (
+              <div
+                className={`${HF_INNER_CARD} col-span-2`}
+                title="Estimate based on BSR + category. Not guaranteed."
+              >
+                <p className={HF_KPI_LABEL}>Est. sales / mo</p>
+                <p className="mt-0.5 text-lg font-extrabold tabular-nums tracking-tight text-slate-50">
+                  {formatSalesRange(salesEstimate)}{" "}
+                  <span className="text-[10px] font-normal text-slate-500">(est.)</span>
+                </p>
+              </div>
+            ) : null}
+          </div>
 
-            <div className="grid grid-cols-2 gap-1.5">
-              <div className={HF_INNER_CARD}>
-                <p className={HF_KPI_LABEL}>
-                  BSR
-                  {selectedProduct.salesRankCategory ? ` · ${selectedProduct.salesRankCategory}` : ""}
-                </p>
-                <p className="mt-0.5 text-xl font-extrabold tabular-nums tracking-tight text-slate-50">
-                  {selectedProduct.salesRank != null ? formatNumber(selectedProduct.salesRank) : "—"}
-                </p>
-              </div>
-              <div className={HF_INNER_CARD}>
-                <p className={HF_KPI_LABEL}>Buy box</p>
-                <p className="mt-0.5 text-xl font-extrabold tabular-nums tracking-tight text-slate-50">
-                  {formatCurrency(selectedProduct.buyBoxPrice)}
-                </p>
-              </div>
-              {salesEstimate != null && salesEstimate > 0 ? (
-                <div
-                  className={`${HF_INNER_CARD} col-span-2`}
-                  title="Estimate based on BSR + category. Not guaranteed."
+          {/* Profitability calculator — locked when Amazon not connected */}
+          <LockedFieldGroup isLocked={isLocked}>
+            <div className="mt-2 space-y-2 rounded-[14px] border border-teal-500/18 bg-gradient-to-b from-slate-900/88 to-slate-900/48 p-2.5 shadow-[inset_0_1px_0_rgba(45,212,191,0.06),0_20px_56px_-30px_rgba(0,0,0,0.65)]">
+              <p className="border-b border-white/[0.05] pb-1.5 text-[10px] font-semibold uppercase tracking-wide text-teal-400/90">
+                Profitability calculator
+              </p>
+
+              <div className="flex rounded-[11px] border border-white/[0.08] bg-slate-950/35 p-0.5 shadow-[inset_0_1px_2px_rgba(0,0,0,0.25)]">
+                <button
+                  type="button"
+                  onClick={() => onSellerTypeChange("FBA")}
+                  className={`flex-1 rounded-[9px] px-2 py-1.5 text-[11px] font-bold uppercase tracking-wide transition-[color,background-color,box-shadow] duration-200 ${
+                    sellerType === "FBA"
+                      ? "bg-teal-600 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] ring-1 ring-teal-400/25"
+                      : "text-slate-400 hover:bg-white/[0.04] hover:text-slate-200"
+                  }`}
                 >
-                  <p className={HF_KPI_LABEL}>Est. sales / mo</p>
-                  <p className="mt-0.5 text-lg font-extrabold tabular-nums tracking-tight text-slate-50">
-                    {formatSalesRange(salesEstimate)}{" "}
-                    <span className="text-[10px] font-normal text-slate-500">(est.)</span>
-                  </p>
-                </div>
-              ) : null}
-            </div>
-
-            <div className="flex rounded-[11px] border border-white/[0.08] bg-slate-950/35 p-0.5 shadow-[inset_0_1px_2px_rgba(0,0,0,0.25)]">
-              <button
-                type="button"
-                onClick={() => onSellerTypeChange("FBA")}
-                className={`flex-1 rounded-[9px] px-2 py-1.5 text-[11px] font-bold uppercase tracking-wide transition-[color,background-color,box-shadow] duration-200 ${
-                  sellerType === "FBA"
-                    ? "bg-teal-600 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] ring-1 ring-teal-400/25"
-                    : "text-slate-400 hover:bg-white/[0.04] hover:text-slate-200"
-                }`}
-              >
-                FBA
-              </button>
-              <button
-                type="button"
-                onClick={() => onSellerTypeChange("FBM")}
-                className={`flex-1 rounded-[9px] px-2 py-1.5 text-[11px] font-bold uppercase tracking-wide transition-[color,background-color,box-shadow] duration-200 ${
-                  sellerType === "FBM"
-                    ? "bg-teal-600 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] ring-1 ring-teal-400/25"
-                    : "text-slate-400 hover:bg-white/[0.04] hover:text-slate-200"
-                }`}
-              >
-                FBM
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              <div>
-                <label className="mb-1 block text-xs font-medium text-slate-500">Your cost</label>
-                <input
-                  type="number"
-                  min={0}
-                  step={0.01}
-                  value={detailPanelCost}
-                  onChange={(e) => onDetailPanelCostChange(e.target.value)}
-                  placeholder="Enter your cost"
-                  className={INPUT_FIELD_CLASS}
-                />
+                  FBA
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onSellerTypeChange("FBM")}
+                  className={`flex-1 rounded-[9px] px-2 py-1.5 text-[11px] font-bold uppercase tracking-wide transition-[color,background-color,box-shadow] duration-200 ${
+                    sellerType === "FBM"
+                      ? "bg-teal-600 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] ring-1 ring-teal-400/25"
+                      : "text-slate-400 hover:bg-white/[0.04] hover:text-slate-200"
+                  }`}
+                >
+                  FBM
+                </button>
               </div>
-              {sellerType === "FBM" ? (
+
+              <div className="space-y-3">
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-slate-500">Shipping cost (FBM)</label>
+                  <label className="mb-1 block text-xs font-medium text-slate-500">Your cost</label>
                   <input
                     type="number"
                     min={0}
                     step={0.01}
-                    value={shippingCost}
-                    onChange={(e) => onShippingCostChange(e.target.value)}
+                    value={detailPanelCost}
+                    onChange={(e) => onDetailPanelCostChange(e.target.value)}
+                    placeholder="Enter your cost"
                     className={INPUT_FIELD_CLASS}
                   />
                 </div>
-              ) : null}
-              <div>
-                <label className="mb-1 block text-xs font-medium text-slate-500">
-                  Units (for total buy &amp; projected profit)
-                </label>
-                <input
-                  type="number"
-                  min={1}
-                  step={1}
-                  value={projectedMonthlyUnits}
-                  onChange={(e) => onProjectedMonthlyUnitsChange(e.target.value)}
-                  className={INPUT_FIELD_CLASS}
-                />
+                {sellerType === "FBM" ? (
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-500">Shipping cost (FBM)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.01}
+                      value={shippingCost}
+                      onChange={(e) => onShippingCostChange(e.target.value)}
+                      className={INPUT_FIELD_CLASS}
+                    />
+                  </div>
+                ) : null}
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-500">
+                    Units (for total buy &amp; projected profit)
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={projectedMonthlyUnits}
+                    onChange={(e) => onProjectedMonthlyUnitsChange(e.target.value)}
+                    className={INPUT_FIELD_CLASS}
+                  />
+                </div>
               </div>
-            </div>
 
-            <div className="grid grid-cols-2 gap-1.5">
-              <div className={`${HF_INNER_CARD} ring-1 ring-teal-500/10`}>
-                <p className={HF_KPI_LABEL}>Profit</p>
-                <p
-                  className={`mt-0.5 text-[1.35rem] font-extrabold leading-none tabular-nums tracking-tight ${profitPerformanceClass(detailEconomics.net ?? selectedProduct.netProfit)}`}
-                >
-                  {formatCurrency(detailEconomics.net ?? selectedProduct.netProfit)}
-                </p>
+              <div className="grid grid-cols-2 gap-1.5">
+                <div className={`${HF_INNER_CARD} ring-1 ring-teal-500/10`}>
+                  <p className={HF_KPI_LABEL}>Profit</p>
+                  <p
+                    className={`mt-0.5 text-[1.35rem] font-extrabold leading-none tabular-nums tracking-tight ${profitPerformanceClass(detailEconomics.net ?? selectedProduct.netProfit)}`}
+                  >
+                    {formatCurrency(detailEconomics.net ?? selectedProduct.netProfit)}
+                  </p>
+                </div>
+                <div className={`${HF_INNER_CARD} ring-1 ring-teal-500/10`}>
+                  <p className={HF_KPI_LABEL}>ROI</p>
+                  <p
+                    className={`mt-0.5 text-[1.35rem] font-extrabold leading-none tabular-nums tracking-tight ${roiPerformanceClass(detailEconomics.roi ?? selectedProduct.roiPercent)}`}
+                  >
+                    {formatPercent(detailEconomics.roi ?? selectedProduct.roiPercent)}
+                  </p>
+                </div>
+                <div className={`${HF_INNER_CARD} col-span-2 border-teal-500/15 ring-1 ring-teal-500/12`}>
+                  <p className={HF_KPI_LABEL}>Margin</p>
+                  <p
+                    className={`mt-0.5 text-[1.35rem] font-extrabold leading-none tabular-nums tracking-tight ${marginPerformanceClass(detailEconomics.marginPct)}`}
+                  >
+                    {formatPercent(detailEconomics.marginPct)}
+                  </p>
+                </div>
               </div>
-              <div className={`${HF_INNER_CARD} ring-1 ring-teal-500/10`}>
-                <p className={HF_KPI_LABEL}>ROI</p>
-                <p
-                  className={`mt-0.5 text-[1.35rem] font-extrabold leading-none tabular-nums tracking-tight ${roiPerformanceClass(detailEconomics.roi ?? selectedProduct.roiPercent)}`}
-                >
-                  {formatPercent(detailEconomics.roi ?? selectedProduct.roiPercent)}
-                </p>
-              </div>
-              <div className={`${HF_INNER_CARD} col-span-2 border-teal-500/15 ring-1 ring-teal-500/12`}>
-                <p className={HF_KPI_LABEL}>Margin</p>
-                <p
-                  className={`mt-0.5 text-[1.35rem] font-extrabold leading-none tabular-nums tracking-tight ${marginPerformanceClass(detailEconomics.marginPct)}`}
-                >
-                  {formatPercent(detailEconomics.marginPct)}
-                </p>
-              </div>
-            </div>
 
-            <div className="grid grid-cols-2 gap-1.5">
-              <div className={HF_INNER_CARD_STATIC}>
-                <p className={HF_KPI_LABEL}>Wholesale / stored cost</p>
-                <p className="mt-0.5 text-sm font-bold tabular-nums text-slate-100">
-                  {detailPanelCost.trim() !== "" && Number.isFinite(parseFloat(detailPanelCost))
-                    ? formatCurrency(parseFloat(detailPanelCost))
-                    : formatCurrency(selectedProduct.wholesalePrice)}
-                </p>
+              <div className="grid grid-cols-2 gap-1.5">
+                <div className={HF_INNER_CARD_STATIC}>
+                  <p className={HF_KPI_LABEL}>Wholesale / stored cost</p>
+                  <p className="mt-0.5 text-sm font-bold tabular-nums text-slate-100">
+                    {detailPanelCost.trim() !== "" && Number.isFinite(parseFloat(detailPanelCost))
+                      ? formatCurrency(parseFloat(detailPanelCost))
+                      : formatCurrency(selectedProduct.wholesalePrice)}
+                  </p>
+                </div>
+                <div className={HF_INNER_CARD_STATIC}>
+                  <p className={HF_KPI_LABEL}>Fees (ref / {selectedProduct.sellerType === "FBA" ? "FBA" : "FBM ship"})</p>
+                  <p className="mt-0.5 text-sm font-bold tabular-nums text-slate-100">{formatCurrency(selectedProduct.totalFees)}</p>
+                  <p className="mt-1 text-[10px] leading-relaxed text-slate-500">
+                    Ref {formatCurrency(selectedProduct.referralFee)}
+                    {selectedProduct.sellerType === "FBA"
+                      ? ` · FBA ${formatCurrency(selectedProduct.fbaFee)}`
+                      : ` · Ship ${formatCurrency(selectedProduct.shippingCost)}`}
+                  </p>
+                </div>
               </div>
-              <div className={HF_INNER_CARD_STATIC}>
-                <p className={HF_KPI_LABEL}>Fees (ref / {selectedProduct.sellerType === "FBA" ? "FBA" : "FBM ship"})</p>
-                <p className="mt-0.5 text-sm font-bold tabular-nums text-slate-100">{formatCurrency(selectedProduct.totalFees)}</p>
-                <p className="mt-1 text-[10px] leading-relaxed text-slate-500">
-                  Ref {formatCurrency(selectedProduct.referralFee)}
-                  {selectedProduct.sellerType === "FBA"
-                    ? ` · FBA ${formatCurrency(selectedProduct.fbaFee)}`
-                    : ` · Ship ${formatCurrency(selectedProduct.shippingCost)}`}
-                </p>
-              </div>
-            </div>
 
-            <div className="grid grid-cols-1 gap-1.5">
-              <div className={HF_INNER_CARD_STATIC}>
-                <p className={HF_KPI_LABEL}>Total buy cost ({projectedMonthlyUnits} units)</p>
-                <p className="mt-0.5 text-sm font-bold tabular-nums text-slate-100">
-                  {(() => {
-                    const qty = parsePositiveInput(projectedMonthlyUnits);
-                    const cost =
-                      detailPanelCost.trim() !== "" && Number.isFinite(parseFloat(detailPanelCost))
-                        ? parseFloat(detailPanelCost)
-                        : selectedProduct.wholesalePrice;
-                    return qty !== null ? formatCurrency(roundToTwo(cost * qty)) : "—";
-                  })()}
-                </p>
-              </div>
-              <div className={HF_INNER_CARD_STATIC}>
-                <p className={HF_KPI_LABEL}>Projected profit ({projectedMonthlyUnits} × net profit)</p>
-                <p className="mt-0.5 text-sm font-bold tabular-nums text-slate-100">
-                  {(() => {
-                    const qty = parsePositiveInput(projectedMonthlyUnits);
-                    const cost =
-                      detailPanelCost.trim() !== "" && Number.isFinite(parseFloat(detailPanelCost))
-                        ? parseFloat(detailPanelCost)
-                        : selectedProduct.wholesalePrice;
-                    const netP =
-                      selectedProduct.buyBoxPrice != null && selectedProduct.totalFees != null
-                        ? roundToTwo(selectedProduct.buyBoxPrice - cost - selectedProduct.totalFees)
-                        : selectedProduct.netProfit;
-                    return netP != null && qty !== null ? formatCurrency(roundToTwo(netP * qty)) : "—";
-                  })()}
-                </p>
+              <div className="grid grid-cols-1 gap-1.5">
+                <div className={HF_INNER_CARD_STATIC}>
+                  <p className={HF_KPI_LABEL}>Total buy cost ({projectedMonthlyUnits} units)</p>
+                  <p className="mt-0.5 text-sm font-bold tabular-nums text-slate-100">
+                    {(() => {
+                      const qty = parsePositiveInput(projectedMonthlyUnits);
+                      const cost =
+                        detailPanelCost.trim() !== "" && Number.isFinite(parseFloat(detailPanelCost))
+                          ? parseFloat(detailPanelCost)
+                          : selectedProduct.wholesalePrice;
+                      return qty !== null ? formatCurrency(roundToTwo(cost * qty)) : "—";
+                    })()}
+                  </p>
+                </div>
+                <div className={HF_INNER_CARD_STATIC}>
+                  <p className={HF_KPI_LABEL}>Projected profit ({projectedMonthlyUnits} × net profit)</p>
+                  <p className="mt-0.5 text-sm font-bold tabular-nums text-slate-100">
+                    {(() => {
+                      const qty = parsePositiveInput(projectedMonthlyUnits);
+                      const cost =
+                        detailPanelCost.trim() !== "" && Number.isFinite(parseFloat(detailPanelCost))
+                          ? parseFloat(detailPanelCost)
+                          : selectedProduct.wholesalePrice;
+                      const netP =
+                        selectedProduct.buyBoxPrice != null && selectedProduct.totalFees != null
+                          ? roundToTwo(selectedProduct.buyBoxPrice - cost - selectedProduct.totalFees)
+                          : selectedProduct.netProfit;
+                      return netP != null && qty !== null ? formatCurrency(roundToTwo(netP * qty)) : "—";
+                    })()}
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
+          </LockedFieldGroup>
         </IntelSection>
       </div>
 
       <IntelSection eyebrow="Competition">
-        <div className={HF_INNER_CARD_STATIC}>
-          <p className={HF_KPI_LABEL}>Amazon on listing</p>
-          {amazonOnListing === "yes" ? (
-            <p className="mt-0.5 text-sm font-bold text-rose-400">⚠️ YES</p>
-          ) : amazonOnListing === "no" ? (
-            <p className="mt-0.5 text-sm font-bold text-emerald-400">✅ NO</p>
-          ) : (
-            <p className="mt-0.5 text-sm text-slate-500">— Unable to confirm</p>
-          )}
-        </div>
-        {selectedProduct.amazonSalesVolumeLabel ? (
-          <div className="rounded-lg border border-slate-600 bg-emerald-900/30 px-3 py-2">
-            <p className="text-xs text-slate-500">Product sells (from Amazon)</p>
-            <p className="font-semibold text-slate-100">{selectedProduct.amazonSalesVolumeLabel}</p>
-            <p className="mt-0.5 text-[10px] text-slate-400">Extracted from product page when available.</p>
+        <LockedFieldGroup isLocked={isLocked}>
+          <div className={HF_INNER_CARD_STATIC}>
+            <p className={HF_KPI_LABEL}>Amazon on listing</p>
+            {amazonOnListing === "yes" ? (
+              <p className="mt-0.5 text-sm font-bold text-rose-400">⚠️ YES</p>
+            ) : amazonOnListing === "no" ? (
+              <p className="mt-0.5 text-sm font-bold text-emerald-400">✅ NO</p>
+            ) : (
+              <p className="mt-0.5 text-sm text-slate-500">— Unable to confirm</p>
+            )}
           </div>
-        ) : null}
-        {selectedProduct.offerCount != null || selectedProduct.fbaOfferCount != null || selectedProduct.fbmOfferCount != null ? (
-          <CompetitionIntelBlock product={selectedProduct} sellersLine={sellersLine} />
-        ) : (
-          <p className="text-[11px] text-slate-500">Structured offer breakdown will appear once Amazon pricing data loads.</p>
-        )}
+          {selectedProduct.amazonSalesVolumeLabel ? (
+            <div className="rounded-lg border border-slate-600 bg-emerald-900/30 px-3 py-2">
+              <p className="text-xs text-slate-500">Product sells (from Amazon)</p>
+              <p className="font-semibold text-slate-100">{selectedProduct.amazonSalesVolumeLabel}</p>
+              <p className="mt-0.5 text-[10px] text-slate-400">Extracted from product page when available.</p>
+            </div>
+          ) : null}
+          {selectedProduct.offerCount != null || selectedProduct.fbaOfferCount != null || selectedProduct.fbmOfferCount != null ? (
+            <CompetitionIntelBlock product={selectedProduct} sellersLine={sellersLine} />
+          ) : (
+            <p className="text-[11px] text-slate-500">Structured offer breakdown will appear once Amazon pricing data loads.</p>
+          )}
+        </LockedFieldGroup>
       </IntelSection>
 
       <IntelSection eyebrow="Restrictions & compliance">
-        {approvalRequiredEffective(selectedProduct) ||
-        selectedProduct.listingRestricted ||
-        selectedProduct.restrictedBrand ? (
-          <div className={HF_INNER_CARD_STATIC}>
-            <p className={HF_KPI_LABEL}>Ungating economics</p>
-            <ul className="mt-1.5 space-y-1 text-[12px]">
-              {selectedProduct.worthUngating != null && (
-                <li className="flex justify-between gap-2 leading-snug">
-                  <span className="text-slate-500">Worth ungating</span>
-                  <span className={selectedProduct.worthUngating ? "font-semibold text-emerald-300" : "font-medium text-slate-300"}>
-                    {selectedProduct.worthUngating ? "Yes" : "No"}
-                  </span>
-                </li>
-              )}
-              {selectedProduct.ungatingCost10Units != null && (
-                <li className="flex justify-between gap-2 leading-snug">
-                  <span className="text-slate-500">Cost (10 units)</span>
-                  <span className="font-semibold tabular-nums text-slate-100">{formatCurrency(selectedProduct.ungatingCost10Units)}</span>
-                </li>
-              )}
-              {selectedProduct.breakEvenUnits != null && (
-                <li className="flex justify-between gap-2 leading-snug">
-                  <span className="text-slate-500">Break-even units</span>
-                  <span className="font-semibold tabular-nums text-slate-100">{formatNumber(selectedProduct.breakEvenUnits)}</span>
-                </li>
-              )}
-              {selectedProduct.projectedMonthlyProfit != null && (
-                <li className="flex justify-between gap-2 leading-snug">
-                  <span className="text-slate-500">Projected monthly profit</span>
-                  <span className="font-semibold tabular-nums text-slate-100">{formatCurrency(selectedProduct.projectedMonthlyProfit)}</span>
-                </li>
-              )}
-            </ul>
-          </div>
-        ) : null}
-
-        {(() => {
-          const codes = selectedProduct.restrictionReasonCodes;
-          const hasHazmat = codes.some((c) => /HAZMAT|HAZARD|DANGEROUS/i.test(c));
-          return (
-            <div className="grid grid-cols-1 gap-1.5">
-              <div className={HF_INNER_CARD_STATIC}>
-                <p className={HF_KPI_LABEL}>IP / complaint risk</p>
-                <p className="mt-0.5 text-[15px] font-bold text-slate-50">{selectedProduct.ipComplaintRisk ? "Yes" : "No"}</p>
-                {selectedProduct.ipComplaintRisk === true ? <RestrictionsExplain kind="ip" /> : null}
-              </div>
-              <div className={HF_INNER_CARD_STATIC}>
-                <p className={HF_KPI_LABEL}>Meltable</p>
-                <p className="mt-0.5 text-[15px] font-bold text-slate-50">{selectedProduct.meltableRisk ? "Yes" : "No"}</p>
-                {selectedProduct.meltableRisk === true ? <RestrictionsExplain kind="meltable" /> : null}
-              </div>
-              <div className={HF_INNER_CARD_STATIC}>
-                <p className={HF_KPI_LABEL}>Hazmat</p>
-                <p
-                  className={`mt-0.5 text-[15px] font-bold ${
-                    selectedProduct.isHazmat === true ? "text-rose-300" : selectedProduct.isHazmat === false ? "text-slate-50" : "text-slate-500"
-                  }`}
-                >
-                  {selectedProduct.isHazmat === true ? "Yes" : selectedProduct.isHazmat === false ? "No" : hasHazmat ? "Yes" : "—"}
-                </p>
-                {selectedProduct.isHazmat === true || hasHazmat ? <RestrictionsExplain kind="hazmat" /> : null}
-                {selectedProduct.isHazmat === null && !hasHazmat ? (
-                  <p className="mt-1 text-[10px] leading-relaxed text-slate-500">Load product details to check</p>
-                ) : null}
-              </div>
-              <div className="rounded-[11px] border border-amber-400/22 bg-amber-950/25 px-2.5 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-                <p className={HF_KPI_LABEL}>Private label (possible)</p>
-                <p className="mt-0.5 text-[15px] font-bold text-slate-50">{selectedProduct.privateLabelRisk ? "Yes" : "No"}</p>
-              </div>
+        <LockedFieldGroup isLocked={isLocked}>
+          {approvalRequiredEffective(selectedProduct) ||
+          selectedProduct.listingRestricted ||
+          selectedProduct.restrictedBrand ? (
+            <div className={HF_INNER_CARD_STATIC}>
+              <p className={HF_KPI_LABEL}>Ungating economics</p>
+              <ul className="mt-1.5 space-y-1 text-[12px]">
+                {selectedProduct.worthUngating != null && (
+                  <li className="flex justify-between gap-2 leading-snug">
+                    <span className="text-slate-500">Worth ungating</span>
+                    <span className={selectedProduct.worthUngating ? "font-semibold text-emerald-300" : "font-medium text-slate-300"}>
+                      {selectedProduct.worthUngating ? "Yes" : "No"}
+                    </span>
+                  </li>
+                )}
+                {selectedProduct.ungatingCost10Units != null && (
+                  <li className="flex justify-between gap-2 leading-snug">
+                    <span className="text-slate-500">Cost (10 units)</span>
+                    <span className="font-semibold tabular-nums text-slate-100">{formatCurrency(selectedProduct.ungatingCost10Units)}</span>
+                  </li>
+                )}
+                {selectedProduct.breakEvenUnits != null && (
+                  <li className="flex justify-between gap-2 leading-snug">
+                    <span className="text-slate-500">Break-even units</span>
+                    <span className="font-semibold tabular-nums text-slate-100">{formatNumber(selectedProduct.breakEvenUnits)}</span>
+                  </li>
+                )}
+                {selectedProduct.projectedMonthlyProfit != null && (
+                  <li className="flex justify-between gap-2 leading-snug">
+                    <span className="text-slate-500">Projected monthly profit</span>
+                    <span className="font-semibold tabular-nums text-slate-100">{formatCurrency(selectedProduct.projectedMonthlyProfit)}</span>
+                  </li>
+                )}
+              </ul>
             </div>
-          );
-        })()}
+          ) : null}
+
+          {(() => {
+            const codes = selectedProduct.restrictionReasonCodes;
+            const hasHazmat = codes.some((c) => /HAZMAT|HAZARD|DANGEROUS/i.test(c));
+            return (
+              <div className="grid grid-cols-1 gap-1.5">
+                <div className={HF_INNER_CARD_STATIC}>
+                  <p className={HF_KPI_LABEL}>IP / complaint risk</p>
+                  <p className="mt-0.5 text-[15px] font-bold text-slate-50">{selectedProduct.ipComplaintRisk ? "Yes" : "No"}</p>
+                  {selectedProduct.ipComplaintRisk === true ? <RestrictionsExplain kind="ip" /> : null}
+                </div>
+                <div className={HF_INNER_CARD_STATIC}>
+                  <p className={HF_KPI_LABEL}>Meltable</p>
+                  <p className="mt-0.5 text-[15px] font-bold text-slate-50">{selectedProduct.meltableRisk ? "Yes" : "No"}</p>
+                  {selectedProduct.meltableRisk === true ? <RestrictionsExplain kind="meltable" /> : null}
+                </div>
+                <div className={HF_INNER_CARD_STATIC}>
+                  <p className={HF_KPI_LABEL}>Hazmat</p>
+                  <p
+                    className={`mt-0.5 text-[15px] font-bold ${
+                      selectedProduct.isHazmat === true ? "text-rose-300" : selectedProduct.isHazmat === false ? "text-slate-50" : "text-slate-500"
+                    }`}
+                  >
+                    {selectedProduct.isHazmat === true ? "Yes" : selectedProduct.isHazmat === false ? "No" : hasHazmat ? "Yes" : "—"}
+                  </p>
+                  {selectedProduct.isHazmat === true || hasHazmat ? <RestrictionsExplain kind="hazmat" /> : null}
+                  {selectedProduct.isHazmat === null && !hasHazmat ? (
+                    <p className="mt-1 text-[10px] leading-relaxed text-slate-500">Load product details to check</p>
+                  ) : null}
+                </div>
+                <div className="rounded-[11px] border border-amber-400/22 bg-amber-950/25 px-2.5 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+                  <p className={HF_KPI_LABEL}>Private label (possible)</p>
+                  <p className="mt-0.5 text-[15px] font-bold text-slate-50">{selectedProduct.privateLabelRisk ? "Yes" : "No"}</p>
+                </div>
+              </div>
+            );
+          })()}
+        </LockedFieldGroup>
       </IntelSection>
 
       <IntelSection eyebrow="Variations">
