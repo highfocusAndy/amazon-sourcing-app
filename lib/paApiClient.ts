@@ -8,9 +8,10 @@
  * When not configured or if the request fails, callers fall back to the SP-API catalog rank.
  */
 
-const PA_API_GET_ITEMS_TARGET = "com.amazon.paapi5.v1.ProductAdvertisingAPIv1.GetItems";
-const PA_API_SEARCH_TARGET = "com.amazon.paapi5.v1.ProductAdvertisingAPIv1.SearchItems";
+const PA_API_PATH_GET_ITEMS = "/paapi5/getitems";
+const PA_API_PATH_SEARCH_ITEMS = "/paapi5/searchitems";
 const LWA_TOKEN_ENDPOINT = "https://api.amazon.com/auth/o2/token";
+const LWA_SCOPE_PA_API = "paapi";
 
 /** In-process token cache — avoids fetching a new token on every PA-API call (tokens last 1 hour). */
 let _tokenCache: { token: string; expiresAt: number } | null = null;
@@ -157,6 +158,7 @@ async function fetchLwaAccessToken(clientId: string, clientSecret: string): Prom
     grant_type: "client_credentials",
     client_id: clientId,
     client_secret: clientSecret,
+    scope: LWA_SCOPE_PA_API,
   });
   const res = await fetch(LWA_TOKEN_ENDPOINT, {
     method: "POST",
@@ -220,7 +222,6 @@ function getPaApiConfig(): {
   secretKey: string;
   partnerTag: string;
   host: string;
-  region: string;
 } {
   const accessKey = process.env.PA_API_ACCESS_KEY?.trim();
   const secretKey = process.env.PA_API_SECRET_KEY?.trim();
@@ -229,11 +230,8 @@ function getPaApiConfig(): {
     throw new Error("PA-API credentials missing: set PA_API_ACCESS_KEY, PA_API_SECRET_KEY, PA_API_PARTNER_TAG");
   }
   const marketplaceId = (process.env.MARKETPLACE_ID ?? process.env.SP_API_MARKETPLACE_ID ?? "ATVPDKIKX0DER").trim().toUpperCase();
-  const { host, region } = MARKETPLACE_TO_PA_HOST_REGION[marketplaceId] ?? {
-    host: "webservices.amazon.com",
-    region: "us-east-1",
-  };
-  return { accessKey, secretKey, partnerTag, host, region };
+  const { host } = MARKETPLACE_TO_PA_HOST_REGION[marketplaceId] ?? { host: "webservices.amazon.com" };
+  return { accessKey, secretKey, partnerTag, host };
 }
 
 function parseGetItemsResponse(json: unknown): PaApiMainBsrResult | null {
@@ -323,7 +321,7 @@ function parseCatalogItems(json: unknown): PaApiCatalogItem[] {
 }
 
 async function paApiPost(
-  target: string,
+  path: string,
   body: Record<string, unknown>,
 ): Promise<PaApiCallResult<unknown>> {
   if (!isPaApiConfigured()) {
@@ -345,13 +343,11 @@ async function paApiPost(
   }
 
   const bodyStr = JSON.stringify({ ...body, PartnerTag: partnerTag, PartnerType: "Associates" });
-  const response = await fetch(`https://${host}/`, {
+  const response = await fetch(`https://${host}${path}`, {
     method: "POST",
     headers: {
       "authorization": `Bearer ${accessToken}`,
       "content-type": "application/json; charset=utf-8",
-      "content-encoding": "amz-1.0",
-      "x-amz-target": target,
     },
     body: bodyStr,
     cache: "no-store",
@@ -393,11 +389,9 @@ export async function fetchMainBsr(asin: string): Promise<PaApiMainBsrResult | n
   if (!isPaApiConfigured()) return null;
   const normalizedAsin = asin.trim().toUpperCase();
   if (!normalizedAsin || normalizedAsin.length !== 10) return null;
-  const { host } = getPaApiConfig();
-  const json = await paApiPost(PA_API_GET_ITEMS_TARGET, {
+  const json = await paApiPost(PA_API_PATH_GET_ITEMS, {
     ItemIds: [normalizedAsin],
     ItemIdType: "ASIN",
-    Marketplace: host === "webservices.amazon.com" ? "www.amazon.com" : undefined,
     Resources: ["BrowseNodeInfo.WebsiteSalesRank", "BrowseNodeInfo.BrowseNodes.SalesRank", "DetailPageURL"],
   });
   if (!json.ok) return null;
@@ -422,11 +416,9 @@ export async function fetchCatalogItemsFromPaApi(
   if (normalizedAsins.length === 0) {
     return { ok: false, error: "No valid ASINs provided." };
   }
-  const { host } = getPaApiConfig();
-  const json = await paApiPost(PA_API_GET_ITEMS_TARGET, {
+  const json = await paApiPost(PA_API_PATH_GET_ITEMS, {
     ItemIds: normalizedAsins,
     ItemIdType: "ASIN",
-    Marketplace: host === "webservices.amazon.com" ? "www.amazon.com" : undefined,
     Resources: CATALOG_ITEM_RESOURCES,
   });
   if (!json.ok) return json;
@@ -446,12 +438,10 @@ export async function searchCatalogByKeywordPaApi(
   if (!isPaApiConfigured()) {
     return { ok: false, error: "PA-API is not configured." };
   }
-  const { host } = getPaApiConfig();
-  const json = await paApiPost(PA_API_SEARCH_TARGET, {
+  const json = await paApiPost(PA_API_PATH_SEARCH_ITEMS, {
     Keywords: keyword.trim().slice(0, 250),
     SearchIndex: searchIndex,
     ItemCount: Math.min(10, Math.max(1, maxResults)),
-    Marketplace: host === "webservices.amazon.com" ? "www.amazon.com" : undefined,
     Resources: CATALOG_ITEM_RESOURCES,
   });
   if (!json.ok) return json;
