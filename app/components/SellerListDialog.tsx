@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { type MouseEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { amazonSellerStorefrontUrl } from "@/lib/marketplaces";
@@ -96,13 +95,15 @@ function defaultSellerRow(
           {s.feedbackPercent != null && <span title="Positive feedback %">{s.feedbackPercent}% positive</span>}
           {s.feedbackCount == null && s.feedbackPercent == null && <span>—</span>}
         </span>
-        <Link
-          href={`/seller/${s.sellerId}`}
+        <a
+          href={amazonSellerStorefrontUrl(marketplaceDomain, s.sellerId)}
+          target="_blank"
+          rel="noopener noreferrer"
           className="shrink-0 text-[10px] font-medium text-teal-400/90 hover:text-teal-300"
           onClick={(ev) => ev.stopPropagation()}
         >
           All listings ↗
-        </Link>
+        </a>
       </div>
     </div>
   );
