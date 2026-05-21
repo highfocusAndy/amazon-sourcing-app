@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { ensurePromoRowsFromEnv } from "@/lib/billing/ensureOwnerPromoCode";
 import { prisma } from "@/lib/db";
 import { normalizePromoCodeInput } from "@/lib/promoCodeNormalize";
+import { rateLimitAllow } from "@/lib/apiRateLimit";
 
 export const runtime = "nodejs";
 
@@ -25,6 +26,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Promo code is required." }, { status: 400 });
   }
   const userId = session.user.id;
+
+  // 10 attempts per minute per user — prevents brute-force enumeration of codes
+  if (!rateLimitAllow(`promo_redeem:${userId}`, 10, 60_000)) {
+    return NextResponse.json({ error: "Too many attempts. Wait a minute and try again." }, { status: 429 });
+  }
 
   try {
     const result = await prisma.$transaction(async (tx) => {

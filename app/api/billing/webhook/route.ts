@@ -130,6 +130,21 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         });
         break;
       }
+      case "invoice.payment_failed": {
+        const invoice = event.data.object as Stripe.Invoice;
+        const subId =
+          typeof invoice.subscription === "string"
+            ? invoice.subscription
+            : (invoice.subscription as Stripe.Subscription | null)?.id ?? null;
+        if (subId) {
+          // Subscription status transitions to past_due via customer.subscription.updated,
+          // but we retrieve and sync here immediately so there's no window of false access.
+          const sub = await stripe.subscriptions.retrieve(subId);
+          await syncSubscriptionToUser(sub);
+        }
+        console.warn("[stripe] invoice.payment_failed — subscription:", subId);
+        break;
+      }
       default:
         break;
     }

@@ -11,7 +11,7 @@ const DEFAULT_PROJECTED_MONTHLY_UNITS = 30;
 export interface ServerEnv {
   clientId: string;
   clientSecret: string;
-  refreshToken: string;
+  refreshToken: string; // empty string in OAuth-only deployments
   marketplaceId: string;
   spApiRegion: string;
   spApiHost: string;
@@ -58,7 +58,7 @@ export function getServerEnv(): ServerEnv {
   return {
     clientId: requiredEnv("SP_API_CLIENT_ID"),
     clientSecret: requiredEnv("SP_API_CLIENT_SECRET"),
-    refreshToken: requiredEnv("SP_API_REFRESH_TOKEN"),
+    refreshToken: process.env.SP_API_REFRESH_TOKEN?.trim() || "",
     marketplaceId: process.env.MARKETPLACE_ID?.trim() || process.env.SP_API_MARKETPLACE_ID?.trim() || DEFAULT_MARKETPLACE,
     spApiRegion: process.env.SP_API_REGION?.trim() || DEFAULT_REGION,
     spApiHost: process.env.SP_API_HOST?.trim() || DEFAULT_HOST,

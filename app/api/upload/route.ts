@@ -19,7 +19,7 @@ import type { ProductInput } from "@/lib/types";
 
 export const runtime = "nodejs";
 
-const MAX_BATCH_SIZE = 2000;
+const MAX_BATCH_SIZE = 200;
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {

@@ -96,6 +96,11 @@ export async function GET(): Promise<NextResponse> {
   const searchesMtd = sumMetric("catalog_search", "keyword_search");
   const apiCallsMtd = usageThisMonth.reduce((s, u) => s + u.used, 0);
 
+  const usageByMetric: Record<string, number> = {};
+  for (const row of usageThisMonth) {
+    usageByMetric[row.metric] = (usageByMetric[row.metric] ?? 0) + row.used;
+  }
+
   let starterPaying = 0;
   let proPaying = 0;
   for (const row of payersByPlan) {
@@ -119,6 +124,7 @@ export async function GET(): Promise<NextResponse> {
       connectedAmazonAccounts: connectedAmazon,
       searchesMonthToDate: searchesMtd,
       apiRequestsMonthToDate: apiCallsMtd,
+      usageByMetric,
       estimatedMonthlyRevenueUsd: estimatedMonthlyRevenue,
       estimatesNote:
         "MRR assumes ADMIN_ESTIMATE_STARTER_USD / ADMIN_ESTIMATE_PRO_USD per paying seat (set in env).",

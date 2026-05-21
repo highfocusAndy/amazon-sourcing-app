@@ -21,9 +21,9 @@ export const AMAZON_OAUTH_MARKETPLACE_COOKIE = "amazon_sp_oauth_mp";
 
 function isOAuthDraftEnabled(): boolean {
   const raw = process.env.SP_API_OAUTH_DRAFT?.trim();
-  // Default to Draft (beta consent) when the env var isn't provided.
-  // Your Amazon app is currently shown as Draft in Developer Central, so this prevents MD1000.
-  if (!raw) return true;
+  // Default to production (live) mode. Set SP_API_OAUTH_DRAFT=true only while your
+  // Amazon Developer Central app is still in Draft status, to avoid MD1000 errors.
+  if (!raw) return false;
   const v = raw.toLowerCase();
   return v === "1" || v === "true";
 }

@@ -37,14 +37,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const user = await prisma.user.findUnique({ where: { email }, select: { id: true } });
 
   if (!user) {
-    return NextResponse.json(
-      {
-        ok: true,
-        emailSent: false,
-        message: "No account exists for this email.",
-      },
-      { status: 200 },
-    );
+    return NextResponse.json({ ok: true, emailSent: false, message: SENT_MESSAGE }, { status: 200 });
   }
 
   const rawToken = createPasswordResetSecret();

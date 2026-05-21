@@ -276,11 +276,13 @@ export function AdminOverviewClient() {
   // API usage breakdown data from overview metrics for a bar chart
   const usageBreakdown = m
     ? [
-        { metric: "analyze", label: "Analysis", value: 0 },
-        { metric: "analyze_offers", label: "Offers", value: 0 },
-        { metric: "catalog_search", label: "Catalog", value: 0 },
-        { metric: "keyword_search", label: "Keywords", value: 0 },
-        { metric: "restrictions", label: "Restrictions", value: 0 },
+        { metric: "analyze", label: "Analysis", value: m.usageByMetric?.analyze ?? 0 },
+        { metric: "analyze_offers", label: "Offers", value: m.usageByMetric?.analyze_offers ?? 0 },
+        { metric: "catalog_search", label: "Catalog", value: m.usageByMetric?.catalog_search ?? 0 },
+        { metric: "keyword_search", label: "Keywords", value: m.usageByMetric?.keyword_search ?? 0 },
+        { metric: "restrictions", label: "Restrictions", value: m.usageByMetric?.restrictions ?? 0 },
+        { metric: "openai_insight", label: "AI Insight", value: m.usageByMetric?.openai_insight ?? 0 },
+        { metric: "openai_chat", label: "AI Chat", value: m.usageByMetric?.openai_chat ?? 0 },
       ]
     : [];
 
@@ -474,8 +476,8 @@ export function AdminOverviewClient() {
                       { key: "openai_insight", label: "AI Insight", color: METRIC_COLORS.openai_insight },
                       { key: "openai_chat", label: "AI Chat", color: METRIC_COLORS.openai_chat },
                     ].map(({ key, label, color }) => {
-                      const v = 0; // individual breakdown not in overview; show totals note
-                      void v; void key;
+                      const entry = usageBreakdown.find((u) => u.metric === key);
+                      const v = entry?.value ?? 0;
                       return (
                         <div
                           key={key}
@@ -483,7 +485,7 @@ export function AdminOverviewClient() {
                         >
                           <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: color }} />
                           <span className="flex-1 text-[13px] text-slate-300">{label}</span>
-                          <span className="font-mono text-[12px] text-slate-500">—</span>
+                          <span className="font-mono text-[12px] text-slate-400">{v.toLocaleString()}</span>
                         </div>
                       );
                     })

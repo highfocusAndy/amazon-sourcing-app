@@ -1,16 +1,18 @@
 "use client";
 
 import { useState } from "react";
+import { signOut } from "next-auth/react";
 import { ChangePasswordForm } from "./ChangePasswordForm";
 import { PasskeysSection } from "./PasskeysSection";
 import { ManagePasskeySection } from "./ManagePasskeySection";
 
-export type AccountSection = "change-password" | "add-passkey" | "change-passkey";
+export type AccountSection = "change-password" | "add-passkey" | "change-passkey" | "delete-account";
 
 const MENU_ITEMS: { id: AccountSection; label: string; icon: string }[] = [
   { id: "change-password", label: "Change password", icon: "🔑" },
   { id: "add-passkey", label: "Add passkey", icon: "🔐" },
   { id: "change-passkey", label: "Manage passkeys", icon: "🔄" },
+  { id: "delete-account", label: "Delete account", icon: "🗑️" },
 ];
 
 export function AccountSettingsPanels() {
@@ -79,8 +81,70 @@ export function AccountSettingsPanels() {
               <ManagePasskeySection className="mt-4" />
             </div>
           )}
+
+          {section === "delete-account" && (
+            <DeleteAccountPanel />
+          )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function DeleteAccountPanel() {
+  const [confirmed, setConfirmed] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleDelete() {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/user/delete", { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError((data as { error?: string }).error ?? "Failed to delete account.");
+        return;
+      }
+      await signOut({ callbackUrl: "/" });
+    } catch {
+      setError("Network error. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="rounded-2xl border border-rose-200 bg-white p-6 shadow-lg shadow-slate-200/50">
+      <h2 className="text-lg font-semibold text-rose-700">Delete account</h2>
+      <p className="mt-1 text-sm text-slate-600">
+        Permanently deletes your account, all saved data, and cancels any active subscription.
+        This cannot be undone.
+      </p>
+      <div className="mt-5 rounded-lg border border-rose-100 bg-rose-50 p-4">
+        <label className="flex items-start gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={confirmed}
+            onChange={(e) => setConfirmed(e.target.checked)}
+            className="mt-0.5 accent-rose-600"
+          />
+          <span className="text-sm text-rose-800">
+            I understand this is permanent and cannot be reversed.
+          </span>
+        </label>
+      </div>
+      {error && (
+        <p className="mt-3 text-sm text-rose-600">{error}</p>
+      )}
+      <button
+        type="button"
+        disabled={!confirmed || loading}
+        onClick={handleDelete}
+        className="mt-4 rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-700 disabled:opacity-40 disabled:cursor-not-allowed"
+      >
+        {loading ? "Deleting…" : "Delete my account"}
+      </button>
     </div>
   );
 }
