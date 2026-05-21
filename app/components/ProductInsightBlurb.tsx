@@ -2,17 +2,11 @@
 
 import Link from "next/link";
 import type { ProductAnalysis } from "@/lib/types";
-import {
-  buildProductInsightMessage,
-  showConnectAmazonCta,
-  showSignInCta,
-} from "@/lib/productInsight";
+import { buildProductInsightMessage, showSignInCta } from "@/lib/productInsight";
 
 type Props = {
   product: ProductAnalysis;
   sessionSignedIn: boolean;
-  amazonConnected: boolean;
-  onConnectAmazon: () => void;
   /** Server has OPENAI_API_KEY — parent fetches LLM insight. */
   openaiConfigured?: boolean | null;
   llmInsight?: string | null;
@@ -23,16 +17,13 @@ type Props = {
 export function ProductInsightBlurb({
   product,
   sessionSignedIn,
-  amazonConnected,
-  onConnectAmazon,
   openaiConfigured,
   llmInsight,
   llmLoading,
   llmError,
 }: Props) {
-  const fallbackText = buildProductInsightMessage(product, { sessionSignedIn, amazonConnected });
-  const signIn = showSignInCta(product, { sessionSignedIn, amazonConnected });
-  const connect = showConnectAmazonCta(product, { sessionSignedIn, amazonConnected });
+  const fallbackText = buildProductInsightMessage(product, { sessionSignedIn, amazonConnected: true });
+  const signIn = showSignInCta(product, { sessionSignedIn, amazonConnected: true });
 
   const showLlm = Boolean(openaiConfigured);
   let mainText: string;
@@ -67,15 +58,6 @@ export function ProductInsightBlurb({
         >
           Sign in
         </Link>
-      ) : null}
-      {connect ? (
-        <button
-          type="button"
-          onClick={onConnectAmazon}
-          className="mt-2 inline-flex items-center rounded-lg bg-gradient-to-r from-teal-500 to-cyan-600 px-3 py-1.5 text-xs font-semibold text-white shadow-md shadow-teal-500/20 hover:from-teal-400 hover:to-cyan-500"
-        >
-          Connect Amazon seller account
-        </button>
       ) : null}
     </div>
   );

@@ -41,6 +41,7 @@ type OverviewResponse = {
     keepaConfigured: boolean;
     paApiConfigured: boolean;
     paApiConfigurationIssue?: string | null;
+    paApiCatalogEnabled: boolean;
     uptimeSeconds: number;
   };
 };
@@ -549,7 +550,17 @@ export function AdminOverviewClient() {
                   <HealthRow label="App server" tier="operational" detail={h?.uptimeSeconds !== undefined ? `Up ${formatUptime(h.uptimeSeconds)}` : "Running"} />
                   <HealthRow label="Database" tier={h?.database === "ok" ? "operational" : "attention"} />
                   <HealthRow label="SP-API configuration" tier={h?.spApiConfigured ? "operational" : "attention"} />
-                  <HealthRow label="PA-API (Product Advertising)" tier={h?.paApiConfigured ? "operational" : h?.paApiConfigurationIssue ? "attention" : "idle"} detail={h?.paApiConfigured ? "Main-category BSR · Affiliate URLs" : h?.paApiConfigurationIssue ?? "Set PA_API_ACCESS_KEY / SECRET_KEY / PARTNER_TAG"} />
+                  <HealthRow
+                    label="PA-API (Product Advertising)"
+                    tier={h?.paApiCatalogEnabled ? (h?.paApiConfigured ? "operational" : "attention") : "idle"}
+                    detail={
+                      h?.paApiCatalogEnabled
+                        ? h?.paApiConfigured
+                          ? "Catalog browse · Affiliate URLs"
+                          : h?.paApiConfigurationIssue ?? "Credentials configured but not eligible yet"
+                        : "Catalog browse uses SP-API — enable when Associates eligible"
+                    }
+                  />
                   <HealthRow label="OpenAI vision (image scans)" tier={h?.imageSearchEnabled ? "operational" : "idle"} />
                   <HealthRow label="Keepa API token" tier={h?.keepaConfigured ? "operational" : "idle"} />
                 </div>

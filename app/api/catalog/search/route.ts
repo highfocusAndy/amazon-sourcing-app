@@ -1,14 +1,16 @@
 /**
  * GET /api/catalog/search
- * Catalog browsing via PA-API exclusively.
- * PA-API is the only source for category browsing / search / best sellers.
- * If PA-API is unavailable, returns a clear "Catalog temporarily unavailable" error.
+ * Catalog browsing via PA-API when ff:pa_api_catalog is enabled, otherwise SP-API.
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { userCatalogSearchLimit } from "@/lib/apiRateLimit";
+import {
+  getSpApiClientForUserOrGlobal,
+  SP_API_UNAVAILABLE_USER_MESSAGE,
+} from "@/lib/amazonAccount";
 import { requireAppAccess } from "@/lib/billing/requireAppAccess";
-import { consumeMonthlyUsage } from "@/lib/usageQuota";
+import { isPaApiCatalogEnabled } from "@/lib/featureFlags";
 import {
   getPaApiConfigurationIssue,
   isPaApiConfigured,
@@ -18,6 +20,7 @@ import {
   type PaApiCatalogItem,
 } from "@/lib/paApiClient";
 import type { CatalogItem } from "@/lib/spApiClient";
+import { consumeMonthlyUsage } from "@/lib/usageQuota";
 
 const CATALOG_UNAVAILABLE = "Catalog temporarily unavailable. Please try again shortly.";
 
@@ -40,6 +43,69 @@ function paApiItemsToCatalogItems(items: PaApiCatalogItem[]): CatalogItem[] {
     rank: p.salesRank,
     imageUrl: p.imageUrl,
   }));
+}
+
+async function searchCatalogViaSpApi(
+  userId: string,
+  q: string,
+  size: number,
+  pageToken: string | null,
+): Promise<
+  | { ok: true; items: CatalogItem[]; nextPageToken: string | null }
+  | { ok: false; error: string; status: number }
+> {
+  const client = await getSpApiClientForUserOrGlobal(userId);
+  if (!client) {
+    return {
+      ok: false,
+      error: SP_API_UNAVAILABLE_USER_MESSAGE,
+      status: 503,
+    };
+  }
+
+  if (isAsinQuery(q)) {
+    const item = await client.fetchCatalogItem(q.toUpperCase());
+    return { ok: true, items: item ? [item] : [], nextPageToken: null };
+  }
+
+  const { items, nextPageToken } = await client.searchCatalogByKeywordPage(q, pageToken, size);
+  return { ok: true, items, nextPageToken };
+}
+
+async function searchCatalogViaPaApi(
+  q: string,
+  size: number,
+  category: string | null,
+  subcategory: string | null,
+  keywordParam: string | null,
+): Promise<
+  | { ok: true; items: CatalogItem[]; nextPageToken: string | null }
+  | { ok: false; error: string; status: number }
+> {
+  if (!isPaApiConfigured()) {
+    const issue = getPaApiConfigurationIssue();
+    return { ok: false, error: issue ?? CATALOG_UNAVAILABLE, status: 503 };
+  }
+
+  if (isAsinQuery(q)) {
+    const result = await fetchCatalogItemsFromPaApi([q]);
+    if (!result.ok) {
+      return { ok: false, error: result.error || CATALOG_UNAVAILABLE, status: 503 };
+    }
+    return { ok: true, items: paApiItemsToCatalogItems(result.data), nextPageToken: null };
+  }
+
+  const { keywords, searchIndex } = resolvePaApiSearchParams({
+    category,
+    subcategory,
+    keyword: keywordParam,
+    fallbackQuery: q,
+  });
+  const result = await searchCatalogByKeywordPaApi(keywords, size, searchIndex);
+  if (!result.ok) {
+    return { ok: false, error: result.error || CATALOG_UNAVAILABLE, status: 503 };
+  }
+  return { ok: true, items: paApiItemsToCatalogItems(result.data.items), nextPageToken: null };
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
@@ -88,41 +154,22 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const requested = rawPageSize ? Math.min(500, Math.max(1, parseInt(rawPageSize, 10))) : 30;
   const size = Number.isFinite(requested) ? Math.min(requested, maxCatalogPageSize()) : Math.min(30, maxCatalogPageSize());
 
-  // PA-API is the only source for catalog browsing.
-  if (!isPaApiConfigured()) {
-    const issue = getPaApiConfigurationIssue();
-    return NextResponse.json(
-      { error: issue ?? CATALOG_UNAVAILABLE, items: [], nextPageToken: null },
-      { status: 503 },
-    );
-  }
+  const pageToken = searchParams.get("pageToken")?.trim() || null;
 
   try {
-    if (isAsinQuery(q)) {
-      const result = await fetchCatalogItemsFromPaApi([q]);
-      if (!result.ok) {
-        return NextResponse.json(
-          { error: result.error || CATALOG_UNAVAILABLE, items: [], nextPageToken: null },
-          { status: 503 },
-        );
-      }
-      return NextResponse.json({ items: paApiItemsToCatalogItems(result.data), nextPageToken: null });
-    }
+    const usePaApi = await isPaApiCatalogEnabled();
+    const result = usePaApi
+      ? await searchCatalogViaPaApi(q, size, category, subcategory, keywordParam)
+      : await searchCatalogViaSpApi(gate.userId, q, size, pageToken);
 
-    const { keywords, searchIndex } = resolvePaApiSearchParams({
-      category,
-      subcategory,
-      keyword: keywordParam,
-      fallbackQuery: q,
-    });
-    const result = await searchCatalogByKeywordPaApi(keywords, size, searchIndex);
     if (!result.ok) {
       return NextResponse.json(
-        { error: result.error || CATALOG_UNAVAILABLE, items: [], nextPageToken: null },
-        { status: 503 },
+        { error: result.error, items: [], nextPageToken: null },
+        { status: result.status },
       );
     }
-    return NextResponse.json({ items: paApiItemsToCatalogItems(result.data.items), nextPageToken: null });
+
+    return NextResponse.json({ items: result.items, nextPageToken: result.nextPageToken ?? null });
   } catch (e) {
     console.error("Catalog search error:", e);
     return NextResponse.json(

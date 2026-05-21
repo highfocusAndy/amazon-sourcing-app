@@ -16,8 +16,17 @@ const DEFAULT_FLAGS: { key: string; label: string; description: string }[] = [
   { key: "ff:ai_chat", label: "AI Amazon Chat", description: "Show the Ask AI chat widget" },
   { key: "ff:bulk_upload", label: "Bulk Upload", description: "Allow .xlsx/.csv list uploads" },
   { key: "ff:pa_api_bsr", label: "PA-API Main BSR", description: "Fetch main-category BSR via Product Advertising API" },
+  {
+    key: "ff:pa_api_catalog",
+    label: "PA-API Catalog Browse",
+    description: "Use Product Advertising API for catalog search. When off, catalog uses SP-API.",
+  },
   { key: "ff:analyzer_page", label: "Catalog Analyzer", description: "Enable the Analyzer / Explorer page" },
 ];
+
+const FLAG_DEFAULTS: Record<string, boolean> = {
+  "ff:pa_api_catalog": false,
+};
 
 export async function GET(): Promise<NextResponse> {
   const gate = await requireAdminAccess();
@@ -30,7 +39,7 @@ export async function GET(): Promise<NextResponse> {
 
   const flags = DEFAULT_FLAGS.map((f) => ({
     ...f,
-    enabled: storedMap[f.key] !== undefined ? storedMap[f.key] === "true" : true,
+    enabled: storedMap[f.key] !== undefined ? storedMap[f.key] === "true" : (FLAG_DEFAULTS[f.key] ?? true),
   }));
 
   return NextResponse.json({ ok: true, flags });

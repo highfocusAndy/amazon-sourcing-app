@@ -15,7 +15,11 @@
       "PowerShell(Get-Process *)",
       "PowerShell(cd C:\\\\dev\\\\amazon-sourcing-app; Start-Process -FilePath \"npx\" -ArgumentList \"prisma\",\"generate\" -Verb RunAs -Wait 2>&1; Write-Host \"Done\")",
       "PowerShell(New-Item *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(New-Item -ItemType Directory -Force \"C:\\\\dev\\\\amazon-sourcing-app\\\\app\\\\api\\\\seller\\\\[sellerId]\")",
+      "Bash(Out-Null)",
+      "Bash(New-Item -ItemType Directory -Force \"C:\\\\dev\\\\amazon-sourcing-app\\\\app\\\\seller\\\\[sellerId]\")",
+      "Bash(Write-Host \"Directories created\")"
     ]
   }
 }

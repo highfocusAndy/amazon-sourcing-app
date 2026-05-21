@@ -21,6 +21,7 @@ import {
 } from "@/lib/spApiResponseCache";
 import type { ProductAnalysis } from "@/lib/types";
 import { consumeMonthlyUsage } from "@/lib/usageQuota";
+import { isPaApiCatalogEnabled } from "@/lib/featureFlags";
 import { isPaApiConfigured, resolvePaApiSearchParams, searchCatalogByKeywordPaApi } from "@/lib/paApiClient";
 
 export const runtime = "nodejs";
@@ -64,8 +65,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
 
     const hasAmazon = await hasConnectedAmazonAccount(gate.userId);
+    const usePaApi = await isPaApiCatalogEnabled();
 
-    if (isPaApiConfigured()) {
+    if (usePaApi && isPaApiConfigured()) {
       try {
         const { keywords, searchIndex } = resolvePaApiSearchParams({ fallbackQuery: q });
         const paResult = await searchCatalogByKeywordPaApi(keywords, pageSize, searchIndex);

@@ -612,9 +612,6 @@ export async function analyzeProduct(
       if (approvalRequiredEffective(result)) {
         result.approvalRequired = true;
       }
-      if (listingRestrictions.reasonCodes.length > 0) {
-        addReasonUnique(result.reasons, `Restriction codes: ${listingRestrictions.reasonCodes.join(", ")}`);
-      }
       if (listingRestrictions.reasonMessages.length > 0) {
         addReasonUnique(result.reasons, listingRestrictions.reasonMessages[0]);
       }

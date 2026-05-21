@@ -8,12 +8,12 @@ import { DashboardHeaderMark } from "@/app/components/DashboardHeaderMark";
 import { ProductIntelPanelContent } from "@/app/components/ProductIntelPanelContent";
 import { AmazonAccountModal } from "@/app/settings/AmazonAccountModal";
 import { AmazonOAuthQueryCleanup } from "@/app/settings/AmazonOAuthQueryCleanup";
-import { amazonSellerStorefrontUrl } from "@/lib/marketplaces";
 import { appHeaderCompact, appHeaderSuffix } from "@/lib/appBranding";
 import type { CatalogItem } from "@/lib/spApiClient";
 import type { ProductAnalysis, SellerType } from "@/lib/types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { SellerListDialog, buildSellerModalState, type SellerModalState } from "@/app/components/SellerListDialog";
 import { useSession } from "next-auth/react";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -80,18 +80,14 @@ export default function ExplorerPage() {
   const [sellerType, setSellerType] = useState<SellerType>("FBA");
   const [shippingCost, setShippingCost] = useState("0");
   const [projectedMonthlyUnits, setProjectedMonthlyUnits] = useState("1");
-  const [catalogPageSize, setCatalogPageSize] = useState(20);
+  const [catalogPageSize, setCatalogPageSize] = useState(30);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
   const [ungatedOnly, setUngatedOnly] = useState(false);
   const [eligibilityByAsin, setEligibilityByAsin] = useState<Record<string, boolean | null>>({});
   const [analyzeRequiresAuth, setAnalyzeRequiresAuth] = useState(false);
   const [pendingProductAsin, setPendingProductAsin] = useState<string | null>(null);
   /** Popover on lg+; full-height sheet from the right on smaller screens (mirrors left nav direction). */
-  const [sellerModal, setSellerModal] = useState<
-    | null
-    | { filter: "all" | "FBA" | "FBM"; layout: "sheet" }
-    | { filter: "all" | "FBA" | "FBM"; layout: "popover"; top: number; left: number; width: number }
-  >(null);
+  const [sellerModal, setSellerModal] = useState<SellerModalState>(null);
   const [sellerSheetVisible, setSellerSheetVisible] = useState(false);
   const [marketplaceDomain, setMarketplaceDomain] = useState("amazon.com");
   const [loadingPaused, setLoadingPaused] = useState(false);
@@ -104,17 +100,7 @@ export default function ExplorerPage() {
   const catalogFetchSize = useMemo(() => Math.min(Math.max(catalogPageSize, 10), 60), [catalogPageSize]);
 
   const openSellerModal = useCallback((e: React.MouseEvent<HTMLButtonElement>, filter: "all" | "FBA" | "FBM") => {
-    const narrow = typeof window !== "undefined" && window.innerWidth < 1024;
-    if (narrow) {
-      setSellerModal({ filter, layout: "sheet" });
-      return;
-    }
-    const r = e.currentTarget.getBoundingClientRect();
-    const margin = 8;
-    const width = Math.min(320, window.innerWidth - 2 * margin);
-    const left = Math.max(margin, Math.min(r.left, window.innerWidth - width - margin));
-    const top = r.bottom + 8;
-    setSellerModal({ filter, layout: "popover", top, left, width });
+    setSellerModal(buildSellerModalState(e, filter));
   }, []);
 
   useEffect(() => {
@@ -888,7 +874,10 @@ const handleProductClick = useCallback(
                   ) : null}
                   <p>
                     {filteredAndSortedProducts.length} products
-                    {catalogNextPageToken ? " · more below" : ""}
+                    {ungatedOnly && catalogResults.length > filteredAndSortedProducts.length
+                      ? ` · ${catalogResults.length} scanned`
+                      : ""}
+                    {catalogNextPageToken ? " · more available" : ""}
                   </p>
                 </div>
               </div>
@@ -987,7 +976,7 @@ const handleProductClick = useCallback(
                     disabled={loadMoreLoading}
                     className="rounded-lg bg-sky-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-sky-500 disabled:opacity-50"
                   >
-                    {loadMoreLoading ? "Loading…" : ungatedOnly ? "Load next 500" : "Load next 30"}
+                    {loadMoreLoading ? "Loading…" : `Load next ${catalogFetchSize}`}
                   </button>
                 </div>
               ) : null}
@@ -1100,138 +1089,22 @@ const handleProductClick = useCallback(
               onProjectedMonthlyUnitsChange={setProjectedMonthlyUnits}
               openSellerModal={openSellerModal}
               variationDetail="explorer"
-              amazonConnected={amazonHeaderConnected}
-              onConnectAmazon={() => {
-                if (subscriptionPaid === false) {
-                  window.location.href = "/billing";
-                } else {
-                  setShowAmazonAccountModal(true);
-                }
-              }}
-              isPaidPlan={subscriptionPaid}
             />
           )}
             </div>
           </div>
+          {selectedProduct ? (
+            <SellerListDialog
+              sellerModal={sellerModal}
+              sellerSheetVisible={sellerSheetVisible}
+              selectedProduct={selectedProduct}
+              marketplaceDomain={marketplaceDomain}
+              onClose={() => setSellerModal(null)}
+            />
+          ) : null}
         </div>
       </aside>
       </div>
-
-      {sellerModal && selectedProduct?.sellerDetails && (selectedProduct.sellerDetails ?? []).length > 0 ? (
-        <>
-          <button
-            type="button"
-            className="fixed inset-0 z-[110] bg-slate-950/50 backdrop-blur-[1px]"
-            onClick={() => setSellerModal(null)}
-            aria-label="Close sellers list"
-          />
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label="Sellers list"
-            className={
-              sellerModal.layout === "sheet"
-                ? `fixed inset-y-0 right-0 z-[115] flex max-h-[100svh] w-[min(100vw,24rem)] flex-col overflow-hidden border-l border-slate-600 bg-slate-800 shadow-2xl transition-transform duration-300 ease-out ${
-                    sellerSheetVisible ? "translate-x-0" : "translate-x-full pointer-events-none"
-                  }`
-                : "fixed z-[115] flex min-h-0 flex-col overflow-hidden rounded-xl border border-slate-600 bg-slate-800 shadow-xl"
-            }
-            style={
-              sellerModal.layout === "popover"
-                ? {
-                    top: sellerModal.top,
-                    left: sellerModal.left,
-                    width: sellerModal.width,
-                    maxHeight: Math.min(window.innerHeight * 0.65, window.innerHeight - sellerModal.top - 8),
-                  }
-                : undefined
-            }
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="shrink-0 border-b border-slate-600 px-4 py-3">
-              <div className="flex items-center justify-between gap-2">
-                <h3 className="text-sm font-semibold text-slate-100">
-                  {sellerModal.filter === "all"
-                    ? "Sellers"
-                    : sellerModal.filter === "FBA"
-                      ? "FBA sellers"
-                      : "FBM sellers"}
-                </h3>
-                <button
-                  type="button"
-                  onClick={() => setSellerModal(null)}
-                  className="rounded p-1 text-slate-400 hover:bg-slate-700 hover:text-slate-200"
-                  aria-label="Close"
-                >
-                  ×
-                </button>
-              </div>
-              <p className="mt-1 text-[10px] leading-snug text-slate-500">
-                {sellerModal.layout === "sheet"
-                  ? "Opens from the right (main menu opens from the left). Tap outside or × to close. Tap a seller for their Amazon storefront."
-                  : "Opens next to this control. Click a seller to open their Amazon storefront in a new tab. Display names show only when Amazon includes them on the offer."}
-              </p>
-            </div>
-            <ul className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain p-2">
-              {(sellerModal.filter === "all"
-                ? (selectedProduct.sellerDetails ?? [])
-                : (selectedProduct.sellerDetails ?? []).filter((s) => s.channel === sellerModal.filter)
-              ).map((s, i) => (
-                <li key={`${s.sellerId}-${i}`} className="mb-2 last:mb-0">
-                  <div className="flex flex-col gap-1 rounded-lg border border-slate-600/80 bg-slate-700/50 px-3 py-2 text-xs transition hover:border-slate-500 hover:bg-slate-600/45">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        {s.sellerDisplayName ? (
-                          <a
-                            href={amazonSellerStorefrontUrl(marketplaceDomain, s.sellerId)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="block truncate font-medium text-slate-100 underline decoration-slate-500 underline-offset-2 hover:text-teal-300 hover:decoration-teal-400"
-                            title={`View ${s.sellerDisplayName} storefront on Amazon`}
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            {s.sellerDisplayName}
-                          </a>
-                        ) : null}
-                        <span
-                          className={
-                            s.sellerDisplayName
-                              ? "block break-all font-mono text-[11px] text-slate-500"
-                              : "block break-all font-mono text-slate-200"
-                          }
-                        >
-                          {s.sellerId}
-                        </span>
-                      </div>
-                      <span className="shrink-0 rounded bg-slate-600 px-1.5 py-0.5 text-[10px] text-slate-300">
-                        {s.channel}
-                      </span>
-                    </div>
-                    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 text-slate-400">
-                      <span className="flex flex-wrap gap-x-3 gap-y-0.5">
-                        {s.feedbackCount != null && (
-                          <span title="Feedback count">{s.feedbackCount.toLocaleString()} feedback</span>
-                        )}
-                        {s.feedbackPercent != null && (
-                          <span title="Positive feedback %">{s.feedbackPercent}% positive</span>
-                        )}
-                        {s.feedbackCount == null && s.feedbackPercent == null && <span>—</span>}
-                      </span>
-                      <Link
-                        href={`/seller/${s.sellerId}`}
-                        className="shrink-0 text-[10px] font-medium text-teal-400/90 hover:text-teal-300"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        All listings ↗
-                      </Link>
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </>
-      ) : null}
     </div>
   );
 }

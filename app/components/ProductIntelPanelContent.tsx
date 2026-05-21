@@ -145,35 +145,7 @@ export type ProductIntelPanelContentProps = {
   variationDetail?: "explorer" | "analyzer";
   /** Optional content after structured sections (e.g. legacy ProductInsightBlurb) */
   children?: ReactNode;
-  /** When false, advanced sections (fees, restrictions, competition) are locked. */
-  amazonConnected?: boolean;
-  onConnectAmazon?: () => void;
-  /** True when user has an active paid subscription (controls CTA destination). */
-  isPaidPlan?: boolean;
 };
-
-function LockedFieldGroup({ isLocked, children }: { isLocked: boolean; children: ReactNode }) {
-  if (!isLocked) return <>{children}</>;
-  return (
-    <div className="relative">
-      <div
-        className="pointer-events-none select-none overflow-hidden rounded-[13px]"
-        aria-hidden="true"
-        style={{ filter: "blur(5px)", opacity: 0.28 }}
-      >
-        {children}
-      </div>
-      <div className="absolute inset-0 flex items-center justify-center rounded-[13px] bg-slate-900/20">
-        <div
-          className="flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-semibold text-slate-300"
-          style={{ background: "rgba(10,15,30,0.9)", border: "1px solid rgba(255,255,255,0.09)" }}
-        >
-          🔒 Connect Amazon to unlock
-        </div>
-      </div>
-    </div>
-  );
-}
 
 export function ProductIntelPanelContent({
   product: selectedProduct,
@@ -189,11 +161,7 @@ export function ProductIntelPanelContent({
   openSellerModal,
   variationDetail = "explorer",
   children,
-  amazonConnected,
-  onConnectAmazon,
-  isPaidPlan,
 }: ProductIntelPanelContentProps) {
-  const isLocked = amazonConnected === false;
   const competitionThresholds = useCompetitionThresholds();
 
   const detailEconomics = useMemo(
@@ -294,40 +262,6 @@ export function ProductIntelPanelContent({
         </span>
       </div>
 
-      {isLocked ? (
-        <div
-          className="rounded-[16px] px-4 py-3.5 text-center"
-          style={{
-            background: "linear-gradient(135deg, rgba(201,168,76,0.1) 0%, rgba(201,168,76,0.04) 100%)",
-            border: "1px solid rgba(201,168,76,0.28)",
-          }}
-        >
-          <p className="text-[13px] font-semibold text-amber-200/90">
-            Connect your Amazon account to unlock full analysis
-          </p>
-          <p className="mt-1 text-[11px] text-slate-500">
-            FBA fees · Listing restrictions · Profit calculator · Seller competition
-          </p>
-          <button
-            type="button"
-            onClick={() => {
-              if (isPaidPlan === false) {
-                window.location.href = "/billing";
-              } else {
-                onConnectAmazon?.();
-              }
-            }}
-            className="mt-3 inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-[12px] font-bold text-slate-900 transition hover:opacity-90 active:scale-[0.98]"
-            style={{
-              background: "linear-gradient(135deg, #E8CC7A 0%, #C9A84C 60%)",
-              boxShadow: "0 2px 18px -4px rgba(201,168,76,0.5)",
-            }}
-          >
-            {isPaidPlan === false ? "Upgrade to unlock →" : "Connect Amazon →"}
-          </button>
-        </div>
-      ) : null}
-
       <IntelSection eyebrow="Product">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
           <div className="shrink-0 sm:w-[7.75rem]">
@@ -338,7 +272,7 @@ export function ProductIntelPanelContent({
                     href={productUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    title="Open this product on Amazon (use Buying options / Other sellers there to compare offers)"
+                    title="Open this product on Amazon"
                     className="block rounded-[10px] outline-none ring-teal-400/70 ring-offset-2 ring-offset-slate-800 focus-visible:ring-2"
                   >
                     <img
@@ -370,7 +304,7 @@ export function ProductIntelPanelContent({
                     href={productUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    title="Open this product on Amazon (use Buying options / Other sellers there to compare offers)"
+                    title="Open this product on Amazon"
                     className="font-medium leading-snug text-slate-100 underline decoration-slate-500 underline-offset-2 transition hover:text-teal-300 hover:decoration-teal-300"
                   >
                     {selectedProduct.title || selectedProduct.asin || "Product"}
@@ -378,12 +312,6 @@ export function ProductIntelPanelContent({
                 ) : (
                   <p className="font-medium leading-snug text-slate-100">{selectedProduct.title || selectedProduct.asin || "Product"}</p>
                 )}
-                {selectedProduct.asin ? (
-                  <p className="mt-1 text-[11px] leading-snug text-slate-500">
-                    On Amazon, use <span className="text-slate-400">Buying options</span> or{" "}
-                    <span className="text-slate-400">Other sellers</span> on that page to see who is selling this ASIN.
-                  </p>
-                ) : null}
                 {selectedProduct.offerLabel ? (
                   <p className="mt-1 text-sm text-teal-400">Listing: {selectedProduct.offerLabel}</p>
                 ) : null}
@@ -420,34 +348,32 @@ export function ProductIntelPanelContent({
           </div>
         </div>
 
-        <LockedFieldGroup isLocked={isLocked}>
-          <div className={HF_INNER_CARD_STATIC}>
-            <p className={HF_KPI_LABEL}>Gated / eligible</p>
-            <div className="mt-1.5 flex flex-wrap gap-1.5">
-              {approvalRequiredEffective(selectedProduct) ? (
-                <span className="rounded-full border border-amber-400/35 bg-amber-950/50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_0_16px_-8px_rgba(251,191,36,0.2)] ring-1 ring-inset ring-amber-400/12">
-                  Approval required
-                </span>
-              ) : selectedProduct.approvalRequired === false ? (
-                <span className="rounded-full border border-white/12 bg-slate-950/50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-300 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-                  No approval required
-                </span>
-              ) : null}
-              {selectedProduct.listingRestricted === true ? (
-                <span className="rounded-full border border-amber-400/35 bg-amber-950/50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_0_16px_-8px_rgba(251,191,36,0.2)] ring-1 ring-inset ring-amber-400/12">
-                  Listing restricted
-                </span>
-              ) : selectedProduct.listingRestricted === false ? (
-                <span className="rounded-full border border-white/12 bg-slate-950/50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-300 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-                  Not restricted
-                </span>
-              ) : null}
-              {approvalEligibilityUnset(selectedProduct) && selectedProduct.listingRestricted == null ? (
-                <span className="text-[11px] text-slate-500">—</span>
-              ) : null}
-            </div>
+        <div className={HF_INNER_CARD_STATIC}>
+          <p className={HF_KPI_LABEL}>Gated / eligible</p>
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {approvalRequiredEffective(selectedProduct) ? (
+              <span className="rounded-full border border-amber-400/35 bg-amber-950/50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_0_16px_-8px_rgba(251,191,36,0.2)] ring-1 ring-inset ring-amber-400/12">
+                Approval required
+              </span>
+            ) : selectedProduct.approvalRequired === false ? (
+              <span className="rounded-full border border-white/12 bg-slate-950/50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-300 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+                No approval required
+              </span>
+            ) : null}
+            {selectedProduct.listingRestricted === true ? (
+              <span className="rounded-full border border-amber-400/35 bg-amber-950/50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_0_16px_-8px_rgba(251,191,36,0.2)] ring-1 ring-inset ring-amber-400/12">
+                Listing restricted
+              </span>
+            ) : selectedProduct.listingRestricted === false ? (
+              <span className="rounded-full border border-white/12 bg-slate-950/50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-300 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+                Not restricted
+              </span>
+            ) : null}
+            {approvalEligibilityUnset(selectedProduct) && selectedProduct.listingRestricted == null ? (
+              <span className="text-[11px] text-slate-500">—</span>
+            ) : null}
           </div>
-        </LockedFieldGroup>
+        </div>
       </IntelSection>
 
       <div className="border-t border-white/[0.06] pt-3">
@@ -483,9 +409,8 @@ export function ProductIntelPanelContent({
             ) : null}
           </div>
 
-          {/* Profitability calculator — locked when Amazon not connected */}
-          <LockedFieldGroup isLocked={isLocked}>
-            <div className="mt-2 space-y-2 rounded-[14px] border border-teal-500/18 bg-gradient-to-b from-slate-900/88 to-slate-900/48 p-2.5 shadow-[inset_0_1px_0_rgba(45,212,191,0.06),0_20px_56px_-30px_rgba(0,0,0,0.65)]">
+          {/* Profitability calculator */}
+          <div className="mt-2 space-y-2 rounded-[14px] border border-teal-500/18 bg-gradient-to-b from-slate-900/88 to-slate-900/48 p-2.5 shadow-[inset_0_1px_0_rgba(45,212,191,0.06),0_20px_56px_-30px_rgba(0,0,0,0.65)]">
               <p className="border-b border-white/[0.05] pb-1.5 text-[10px] font-semibold uppercase tracking-wide text-teal-400/90">
                 Profitability calculator
               </p>
@@ -637,17 +562,13 @@ export function ProductIntelPanelContent({
                 </div>
               </div>
             </div>
-          </LockedFieldGroup>
         </IntelSection>
       </div>
 
       <IntelSection eyebrow="Competition">
-        {/* Amazon on listing — always shown; locked state shows prompt instead of blurring */}
         <div className={HF_INNER_CARD_STATIC}>
           <p className={HF_KPI_LABEL}>Amazon on listing</p>
-          {isLocked ? (
-            <p className="mt-0.5 text-[11px] text-slate-500">Connect Amazon to check</p>
-          ) : typeof amazonOnListing === "object" ? (
+          {typeof amazonOnListing === "object" ? (
             <p className="mt-0.5 text-sm font-bold text-rose-400">⚠️ YES — {amazonOnListing.entity}</p>
           ) : amazonOnListing === "no" ? (
             <p className="mt-0.5 text-sm font-bold text-emerald-400">✅ NO</p>
@@ -655,97 +576,93 @@ export function ProductIntelPanelContent({
             <p className="mt-0.5 text-sm text-slate-500">— Unable to confirm</p>
           )}
         </div>
-        <LockedFieldGroup isLocked={isLocked}>
-          {selectedProduct.amazonSalesVolumeLabel ? (
-            <div className="rounded-lg border border-slate-600 bg-emerald-900/30 px-3 py-2">
-              <p className="text-xs text-slate-500">Product sells (from Amazon)</p>
-              <p className="font-semibold text-slate-100">{selectedProduct.amazonSalesVolumeLabel}</p>
-              <p className="mt-0.5 text-[10px] text-slate-400">Extracted from product page when available.</p>
-            </div>
-          ) : null}
-          {selectedProduct.offerCount != null || selectedProduct.fbaOfferCount != null || selectedProduct.fbmOfferCount != null ? (
-            <CompetitionIntelBlock product={selectedProduct} sellersLine={sellersLine} />
-          ) : (
-            <p className="text-[11px] text-slate-500">Structured offer breakdown will appear once Amazon pricing data loads.</p>
-          )}
-        </LockedFieldGroup>
+        {selectedProduct.amazonSalesVolumeLabel ? (
+          <div className="rounded-lg border border-slate-600 bg-emerald-900/30 px-3 py-2">
+            <p className="text-xs text-slate-500">Product sells (from Amazon)</p>
+            <p className="font-semibold text-slate-100">{selectedProduct.amazonSalesVolumeLabel}</p>
+            <p className="mt-0.5 text-[10px] text-slate-400">Extracted from product page when available.</p>
+          </div>
+        ) : null}
+        {selectedProduct.offerCount != null || selectedProduct.fbaOfferCount != null || selectedProduct.fbmOfferCount != null ? (
+          <CompetitionIntelBlock product={selectedProduct} sellersLine={sellersLine} />
+        ) : (
+          <p className="text-[11px] text-slate-500">Structured offer breakdown will appear once Amazon pricing data loads.</p>
+        )}
       </IntelSection>
 
       <IntelSection eyebrow="Restrictions & compliance">
-        <LockedFieldGroup isLocked={isLocked}>
-          {approvalRequiredEffective(selectedProduct) ||
-          selectedProduct.listingRestricted ||
-          selectedProduct.restrictedBrand ? (
-            <div className={HF_INNER_CARD_STATIC}>
-              <p className={HF_KPI_LABEL}>Ungating economics</p>
-              <ul className="mt-1.5 space-y-1 text-[12px]">
-                {selectedProduct.worthUngating != null && (
-                  <li className="flex justify-between gap-2 leading-snug">
-                    <span className="text-slate-500">Worth ungating</span>
-                    <span className={selectedProduct.worthUngating ? "font-semibold text-emerald-300" : "font-medium text-slate-300"}>
-                      {selectedProduct.worthUngating ? "Yes" : "No"}
-                    </span>
-                  </li>
-                )}
-                {selectedProduct.ungatingCost10Units != null && (
-                  <li className="flex justify-between gap-2 leading-snug">
-                    <span className="text-slate-500">Cost (10 units)</span>
-                    <span className="font-semibold tabular-nums text-slate-100">{formatCurrency(selectedProduct.ungatingCost10Units)}</span>
-                  </li>
-                )}
-                {selectedProduct.breakEvenUnits != null && (
-                  <li className="flex justify-between gap-2 leading-snug">
-                    <span className="text-slate-500">Break-even units</span>
-                    <span className="font-semibold tabular-nums text-slate-100">{formatNumber(selectedProduct.breakEvenUnits)}</span>
-                  </li>
-                )}
-                {selectedProduct.projectedMonthlyProfit != null && (
-                  <li className="flex justify-between gap-2 leading-snug">
-                    <span className="text-slate-500">Projected monthly profit</span>
-                    <span className="font-semibold tabular-nums text-slate-100">{formatCurrency(selectedProduct.projectedMonthlyProfit)}</span>
-                  </li>
-                )}
-              </ul>
-            </div>
-          ) : null}
+        {approvalRequiredEffective(selectedProduct) ||
+        selectedProduct.listingRestricted ||
+        selectedProduct.restrictedBrand ? (
+          <div className={HF_INNER_CARD_STATIC}>
+            <p className={HF_KPI_LABEL}>Ungating economics</p>
+            <ul className="mt-1.5 space-y-1 text-[12px]">
+              {selectedProduct.worthUngating != null && (
+                <li className="flex justify-between gap-2 leading-snug">
+                  <span className="text-slate-500">Worth ungating</span>
+                  <span className={selectedProduct.worthUngating ? "font-semibold text-emerald-300" : "font-medium text-slate-300"}>
+                    {selectedProduct.worthUngating ? "Yes" : "No"}
+                  </span>
+                </li>
+              )}
+              {selectedProduct.ungatingCost10Units != null && (
+                <li className="flex justify-between gap-2 leading-snug">
+                  <span className="text-slate-500">Cost (10 units)</span>
+                  <span className="font-semibold tabular-nums text-slate-100">{formatCurrency(selectedProduct.ungatingCost10Units)}</span>
+                </li>
+              )}
+              {selectedProduct.breakEvenUnits != null && (
+                <li className="flex justify-between gap-2 leading-snug">
+                  <span className="text-slate-500">Break-even units</span>
+                  <span className="font-semibold tabular-nums text-slate-100">{formatNumber(selectedProduct.breakEvenUnits)}</span>
+                </li>
+              )}
+              {selectedProduct.projectedMonthlyProfit != null && (
+                <li className="flex justify-between gap-2 leading-snug">
+                  <span className="text-slate-500">Projected monthly profit</span>
+                  <span className="font-semibold tabular-nums text-slate-100">{formatCurrency(selectedProduct.projectedMonthlyProfit)}</span>
+                </li>
+              )}
+            </ul>
+          </div>
+        ) : null}
 
-          {(() => {
-            const codes = selectedProduct.restrictionReasonCodes;
-            const hasHazmat = codes.some((c) => /HAZMAT|HAZARD|DANGEROUS/i.test(c));
-            return (
-              <div className="grid grid-cols-1 gap-1.5">
-                <div className={HF_INNER_CARD_STATIC}>
-                  <p className={HF_KPI_LABEL}>IP / complaint risk</p>
-                  <p className="mt-0.5 text-[15px] font-bold text-slate-50">{selectedProduct.ipComplaintRisk ? "Yes" : "No"}</p>
-                  {selectedProduct.ipComplaintRisk === true ? <RestrictionsExplain kind="ip" /> : null}
-                </div>
-                <div className={HF_INNER_CARD_STATIC}>
-                  <p className={HF_KPI_LABEL}>Meltable</p>
-                  <p className="mt-0.5 text-[15px] font-bold text-slate-50">{selectedProduct.meltableRisk ? "Yes" : "No"}</p>
-                  {selectedProduct.meltableRisk === true ? <RestrictionsExplain kind="meltable" /> : null}
-                </div>
-                <div className={HF_INNER_CARD_STATIC}>
-                  <p className={HF_KPI_LABEL}>Hazmat</p>
-                  <p
-                    className={`mt-0.5 text-[15px] font-bold ${
-                      selectedProduct.isHazmat === true ? "text-rose-300" : selectedProduct.isHazmat === false ? "text-slate-50" : "text-slate-500"
-                    }`}
-                  >
-                    {selectedProduct.isHazmat === true ? "Yes" : selectedProduct.isHazmat === false ? "No" : hasHazmat ? "Yes" : "—"}
-                  </p>
-                  {selectedProduct.isHazmat === true || hasHazmat ? <RestrictionsExplain kind="hazmat" /> : null}
-                  {selectedProduct.isHazmat === null && !hasHazmat ? (
-                    <p className="mt-1 text-[10px] leading-relaxed text-slate-500">Load product details to check</p>
-                  ) : null}
-                </div>
-                <div className="rounded-[11px] border border-amber-400/22 bg-amber-950/25 px-2.5 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-                  <p className={HF_KPI_LABEL}>Private label (possible)</p>
-                  <p className="mt-0.5 text-[15px] font-bold text-slate-50">{selectedProduct.privateLabelRisk ? "Yes" : "No"}</p>
-                </div>
+        {(() => {
+          const codes = selectedProduct.restrictionReasonCodes;
+          const hasHazmat = codes.some((c) => /HAZMAT|HAZARD|DANGEROUS/i.test(c));
+          return (
+            <div className="grid grid-cols-1 gap-1.5">
+              <div className={HF_INNER_CARD_STATIC}>
+                <p className={HF_KPI_LABEL}>IP / complaint risk</p>
+                <p className="mt-0.5 text-[15px] font-bold text-slate-50">{selectedProduct.ipComplaintRisk ? "Yes" : "No"}</p>
+                {selectedProduct.ipComplaintRisk === true ? <RestrictionsExplain kind="ip" /> : null}
               </div>
-            );
-          })()}
-        </LockedFieldGroup>
+              <div className={HF_INNER_CARD_STATIC}>
+                <p className={HF_KPI_LABEL}>Meltable</p>
+                <p className="mt-0.5 text-[15px] font-bold text-slate-50">{selectedProduct.meltableRisk ? "Yes" : "No"}</p>
+                {selectedProduct.meltableRisk === true ? <RestrictionsExplain kind="meltable" /> : null}
+              </div>
+              <div className={HF_INNER_CARD_STATIC}>
+                <p className={HF_KPI_LABEL}>Hazmat</p>
+                <p
+                  className={`mt-0.5 text-[15px] font-bold ${
+                    selectedProduct.isHazmat === true ? "text-rose-300" : selectedProduct.isHazmat === false ? "text-slate-50" : "text-slate-500"
+                  }`}
+                >
+                  {selectedProduct.isHazmat === true ? "Yes" : selectedProduct.isHazmat === false ? "No" : hasHazmat ? "Yes" : "—"}
+                </p>
+                {selectedProduct.isHazmat === true || hasHazmat ? <RestrictionsExplain kind="hazmat" /> : null}
+                {selectedProduct.isHazmat === null && !hasHazmat ? (
+                  <p className="mt-1 text-[10px] leading-relaxed text-slate-500">Load product details to check</p>
+                ) : null}
+              </div>
+              <div className="rounded-[11px] border border-amber-400/22 bg-amber-950/25 px-2.5 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+                <p className={HF_KPI_LABEL}>Private label (possible)</p>
+                <p className="mt-0.5 text-[15px] font-bold text-slate-50">{selectedProduct.privateLabelRisk ? "Yes" : "No"}</p>
+              </div>
+            </div>
+          );
+        })()}
       </IntelSection>
 
       <IntelSection eyebrow="Variations">
@@ -782,34 +699,34 @@ export function ProductIntelPanelContent({
       </IntelSection>
 
       <IntelSection eyebrow="Alerts & notes">
-        {selectedProduct.reasons.length > 0 ||
-        selectedProduct.restrictionReasonCodes.length > 0 ||
-        selectedProduct.error ||
-        selectedProduct.listingRestricted ||
-        approvalRequiredEffective(selectedProduct) ||
-        selectedProduct.restrictedBrand ? (
+        {(() => {
+          const visibleReasons = selectedProduct.reasons.filter((r) => !/^Restriction codes:/i.test(r));
+          const showAlerts =
+            visibleReasons.length > 0 ||
+            selectedProduct.error ||
+            selectedProduct.listingRestricted ||
+            approvalRequiredEffective(selectedProduct) ||
+            selectedProduct.restrictedBrand;
+          if (!showAlerts) {
+            return <p className="text-[11px] leading-relaxed text-slate-500">No extra alerts on this snapshot.</p>;
+          }
+          return (
           <div className="rounded-[12px] border border-amber-400/24 bg-gradient-to-br from-amber-950/40 to-amber-950/[0.12] px-2.5 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
             <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-amber-200/90">Alerts / Amazon info</p>
             {selectedProduct.error ? <p className="mt-1 text-sm font-medium leading-snug text-rose-300">{selectedProduct.error}</p> : null}
             {selectedProduct.restrictedBrand ? <p className="mt-1 text-xs text-amber-200/95">Restricted brand list</p> : null}
             {selectedProduct.listingRestricted ? <p className="mt-1 text-xs text-amber-200/95">Listing restricted</p> : null}
             {approvalRequiredEffective(selectedProduct) ? <p className="mt-1 text-xs text-amber-200/95">Approval required</p> : null}
-            {selectedProduct.restrictionReasonCodes.length > 0 ? (
-              <p className="mt-1 font-mono text-[10px] leading-relaxed text-amber-200/85">
-                Codes: {selectedProduct.restrictionReasonCodes.join(", ")}
-              </p>
-            ) : null}
-            {selectedProduct.reasons.length > 0 ? (
+            {visibleReasons.length > 0 ? (
               <ul className="mt-2 list-disc space-y-0.5 pl-4 text-[11px] leading-relaxed text-amber-100/95">
-                {selectedProduct.reasons.map((r) => (
+                {visibleReasons.map((r) => (
                   <li key={r}>{r}</li>
                 ))}
               </ul>
             ) : null}
           </div>
-        ) : (
-          <p className="text-[11px] leading-relaxed text-slate-500">No extra alerts on this snapshot.</p>
-        )}
+          );
+        })()}
       </IntelSection>
 
       <AiInsightStrip
