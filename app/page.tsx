@@ -211,6 +211,16 @@ function HeroSection() {
       />
 
       <div className="relative z-10 mx-auto max-w-5xl">
+        {/* Logo */}
+        <div className="mb-8 flex justify-center">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/HF_LOGO.png"
+            alt="HIGH FOCUS"
+            className="h-16 w-auto object-contain drop-shadow-[0_0_32px_rgba(201,168,76,0.35)] sm:h-20"
+          />
+        </div>
+
         {/* Badge */}
         <Label>Professional Sourcing Platform</Label>
 
