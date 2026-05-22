@@ -32,6 +32,7 @@ export function GetAccessContent({
 }: Props) {
   const searchParams = useSearchParams();
   const checkout = searchParams.get("checkout");
+  const planParam = searchParams.get("plan") as "starter" | "pro" | null;
 
   const [stripeLoading, setStripeLoading] = useState(false);
   const [promoCode, setPromoCode] = useState("");
@@ -97,6 +98,24 @@ export function GetAccessContent({
     } finally {
       setStripeLoading(false);
     }
+  }, []);
+
+  // Auto-start checkout when arriving via a plan-specific CTA (e.g. "Get Starter →" on landing page).
+  // Only fires once; skipped if the user just canceled out of Stripe.
+  const autoStartedRef = useRef(false);
+  useEffect(() => {
+    if (
+      planParam &&
+      stripeConfigured &&
+      !subscriptionsPaused &&
+      checkout !== "cancel" &&
+      !autoStartedRef.current
+    ) {
+      autoStartedRef.current = true;
+      const plan = planParam === "pro" && proPlanEnabled ? "pro" : "starter";
+      void startStripe(plan);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const onPromoSignup = async (e: React.FormEvent) => {

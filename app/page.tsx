@@ -312,12 +312,12 @@ function StatsBar() {
 // ── Features ──────────────────────────────────────────────────────────────────
 function FeaturesSection() {
   const cards = [
-    { n: "01", icon: "📦", title: "Bulk Upload",            desc: "Drop your supplier's .xlsx, .xls, or .csv. Auto-detects ASIN/UPC + price headers. Up to 200 rows per run." },
-    { n: "02", icon: "📊", title: "Live SP-API Data",       desc: "Buy Box price, offer count, BSR, FBA fees, and listing restrictions — pulled live from Amazon on every analysis." },
-    { n: "03", icon: "🚦", title: "Smart Buy Decisions",    desc: "BUY · WORTH UNGATING · LOW MARGIN · PASS — color-coded verdicts calibrated to your own ROI and margin targets." },
-    { n: "04", icon: "💰", title: "Profit Engine",          desc: "FBA fee preview, net profit per unit, and ROI for every product. Know exactly what you earn before you order." },
+    { n: "01", icon: "📦", title: "Bulk Upload", pro: true,   desc: "Drop your supplier's .xlsx, .xls, or .csv. Auto-detects ASIN/UPC + price headers. Up to 200 rows per run." },
+    { n: "02", icon: "📊", title: "Live SP-API Data",         desc: "Buy Box price, offer count, BSR, FBA fees, and listing restrictions — pulled live from Amazon on every analysis." },
+    { n: "03", icon: "🚦", title: "Smart Buy Decisions",      desc: "BUY · WORTH UNGATING · LOW MARGIN · PASS — color-coded verdicts calibrated to your own ROI and margin targets." },
+    { n: "04", icon: "💰", title: "Profit Engine",            desc: "FBA fee preview, net profit per unit, and ROI for every product. Know exactly what you earn before you order." },
     { n: "05", icon: "🔍", title: "Catalog & Keyword Search", desc: "Browse Amazon categories by keyword or BSR. Filter by restriction status, ROI floor, and competition level." },
-    { n: "06", icon: "🔓", title: "Ungating Intelligence",  desc: "Instantly flag restricted products worth unlocking. The engine weighs ungate cost against profit potential for a clear verdict." },
+    { n: "06", icon: "🔓", title: "Ungating Intelligence",    desc: "Instantly flag restricted products worth unlocking. The engine weighs ungate cost against profit potential for a clear verdict." },
   ];
 
   return (
@@ -337,7 +337,7 @@ function FeaturesSection() {
         </ScrollReveal>
 
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {cards.map(({ n, icon, title, desc }, i) => (
+          {cards.map(({ n, icon, title, desc, pro }, i) => (
             <ScrollReveal key={n} delay={i * 65}>
               <div
                 className="lp-feat lp-b flex h-full flex-col rounded-2xl border p-7"
@@ -350,7 +350,17 @@ function FeaturesSection() {
                   >
                     {n}
                   </span>
-                  <span className="text-[22px]" aria-hidden>{icon}</span>
+                  <div className="flex items-center gap-2">
+                    {pro && (
+                      <span
+                        className="lp-b rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.18em]"
+                        style={{ background: G_DIM, border: `1px solid ${G_BORD}`, color: G }}
+                      >
+                        Pro
+                      </span>
+                    )}
+                    <span className="text-[22px]" aria-hidden>{icon}</span>
+                  </div>
                 </div>
                 <h3
                   className="lp-h mb-2.5 text-[19px] font-semibold text-white"
@@ -474,7 +484,7 @@ function PricingSection() {
         "Export to XLSX",
       ],
       cta: "Get Starter →",
-      href: "/get-access",
+      href: "/get-access?plan=starter",
     },
     {
       name: "Pro",
@@ -491,7 +501,7 @@ function PricingSection() {
         "Export to XLSX · Priority support",
       ],
       cta: "Get Pro →",
-      href: "/get-access",
+      href: "/get-access?plan=pro",
       pro: true,
       badge: "Best Value",
     },
