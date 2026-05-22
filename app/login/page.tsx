@@ -85,6 +85,7 @@ export default async function LoginPage({
             src="/HF_LOGO.png"
             alt="HIGH FOCUS Professional"
             className="h-24 w-auto max-w-[min(100%,13rem)] object-contain sm:h-28"
+            style={{ filter: "invert(1) sepia(1) saturate(1.6) hue-rotate(5deg) brightness(0.92)" }}
           />
           <h1
             className="text-center text-[1.6rem] font-semibold tracking-tight text-white sm:text-[1.85rem]"
