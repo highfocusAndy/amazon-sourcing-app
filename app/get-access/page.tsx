@@ -17,7 +17,7 @@ export default async function GetAccessPage() {
   const proPriceId = process.env.STRIPE_PRICE_ID_PRO?.trim();
   const stripeConfigured = Boolean(process.env.STRIPE_SECRET_KEY?.trim() && starterPriceId);
   const proPlanEnabled = Boolean(process.env.STRIPE_SECRET_KEY?.trim() && proPriceId);
-  const starterPriceDisplay = process.env.BILLING_PRICE_DISPLAY_STARTER?.trim() || process.env.BILLING_PRICE_DISPLAY?.trim() || "$19.95/month";
+  const starterPriceDisplay = process.env.BILLING_PRICE_DISPLAY_STARTER?.trim() || process.env.BILLING_PRICE_DISPLAY?.trim() || "$18.99/month";
   const proPriceDisplay = process.env.BILLING_PRICE_DISPLAY_PRO?.trim() || "$29.95/month";
   const subscriptionsPaused = isSubscriptionsPaused();
   const pausedMessage = subscriptionsPausedMessage();

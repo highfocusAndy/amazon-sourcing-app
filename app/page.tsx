@@ -462,14 +462,13 @@ function PricingSection() {
     },
     {
       name: "Starter",
-      price: "$19.95",
+      price: "$18.99",
       period: "/ month",
       desc: "Everything you need to source daily.",
       features: [
         "1,000 product analyses / month",
         "3,000 catalog searches / month",
         "1,200 keyword searches / month",
-        "Bulk upload (200 rows per run)",
         "BUY / PASS / WORTH UNGATING",
         "Ungating opportunity scanner",
         "Export to XLSX",

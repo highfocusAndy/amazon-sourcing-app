@@ -673,13 +673,13 @@ export function AdminOverviewClient() {
               <MetricCard
                 label="Starter subscribers"
                 value={m.starterPaying}
-                sub={`≈ $${(m.starterPaying * (Number(process?.env?.NEXT_PUBLIC_STARTER_PRICE) || 29)).toLocaleString()}/mo est.`}
+                sub={`≈ $${(m.starterPaying * (Number(process?.env?.NEXT_PUBLIC_STARTER_PRICE) || 18.99)).toLocaleString()}/mo est.`}
                 accent="teal"
               />
               <MetricCard
                 label="Pro subscribers"
                 value={m.proPaying}
-                sub={`≈ $${(m.proPaying * (Number(process?.env?.NEXT_PUBLIC_PRO_PRICE) || 79)).toLocaleString()}/mo est.`}
+                sub={`≈ $${(m.proPaying * (Number(process?.env?.NEXT_PUBLIC_PRO_PRICE) || 29.95)).toLocaleString()}/mo est.`}
                 accent="violet"
               />
               <MetricCard
