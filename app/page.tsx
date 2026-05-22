@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Cormorant_Garamond, Montserrat } from "next/font/google";
 import { ScrollReveal } from "@/app/components/ScrollReveal";
+import { LandingPricingSection } from "@/app/components/LandingPricingSection";
+import { defaultTrialDays, isSubscriptionsPaused } from "@/lib/billing/access";
 
 export const metadata = {
   title: "HIGH FOCUS Sourcing — Amazon FBA Wholesale Research Tool",
@@ -174,7 +176,7 @@ function LandingNav() {
             Sign In
           </Link>
           <Link
-            href="/get-access"
+            href="#pricing"
             className="lp-btn-g lp-b rounded-xl px-5 py-2.5 text-sm font-bold text-black"
           >
             Start Free Trial
@@ -243,7 +245,7 @@ function HeroSection() {
         {/* CTAs */}
         <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
           <Link
-            href="/get-access"
+            href="#pricing"
             className="lp-btn-g lp-b inline-flex items-center gap-2.5 rounded-xl px-9 py-4 text-[15px] font-bold text-black"
           >
             Start Free Trial <span aria-hidden>→</span>
@@ -442,158 +444,6 @@ function HowItWorksSection() {
   );
 }
 
-// ── Pricing ───────────────────────────────────────────────────────────────────
-function PricingSection() {
-  const plans: Array<{
-    name: string;
-    price: string;
-    period: string;
-    desc: string;
-    features: string[];
-    cta: string;
-    href: string;
-    pro?: boolean;
-    badge?: string;
-  }> = [
-    {
-      name: "Free Trial",
-      price: "$0",
-      period: "no card needed",
-      desc: "Try before you commit.",
-      features: [
-        "10 product analyses",
-        "10 catalog searches",
-        "Live SP-API pricing & fees",
-        "BUY / PASS / WORTH UNGATING",
-        "Single-product manual search",
-      ],
-      cta: "Try Free",
-      href: "/get-access",
-    },
-    {
-      name: "Starter",
-      price: "$18.99",
-      period: "/ month",
-      desc: "Everything you need to source daily.",
-      features: [
-        "1,000 product analyses / month",
-        "3,000 catalog searches / month",
-        "1,200 keyword searches / month",
-        "BUY / PASS / WORTH UNGATING",
-        "Ungating opportunity scanner",
-        "Export to XLSX",
-      ],
-      cta: "Get Starter →",
-      href: "/get-access?plan=starter",
-    },
-    {
-      name: "Pro",
-      price: "$29.95",
-      period: "/ month",
-      desc: "High-volume sourcing at full power.",
-      features: [
-        "5,000 product analyses / month",
-        "20,000 catalog searches / month",
-        "1,500 bulk offer analyses / month",
-        "8,000 keyword searches / month",
-        "Bulk upload (200 rows per run)",
-        "Ungating opportunity scanner",
-        "Export to XLSX · Priority support",
-      ],
-      cta: "Get Pro →",
-      href: "/get-access?plan=pro",
-      pro: true,
-      badge: "Best Value",
-    },
-  ];
-
-  return (
-    <section className="px-6 py-24">
-      <div className="mx-auto max-w-6xl">
-        <ScrollReveal>
-          <Label>Pricing</Label>
-          <h2
-            className="lp-h mb-3 text-center text-white"
-            style={{ fontSize: "clamp(2rem, 5vw, 3.2rem)", fontStyle: "italic", fontWeight: 600 }}
-          >
-            Simple, honest pricing
-          </h2>
-          <p className="lp-b mx-auto mb-14 max-w-sm text-center text-slate-500">
-            Start free. Upgrade when you&apos;re ready to scale.
-          </p>
-        </ScrollReveal>
-
-        <div className="grid gap-6 sm:grid-cols-3">
-          {plans.map(({ name, price, period, desc, features, cta, href, pro, badge }, i) => (
-            <ScrollReveal key={name} delay={i * 90}>
-              <div
-                className={`relative flex h-full flex-col rounded-2xl p-8 ${pro ? "lp-pro-glow" : ""}`}
-                style={{
-                  background: pro
-                    ? `linear-gradient(160deg, rgba(201,168,76,0.11) 0%, rgba(201,168,76,0.04) 100%)`
-                    : CARD,
-                  border: `1px solid ${pro ? G_BORD : C_BORD}`,
-                }}
-              >
-                {/* "Most Popular" badge floats above the card */}
-                {badge && (
-                  <div className="absolute -top-4 left-0 right-0 flex justify-center">
-                    <span
-                      className="lp-b rounded-full px-4 py-1 text-[10px] font-bold uppercase tracking-[0.2em]"
-                      style={{ background: G, color: "#0a0800" }}
-                    >
-                      {badge}
-                    </span>
-                  </div>
-                )}
-
-                {/* Plan header */}
-                <div className="mb-6">
-                  <p
-                    className="lp-b mb-2 text-[10px] font-bold uppercase tracking-[0.24em]"
-                    style={{ color: pro ? G : "rgb(100 116 139)" }}
-                  >
-                    {name}
-                  </p>
-                  <div className="flex items-end gap-1.5">
-                    <span
-                      className="lp-h text-5xl font-bold leading-none text-white"
-                      style={{ fontStyle: "italic" }}
-                    >
-                      {price}
-                    </span>
-                    <span className="lp-b mb-1.5 text-sm text-slate-500">{period}</span>
-                  </div>
-                  <p className="lp-b mt-2 text-[13px] text-slate-500">{desc}</p>
-                </div>
-
-                {/* Features list */}
-                <ul className="mb-8 flex-1 space-y-3">
-                  {features.map((f) => (
-                    <li key={f} className="lp-b flex items-start gap-2.5 text-[13px]">
-                      <span className="mt-0.5 shrink-0" style={{ color: G }}>✓</span>
-                      <span className={pro ? "text-slate-300" : "text-slate-400"}>{f}</span>
-                    </li>
-                  ))}
-                </ul>
-
-                {/* CTA */}
-                <Link
-                  href={href}
-                  className={`lp-b block rounded-xl py-3.5 text-center text-sm font-bold transition ${
-                    pro ? "lp-btn-g text-black" : "lp-btn-o text-slate-300"
-                  }`}
-                >
-                  {cta}
-                </Link>
-              </div>
-            </ScrollReveal>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
 
 // ── Final CTA ─────────────────────────────────────────────────────────────────
 function CtaSection() {
@@ -628,10 +478,10 @@ function CtaSection() {
               </p>
               <div className="mt-9 flex flex-col items-center justify-center gap-4 sm:flex-row">
                 <Link
-                  href="/get-access"
+                  href="#pricing"
                   className="lp-btn-g lp-b inline-flex items-center gap-2.5 rounded-xl px-10 py-4 text-base font-bold text-black"
                 >
-                  Create Free Account →
+                  See Plans &amp; Get Started →
                 </Link>
                 <Link href="/login" className="lp-b text-sm text-slate-500 transition hover:text-slate-300">
                   Already have an account? Sign in
@@ -682,6 +532,15 @@ export default async function HomePage() {
   const session = await auth();
   if (session?.user?.id) redirect("/dashboard");
 
+  const subscriptionTrialDays = defaultTrialDays();
+  const starterPriceId    = process.env.STRIPE_PRICE_ID_STARTER?.trim() || process.env.STRIPE_PRICE_ID?.trim();
+  const proPriceId        = process.env.STRIPE_PRICE_ID_PRO?.trim();
+  const stripeConfigured  = Boolean(process.env.STRIPE_SECRET_KEY?.trim() && starterPriceId);
+  const proPlanEnabled    = Boolean(process.env.STRIPE_SECRET_KEY?.trim() && proPriceId);
+  const starterPriceDisplay = process.env.BILLING_PRICE_DISPLAY_STARTER?.trim() || process.env.BILLING_PRICE_DISPLAY?.trim() || "$18.99/month";
+  const proPriceDisplay   = process.env.BILLING_PRICE_DISPLAY_PRO?.trim() || "$29.95/month";
+  const subsPaused        = isSubscriptionsPaused();
+
   return (
     <div
       className={`${cormorant.variable} ${montserrat.variable} min-h-screen`}
@@ -693,7 +552,14 @@ export default async function HomePage() {
       <StatsBar />
       <FeaturesSection />
       <HowItWorksSection />
-      <PricingSection />
+      <LandingPricingSection
+        stripeConfigured={stripeConfigured}
+        proPlanEnabled={proPlanEnabled}
+        starterPriceDisplay={starterPriceDisplay}
+        proPriceDisplay={proPriceDisplay}
+        subscriptionsPaused={subsPaused}
+        subscriptionTrialDays={subscriptionTrialDays}
+      />
       <CtaSection />
       <LandingFooter />
     </div>
