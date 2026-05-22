@@ -128,6 +128,7 @@ async function planTierForUser(
 export async function consumeMonthlyUsage(
   userId: string,
   metric: UsageMetric,
+  count = 1,
 ): Promise<UsageCheckResult> {
   const { tier } = await planTierForUser(userId);
   const periodKey = monthKeyUtc();
@@ -150,25 +151,25 @@ export async function consumeMonthlyUsage(
   return prisma.$transaction(async (tx) => {
     const row = await tx.userMonthlyUsage.findUnique({ where: key });
     const used = row?.used ?? 0;
-    if (used >= limit) {
+    if (used + count > limit) {
       return {
         ok: false as const,
         metric,
         periodKey,
         tier,
         used,
-        remaining: 0,
+        remaining: Math.max(0, limit - used),
         limit,
       };
     }
-    const nextUsed = used + 1;
+    const nextUsed = used + count;
     await tx.userMonthlyUsage.upsert({
       where: key,
       create: {
         userId,
         periodKey,
         metric,
-        used: 1,
+        used: count,
         limit,
       },
       update: {

@@ -32,6 +32,7 @@ type OverviewResponse = {
     apiRequestsMonthToDate: number;
     estimatedMonthlyRevenueUsd: number;
     estimatesNote: string;
+    usageByMetric?: Record<string, number>;
   };
   health: {
     database: string;

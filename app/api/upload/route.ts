@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { userUploadLimit } from "@/lib/apiRateLimit";
-import { requireAppAccess } from "@/lib/billing/requireAppAccess";
+import { requireProBulkAccess } from "@/lib/billing/requireAppAccess";
 import { analyzeBatch } from "@/lib/analysis";
 import { parseSourcingFile } from "@/lib/upload-parser";
 import {
@@ -16,6 +16,7 @@ import {
   hasConnectedAmazonAccount,
 } from "@/lib/amazonAccount";
 import type { ProductInput } from "@/lib/types";
+import { consumeMonthlyUsage } from "@/lib/usageQuota";
 
 export const runtime = "nodejs";
 
@@ -23,7 +24,7 @@ const MAX_BATCH_SIZE = 200;
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
-    const gate = await requireAppAccess();
+    const gate = await requireProBulkAccess();
     if (!gate.ok) return gate.response;
 
     if (!(await userUploadLimit(gate.userId))) {
@@ -60,6 +61,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       sellerType,
       shippingCost,
     }));
+
+    // Charge analyze quota upfront for the whole batch.
+    const quota = await consumeMonthlyUsage(gate.userId, "analyze", batchInput.length);
+    if (!quota.ok) {
+      return NextResponse.json(
+        {
+          error: `Monthly analysis limit reached (${quota.limit} this month, ${quota.remaining} remaining). Wait until next month or upgrade your plan.`,
+          code: "QUOTA_EXCEEDED",
+        },
+        { status: 429 },
+      );
+    }
 
     // Bulk analysis requires a connected seller account (SP-API only).
     const hasAmazon = await hasConnectedAmazonAccount(gate.userId);
