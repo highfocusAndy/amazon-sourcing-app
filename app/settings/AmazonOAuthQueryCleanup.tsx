@@ -2,6 +2,7 @@
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect } from "react";
+import { trackAmazonConnectComplete } from "@/lib/analytics";
 
 /**
  * Strips Amazon OAuth callback query params from the URL with no UI.
@@ -16,6 +17,8 @@ export function AmazonOAuthQueryCleanup() {
     const connected = searchParams.get("amazon_connected");
     const err = searchParams.get("amazon_error");
     if (connected !== "1" && !err) return;
+
+    if (connected === "1") trackAmazonConnectComplete();
 
     const next = new URLSearchParams(searchParams.toString());
     if (connected === "1") next.delete("amazon_connected");

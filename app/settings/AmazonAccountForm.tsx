@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { trackAmazonConnectStart } from "@/lib/analytics";
 
 const BTN_PRIMARY =
   "w-fit rounded-xl bg-gradient-to-r from-teal-500 to-cyan-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-teal-500/25 hover:from-teal-400 hover:to-cyan-500 disabled:opacity-50 transition-all";
@@ -68,6 +69,7 @@ export function AmazonAccountForm({
       window.location.href = "/billing";
       return;
     }
+    trackAmazonConnectStart();
     window.location.href = "/api/amazon/oauth/start";
   }
 

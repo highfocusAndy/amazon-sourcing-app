@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { appDisplayName, appShortName } from "@/lib/appBranding";
 import { AuthSessionProvider } from "./components/AuthSessionProvider";
+import { GoogleAnalytics } from "./components/GoogleAnalytics";
 import { PwaRegister } from "./components/PwaRegister";
 import { publicSiteOrigin } from "@/lib/publicSiteUrl";
 
@@ -103,6 +104,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
          * never async/deferred by the framework.
          */}
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+        <GoogleAnalytics />
         <PwaRegister />
         <AuthSessionProvider>{children}</AuthSessionProvider>
       </body>

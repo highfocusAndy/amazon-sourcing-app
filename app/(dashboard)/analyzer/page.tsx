@@ -29,6 +29,16 @@ import { amazonSellerStorefrontUrl } from "@/lib/marketplaces";
 import { SellerListDialog, buildSellerModalState, type SellerModalState } from "@/app/components/SellerListDialog";
 import { appHeaderCompact, appHeaderSuffix } from "@/lib/appBranding";
 import type { ProductAnalysis, SellerType } from "@/lib/types";
+import {
+  trackProductSearch,
+  trackProductDetailView,
+  trackKeywordSearch,
+  trackBulkUploadStart,
+  trackBulkUploadComplete,
+  trackBarcodeScanOpen,
+  trackAiInsightView,
+  trackError,
+} from "@/lib/analytics";
 
 type SortColumn =
   | "inputIdentifier"
@@ -408,6 +418,12 @@ function AnalyzerPageContent() {
 
   const { llmInsight, llmLoading, llmError } = useProductAiInsight(selectedProduct, photoSearchAvailable);
 
+  useEffect(() => {
+    if (llmInsight) {
+      trackAiInsightView({ asin: selectedProduct?.asin });
+    }
+  }, [llmInsight, selectedProduct?.asin]);
+
   const openSellerModal = useCallback((e: MouseEvent<HTMLButtonElement>, filter: "all" | "FBA" | "FBM") => {
     setSellerModal(buildSellerModalState(e, filter));
   }, []);
@@ -739,12 +755,14 @@ function AnalyzerPageContent() {
         setSelectedProduct(null);
         setMobileDetailsOpen(false);
 
+        trackProductSearch({ identifier: effectiveIdentifier, lookup_only: lookupOnly });
         setInfoMessage(null);
         if (analysisResult.error) {
           setErrorMessage(analysisResult.error);
         }
         setLastRunMode("manual");
       } catch (error) {
+        trackError({ error_type: "manual_analysis", error_message: error instanceof Error ? error.message : undefined });
         setErrorMessage(error instanceof Error ? error.message : "Manual lookup failed.");
       } finally {
         setIsManualLoading(false);
@@ -1144,6 +1162,7 @@ function AnalyzerPageContent() {
     setSelectedProduct(item);
     setPopupQuantity("");
     setDetailPanelCost("");
+    trackProductDetailView({ asin: item.asin, decision: item.decision });
     setMobileDetailsOpen(true);
     if (item.asin && item.buyBoxPrice == null) {
       let settledRow: ProductAnalysis = item;
@@ -1254,6 +1273,7 @@ function AnalyzerPageContent() {
     setErrorMessage(null);
     setInfoMessage(isAutoRerun ? `Re-analyzing for ${selectedSellerType}...` : null);
     setIsUploadLoading(true);
+    trackBulkUploadStart({ file_name: file.name, seller_type: selectedSellerType });
 
     try {
       const formData = new FormData();
@@ -1293,6 +1313,11 @@ function AnalyzerPageContent() {
       } else {
         msg = `Analyzed ${analyzed} row${analyzed !== 1 ? "s" : ""}${total > 0 ? ` (up to ${maxBatch} per run)` : ""}.`;
       }
+      trackBulkUploadComplete({
+        analyzed_rows: analyzed,
+        valid_rows: valid,
+        total_rows: total,
+      });
       setInfoMessage(msg);
       setLastRunMode("upload");
       setMobileBulkOpen(false);
@@ -1302,6 +1327,7 @@ function AnalyzerPageContent() {
         setSelectedProduct(null);
       });
     } catch (error) {
+      trackError({ error_type: "bulk_upload", error_message: error instanceof Error ? error.message : undefined });
       setErrorMessage(error instanceof Error ? error.message : "Upload analysis failed.");
     } finally {
       setIsUploadLoading(false);
@@ -1330,6 +1356,7 @@ function AnalyzerPageContent() {
         throw new Error(json.error ?? "Keyword search failed.");
       }
       const analysisResults = json.results;
+      trackKeywordSearch({ keyword: effectiveKeyword, result_count: analysisResults.length });
       setResults(analysisResults);
       setLastRunMode("manual");
       setManualIdentifierResolved(false);
@@ -1553,6 +1580,7 @@ function AnalyzerPageContent() {
     const ok = await acquireScannerStream();
     if (ok) {
       setIsScannerOpen(true);
+      trackBarcodeScanOpen();
     } else {
       setScanPhase("idle");
     }

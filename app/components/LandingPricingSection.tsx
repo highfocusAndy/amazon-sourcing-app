@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ScrollReveal } from "@/app/components/ScrollReveal";
 import { signInAfterRegistration } from "@/lib/auth/signInAfterRegistration";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { trackCheckoutStart, trackSignupComplete } from "@/lib/analytics";
 
 const G      = "#C9A84C";
 const G_DIM  = "rgba(201,168,76,0.08)";
@@ -90,6 +91,7 @@ export function LandingPricingSection({
 
   function handlePlanClick(action: CheckoutAction) {
     if (loadingAction) return;
+    trackCheckoutStart({ plan: action });
     if (action === "trial" || action === "starter") {
       if (stripeConfigured && !subscriptionsPaused) void startStripe("starter", action);
       else setPromoOpen(true);
@@ -128,6 +130,7 @@ export function LandingPricingSection({
         promoCodeRef.current?.reportValidity();
         return;
       }
+      trackSignupComplete({ plan: "promo" });
       window.location.href = "/";
     } catch {
       promoCodeRef.current?.setCustomValidity("Something went wrong. Try again.");
