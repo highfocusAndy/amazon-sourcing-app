@@ -221,7 +221,7 @@ export function LandingPricingSection({
           )}
 
           <div className={`grid gap-6 ${buyerModeEnabled ? "sm:grid-cols-3" : "sm:grid-cols-2 mx-auto max-w-3xl w-full"}`}>
-            {plans.map(({ name, price, period, desc, features, cta, action, pro, badge, buyerPlan: isBuyerCard }, i) => (
+            {plans.map(({ name, price, period, desc, features, cta, action, pro = false, badge, buyerPlan: isBuyerCard }, i) => (
               <ScrollReveal key={name} delay={i * 90}>
                 <div
                   className={`relative flex h-full flex-col rounded-2xl p-8 ${pro ? "lp-pro-glow" : ""}`}
