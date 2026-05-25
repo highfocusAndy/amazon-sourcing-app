@@ -12,26 +12,24 @@ const G_BORD = "rgba(201,168,76,0.28)";
 const CARD   = "rgba(255,255,255,0.028)";
 const C_BORD = "rgba(255,255,255,0.065)";
 
-type CheckoutAction = "trial" | "starter" | "pro";
+type CheckoutAction = "trial" | "starter" | "pro" | "buyer";
 
 type Props = {
   stripeConfigured: boolean;
   proPlanEnabled: boolean;
-  starterPriceDisplay: string;
-  proPriceDisplay: string;
   subscriptionsPaused: boolean;
   subscriptionTrialDays: number;
+  buyerModeEnabled?: boolean;
 };
 
 export function LandingPricingSection({
   stripeConfigured,
   proPlanEnabled,
-  starterPriceDisplay,
-  proPriceDisplay,
   subscriptionsPaused,
   subscriptionTrialDays,
+  buyerModeEnabled = false,
 }: Props) {
-  const [loadingAction, setLoadingAction] = useState<CheckoutAction | null>(null);
+  const [navigating, setNavigating] = useState(false);
   const [promoOpen, setPromoOpen]         = useState(false);
   const [promoCode, setPromoCode]         = useState("");
   const [email, setEmail]                 = useState("");
@@ -74,30 +72,24 @@ export function LandingPricingSection({
     setPromoOpen(false);
   }, [promoLoading]);
 
-  const startStripe = useCallback(async (stripePlan: "starter" | "pro", action: CheckoutAction) => {
-    setLoadingAction(action);
-    try {
-      const res  = await fetch("/api/billing/checkout-guest", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ plan: stripePlan }),
-      });
-      const data = await res.json() as { url?: string; error?: string };
-      if (!res.ok || !data.url) { alert(data.error ?? "Could not start checkout."); return; }
-      window.location.href = data.url;
-    } catch { alert("Could not start checkout."); }
-    finally    { setLoadingAction(null); }
+  const startStripe = useCallback((stripePlan: "starter" | "pro") => {
+    window.location.href = `/billing?plan=${stripePlan}`;
   }, []);
 
   function handlePlanClick(action: CheckoutAction) {
-    if (loadingAction) return;
+    if (navigating) return;
+    setNavigating(true);
     trackCheckoutStart({ plan: action });
+    if (action === "buyer") {
+      window.location.href = "/register?mode=buyer";
+      return;
+    }
     if (action === "trial" || action === "starter") {
-      if (stripeConfigured && !subscriptionsPaused) void startStripe("starter", action);
-      else setPromoOpen(true);
+      if (stripeConfigured && !subscriptionsPaused) startStripe("starter");
+      else { setNavigating(false); setPromoOpen(true); }
     } else {
-      if (stripeConfigured && !subscriptionsPaused) void startStripe(proPlanEnabled ? "pro" : "starter", action);
-      else setPromoOpen(true);
+      if (stripeConfigured && !subscriptionsPaused) startStripe(proPlanEnabled ? "pro" : "starter");
+      else { setNavigating(false); setPromoOpen(true); }
     }
   }
 
@@ -138,26 +130,28 @@ export function LandingPricingSection({
     } finally { setPromoLoading(false); }
   };
 
-  const trialLabel = subscriptionTrialDays > 0 ? `${subscriptionTrialDays}-day free trial` : "free";
+  const trialLabel = subscriptionTrialDays > 0 ? `${subscriptionTrialDays}-day free trial` : "free trial";
 
-  const plans: Array<{
+  const buyerPlan = {
+    name: "Buyer", price: "$0", period: "/ forever",
+    desc: "Browse Amazon freely, no sourcing needed.",
+    features: [
+      "Unlimited Amazon browsing",
+      "All categories and filters",
+      "Best deals finder",
+      "No credit card required",
+    ],
+    cta: "Start Browsing Free →",
+    action: "buyer" as CheckoutAction,
+    badge: "Always Free",
+    buyerPlan: true,
+  };
+
+  const sellerPlans: Array<{
     name: string; price: string; period: string; desc: string;
     features: string[]; cta: string; action: CheckoutAction;
-    pro?: boolean; badge?: string;
+    pro?: boolean; badge?: string; buyerPlan?: boolean;
   }> = [
-    {
-      name: "Free Trial", price: "$0", period: trialLabel,
-      desc: "Try before you commit.",
-      features: [
-        "10 product analyses",
-        "10 catalog searches",
-        "Live SP-API pricing & fees",
-        "BUY / PASS / WORTH UNGATING",
-        "Single-product manual search",
-      ],
-      cta: subscriptionsPaused ? "Use promo code" : "Start Free Trial",
-      action: "trial",
-    },
     {
       name: "Starter", price: "$18.99", period: "/ month",
       desc: "Everything you need to source daily.",
@@ -169,8 +163,9 @@ export function LandingPricingSection({
         "Ungating opportunity scanner",
         "Export to XLSX",
       ],
-      cta: `Get Starter — ${starterPriceDisplay} →`,
+      cta: subscriptionsPaused ? "Use promo code" : `Start Free Trial`,
       action: "starter",
+      badge: trialLabel,
     },
     {
       name: "Pro", price: "$29.95", period: "/ month",
@@ -182,14 +177,17 @@ export function LandingPricingSection({
         "8,000 keyword searches / month",
         "Bulk upload (200 rows per run)",
         "Ungating opportunity scanner",
-        "Export to XLSX · Priority support",
+        "Export to XLSX",
+        "Priority support",
       ],
-      cta: `Get Pro — ${proPriceDisplay} →`,
+      cta: subscriptionsPaused ? "Use promo code" : `Start Free Trial`,
       action: "pro",
       pro: true,
-      badge: "Best Value",
+      badge: trialLabel,
     },
   ];
+
+  const plans = buyerModeEnabled ? [buyerPlan, ...sellerPlans] : sellerPlans;
 
   return (
     <>
@@ -222,16 +220,18 @@ export function LandingPricingSection({
             </div>
           )}
 
-          <div className="grid gap-6 sm:grid-cols-3">
-            {plans.map(({ name, price, period, desc, features, cta, action, pro, badge }, i) => (
+          <div className={`grid gap-6 ${buyerModeEnabled ? "sm:grid-cols-3" : "sm:grid-cols-2 mx-auto max-w-3xl w-full"}`}>
+            {plans.map(({ name, price, period, desc, features, cta, action, pro, badge, buyerPlan: isBuyerCard }, i) => (
               <ScrollReveal key={name} delay={i * 90}>
                 <div
                   className={`relative flex h-full flex-col rounded-2xl p-8 ${pro ? "lp-pro-glow" : ""}`}
                   style={{
                     background: pro
                       ? "linear-gradient(160deg, rgba(201,168,76,0.11) 0%, rgba(201,168,76,0.04) 100%)"
+                      : isBuyerCard
+                      ? "linear-gradient(160deg, rgba(201,168,76,0.05) 0%, rgba(0,168,224,0.04) 100%)"
                       : CARD,
-                    border: `1px solid ${pro ? G_BORD : C_BORD}`,
+                    border: `1px solid ${pro || isBuyerCard ? G_BORD : C_BORD}`,
                   }}
                 >
                   {badge && (
@@ -248,9 +248,9 @@ export function LandingPricingSection({
                   <div className="mb-6">
                     <p
                       className="lp-b mb-2 text-[10px] font-bold uppercase tracking-[0.24em]"
-                      style={{ color: pro ? G : "rgb(100 116 139)" }}
+                      style={{ color: pro || isBuyerCard ? G : "rgb(100 116 139)" }}
                     >
-                      {name}
+                      {isBuyerCard ? "🛍️" : pro ? "🚀" : "📦"} {name}
                     </p>
                     <div className="flex items-end gap-1.5">
                       <span className="lp-h text-5xl font-bold leading-none text-white" style={{ fontStyle: "italic" }}>
@@ -272,14 +272,25 @@ export function LandingPricingSection({
 
                   <button
                     type="button"
-                    disabled={loadingAction !== null}
+                    disabled={navigating}
                     onClick={() => handlePlanClick(action)}
                     className={`lp-b block w-full rounded-xl py-3.5 text-center text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-50 ${
-                      pro ? "lp-btn-g text-black" : "lp-btn-o text-slate-300"
+                      pro ? "lp-btn-g text-black" : isBuyerCard ? "lp-btn-g text-black" : "lp-btn-o text-slate-300"
                     }`}
                   >
-                    {loadingAction === action ? "Redirecting…" : cta}
+                    {cta}
                   </button>
+
+                  {(action === "starter" || action === "pro") && !subscriptionsPaused && (
+                    <p className="lp-b mt-2 text-center text-[11px] text-slate-600">
+                      14-day free trial · No charge until trial ends
+                    </p>
+                  )}
+                  {isBuyerCard && (
+                    <p className="lp-b mt-2 text-center text-[11px] text-slate-600">
+                      No credit card required
+                    </p>
+                  )}
                 </div>
               </ScrollReveal>
             ))}

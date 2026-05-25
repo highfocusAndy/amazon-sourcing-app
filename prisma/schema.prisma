@@ -26,6 +26,8 @@ model User {
   subscriptionStatus   String   @default("none")
   /// Selected paid plan: starter | pro (promo/trial users default to starter)
   subscriptionPlan     String   @default("starter")
+  /// App mode: 'buyer' (free PA-API catalog) | 'seller' (FBA analysis). Null = seller.
+  userMode             String?
   amazonAccount        AmazonAccount?
   explorerFilterSettings UserExplorerFilters?
   preferences          UserPreferences?

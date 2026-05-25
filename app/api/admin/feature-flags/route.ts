@@ -22,10 +22,16 @@ const DEFAULT_FLAGS: { key: string; label: string; description: string }[] = [
     description: "Use Product Advertising API for catalog search. When off, catalog uses SP-API.",
   },
   { key: "ff:analyzer_page", label: "Catalog Analyzer", description: "Enable the Analyzer / Explorer page" },
+  {
+    key: "ff:buyer_mode",
+    label: "Buyer Mode (PA-API)",
+    description: "Show buyer card on pricing, mode toggle in sidebar, and /buyer catalog page. Requires PA-API credentials. Default: OFF.",
+  },
 ];
 
 const FLAG_DEFAULTS: Record<string, boolean> = {
   "ff:pa_api_catalog": false,
+  "ff:buyer_mode": false,
 };
 
 export async function GET(): Promise<NextResponse> {

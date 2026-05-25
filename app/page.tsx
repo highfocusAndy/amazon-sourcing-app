@@ -5,6 +5,7 @@ import { Cormorant_Garamond, Montserrat } from "next/font/google";
 import { ScrollReveal } from "@/app/components/ScrollReveal";
 import { LandingPricingSection } from "@/app/components/LandingPricingSection";
 import { defaultTrialDays, isSubscriptionsPaused } from "@/lib/billing/access";
+import { isBuyerModeEnabled } from "@/lib/featureFlags";
 
 export const metadata = {
   title: "HIGH FOCUS Sourcing — Amazon FBA Wholesale Research Tool",
@@ -548,9 +549,8 @@ export default async function HomePage() {
   const proPriceId        = process.env.STRIPE_PRICE_ID_PRO?.trim();
   const stripeConfigured  = Boolean(process.env.STRIPE_SECRET_KEY?.trim() && starterPriceId);
   const proPlanEnabled    = Boolean(process.env.STRIPE_SECRET_KEY?.trim() && proPriceId);
-  const starterPriceDisplay = process.env.BILLING_PRICE_DISPLAY_STARTER?.trim() || process.env.BILLING_PRICE_DISPLAY?.trim() || "$18.99/month";
-  const proPriceDisplay   = process.env.BILLING_PRICE_DISPLAY_PRO?.trim() || "$29.95/month";
   const subsPaused        = isSubscriptionsPaused();
+  const buyerModeEnabled  = await isBuyerModeEnabled();
 
   return (
     <div
@@ -566,10 +566,9 @@ export default async function HomePage() {
       <LandingPricingSection
         stripeConfigured={stripeConfigured}
         proPlanEnabled={proPlanEnabled}
-        starterPriceDisplay={starterPriceDisplay}
-        proPriceDisplay={proPriceDisplay}
         subscriptionsPaused={subsPaused}
         subscriptionTrialDays={subscriptionTrialDays}
+        buyerModeEnabled={buyerModeEnabled}
       />
       <CtaSection />
       <LandingFooter />

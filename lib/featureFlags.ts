@@ -20,3 +20,8 @@ export async function getSystemConfigFlag(key: string, defaultValue = true): Pro
 export async function isPaApiCatalogEnabled(): Promise<boolean> {
   return getSystemConfigFlag("ff:pa_api_catalog", false);
 }
+
+/** When true, buyer mode is fully active: buyer card on pricing, mode toggle in sidebar, /buyer page live. Default: false. */
+export async function isBuyerModeEnabled(): Promise<boolean> {
+  return getSystemConfigFlag("ff:buyer_mode", false);
+}

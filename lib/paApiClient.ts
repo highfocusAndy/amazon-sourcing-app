@@ -488,6 +488,67 @@ export async function fetchCatalogItemsFromPaApi(
 }
 
 /**
+ * Extended catalog item returned by buyer-mode search — includes prime eligibility when available.
+ * Extends PaApiCatalogItem without modifying the shared interface.
+ */
+export interface BuyerCatalogItem extends PaApiCatalogItem {
+  isPrime?: boolean;
+}
+
+const BUYER_CATALOG_RESOURCES = [
+  ...CATALOG_ITEM_RESOURCES,
+  "offersV2.listings.deliveryInfo.isPrimeEligible",
+];
+
+function parseBuyerCatalogItems(json: unknown): BuyerCatalogItem[] {
+  const base = parseCatalogItems(json);
+  const rawItems = extractItemsArray(json);
+  return base.map((item, idx) => {
+    const raw = asObject(rawItems[idx]);
+    const offersV2 = asObject(getField(raw, ["offersV2", "OffersV2"]));
+    const offersLegacy = asObject(getField(raw, ["offers", "Offers"]));
+    const listingsRaw = getField(offersV2, ["listings", "Listings"]) ?? getField(offersLegacy, ["listings", "Listings"]);
+    const listings = Array.isArray(listingsRaw) ? listingsRaw : [];
+    let isPrime: boolean | undefined;
+    for (const listing of listings) {
+      const l = asObject(listing);
+      const deliveryInfo = asObject(getField(l, ["deliveryInfo", "DeliveryInfo"]));
+      const prime = getField(deliveryInfo, ["isPrimeEligible", "IsPrimeEligible"]);
+      if (typeof prime === "boolean") { isPrime = prime; break; }
+    }
+    return { ...item, isPrime };
+  });
+}
+
+/**
+ * Search Amazon catalog for buyer mode — supports sortBy and itemPage for pagination.
+ * Returns BuyerCatalogItem[] (same as PaApiCatalogItem + optional isPrime flag).
+ */
+export async function searchBuyerCatalog(options: {
+  keyword: string;
+  searchIndex?: string;
+  sortBy?: string;
+  maxResults?: number;
+  itemPage?: number;
+}): Promise<PaApiCallResult<{ items: BuyerCatalogItem[] }>> {
+  if (!isPaApiConfigured()) {
+    return { ok: false, error: "PA-API is not configured." };
+  }
+  const body: Record<string, unknown> = {
+    keywords: options.keyword.trim().slice(0, 250) || "best sellers",
+    searchIndex: options.searchIndex || "All",
+    itemCount: Math.min(10, Math.max(1, options.maxResults ?? 10)),
+    resources: BUYER_CATALOG_RESOURCES,
+  };
+  if (options.sortBy) body.sortBy = options.sortBy;
+  if (options.itemPage && options.itemPage > 1) body.itemPage = options.itemPage;
+
+  const json = await paApiPost(CREATORS_API_PATH_SEARCH_ITEMS, body);
+  if (!json.ok) return json;
+  return { ok: true, data: { items: parseBuyerCatalogItems(json.data) } };
+}
+
+/**
  * Search Amazon catalog by keyword via PA-API (no seller quota).
  * Returns lightweight results (ASIN, title, brand, image, price, BSR).
  * Returns null when PA-API is not configured.

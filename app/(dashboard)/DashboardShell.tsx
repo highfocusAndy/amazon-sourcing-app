@@ -63,12 +63,14 @@ function LeftNavWithCategories({
   onOpenSettings,
   onOpenAiChat,
   isOwner,
+  buyerModeEnabled,
 }: {
   mobileDrawerOpen: boolean;
   onCloseMobileMenu: () => void;
   onOpenSettings: () => void;
   onOpenAiChat: () => void;
   isOwner: boolean;
+  buyerModeEnabled?: boolean;
 }) {
   const pathname = usePathname();
   const ctx = useExplorerCategoryOptional();
@@ -318,6 +320,30 @@ function LeftNavWithCategories({
           <NavLink href="/subscribe" active={pathname === "/subscribe"} icon="◈" onNavigate={onCloseMobileMenu}>
             Plan & billing
           </NavLink>
+          {buyerModeEnabled && (
+            <div className="px-3 py-2">
+              <p className="mb-1.5 px-1 text-[9px] font-bold uppercase tracking-widest text-slate-600">Mode</p>
+              <div
+                className="flex h-8 overflow-hidden rounded-xl border"
+                style={{ borderColor: "rgba(201,168,76,0.25)" }}
+              >
+                <span
+                  className="flex flex-1 items-center justify-center text-[11px] font-semibold"
+                  style={{ background: "rgba(201,168,76,0.13)", color: "#C9A84C" }}
+                >
+                  📦 Seller
+                </span>
+                <div className="w-px shrink-0" style={{ background: "rgba(201,168,76,0.25)" }} />
+                <Link
+                  href="/buyer"
+                  onClick={() => onCloseMobileMenu()}
+                  className="flex flex-1 items-center justify-center text-[11px] font-medium text-slate-500 transition-colors hover:bg-slate-700/60 hover:text-slate-300"
+                >
+                  🛍️ Buyer
+                </Link>
+              </div>
+            </div>
+          )}
           {isOwner && (
             <NavLink href="/admin" active={pathname.startsWith("/admin")} icon="⚡" onNavigate={onCloseMobileMenu}>
               Admin
@@ -383,7 +409,7 @@ function MobileMenuOpenButton({ onClick, menuOpen }: { onClick: () => void; menu
   );
 }
 
-export function DashboardShell({ children, isOwner = false }: { children: React.ReactNode; isOwner?: boolean }) {
+export function DashboardShell({ children, isOwner = false, buyerModeEnabled = false }: { children: React.ReactNode; isOwner?: boolean; buyerModeEnabled?: boolean; userMode?: string | null }) {
   const pathname = usePathname();
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [mobileDrawerPathname, setMobileDrawerPathname] = useState(pathname);
@@ -464,6 +490,7 @@ export function DashboardShell({ children, isOwner = false }: { children: React.
               onOpenSettings={() => setSettingsModalOpen(true)}
               onOpenAiChat={() => setAiChatOpen(true)}
               isOwner={isOwner}
+              buyerModeEnabled={buyerModeEnabled}
             />
             <div id="app-main-content" className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">{children}</div>
             {!mobileDrawerVisible && !pathname.startsWith("/analyzer") ? (

@@ -18,7 +18,9 @@ export default auth((req) => {
     path.startsWith("/get-access") ||
     path.startsWith("/reset-password") ||
     path.startsWith("/terms") ||
-    path.startsWith("/privacy");
+    path.startsWith("/privacy") ||
+    path.startsWith("/billing") ||
+    path.startsWith("/register");
   /** Crawlers must read these without a session (avoid redirect to /login). */
   const isSeoMetadataRoute = path === "/sitemap.xml" || path === "/robots.txt";
   /** PWA: manifest + service worker must not 302 to login (install / audits). */
