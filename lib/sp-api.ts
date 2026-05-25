@@ -421,6 +421,96 @@ export async function fetchOffersForAsin(asin: string): Promise<OffersBasics> {
   return extractOffersBasics(offers);
 }
 
+export interface SpApiBuyerItem {
+  asin: string;
+  title: string;
+  brand: string;
+  imageUrl: string | null;
+  price: number | null;
+  salesRank: number | null;
+  salesRankCategory: string | null;
+  affiliateUrl: string | null;
+  starRating: number | null;
+  reviewCount: number | null;
+  isPrime?: boolean;
+}
+
+export async function searchBuyerCatalogSpApi(options: {
+  keyword: string;
+  maxResults?: number;
+  pageToken?: string;
+}): Promise<{ ok: true; data: { items: SpApiBuyerItem[]; nextToken?: string } } | { ok: false; error: string }> {
+  const env = getServerEnv();
+  const query: Record<string, string> = {
+    marketplaceIds: env.marketplaceId,
+    keywords: options.keyword,
+    includedData: "summaries,images,salesRanks",
+    pageSize: String(Math.min(options.maxResults ?? 10, 20)),
+  };
+  if (options.pageToken) query.pageToken = options.pageToken;
+
+  try {
+    const response = await spApiRequest<unknown>("GET", "/catalog/2022-04-01/items", { query });
+    const root = asObject(response);
+    const items = asArray(root?.items);
+    const nextToken = readString(root?.nextToken) ?? undefined;
+
+    const mapped: SpApiBuyerItem[] = items.map((raw) => {
+      const item = asObject(raw);
+      const asin = readString(item?.asin) ?? "";
+
+      const summaries = asArray(item?.summaries);
+      const summary = asObject(summaries[0]);
+      const title = readString(summary?.itemName) ?? readString(summary?.itemClassificationName) ?? "";
+      const brand = readString(summary?.brandName) ?? "";
+
+      const imageGroups = asArray(item?.images);
+      let imageUrl: string | null = null;
+      for (const groupRaw of imageGroups) {
+        const group = asObject(groupRaw);
+        const images = asArray(group?.images);
+        for (const imgRaw of images) {
+          const img = asObject(imgRaw);
+          if (readString(img?.variant) === "MAIN") {
+            imageUrl = readString(img?.link);
+            break;
+          }
+        }
+        if (imageUrl) break;
+      }
+
+      const salesRanks = asArray(item?.salesRanks);
+      let salesRank: number | null = null;
+      let salesRankCategory: string | null = null;
+      for (const sgRaw of salesRanks) {
+        const sg = asObject(sgRaw);
+        const classRanks = asArray(sg?.classificationRanks);
+        const dispRanks = asArray(sg?.displayGroupRanks);
+        const merged = classRanks.length > 0 ? classRanks : dispRanks;
+        for (const rankRaw of merged) {
+          const rankObj = asObject(rankRaw);
+          const rank = readNumber(rankObj?.rank);
+          if (rank !== null) {
+            salesRank = rank;
+            salesRankCategory = readString(rankObj?.title) ?? readString(rankObj?.displayName) ?? null;
+            break;
+          }
+        }
+        if (salesRank !== null) break;
+      }
+
+      const partnerTag = process.env.PA_API_PARTNER_TAG ?? "";
+      const affiliateUrl = `https://www.amazon.com/dp/${asin}${partnerTag ? `?tag=${partnerTag}` : ""}`;
+
+      return { asin, title, brand, imageUrl, price: null, salesRank, salesRankCategory, affiliateUrl, starRating: null, reviewCount: null };
+    }).filter((i) => i.asin !== "");
+
+    return { ok: true, data: { items: mapped, nextToken } };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "SP-API catalog search failed" };
+  }
+}
+
 export async function fetchFeePreviewForAsin(
   asin: string,
   buyBoxPrice: number,

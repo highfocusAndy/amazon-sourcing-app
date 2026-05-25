@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { isBuyerModeEnabled } from "@/lib/featureFlags";
 import { searchBuyerCatalog } from "@/lib/paApiClient";
+import { searchBuyerCatalogSpApi } from "@/lib/sp-api";
 import { prisma } from "@/lib/db";
 
 export const runtime = "nodejs";
@@ -60,13 +61,19 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
   } catch { /* ignore cache errors */ }
 
-  const result = await searchBuyerCatalog({
+  let result = await searchBuyerCatalog({
     keyword: effectiveKeyword,
     searchIndex,
     sortBy,
     maxResults: 10,
     itemPage: page,
   });
+
+  if (!result.ok && result.error.includes("not configured")) {
+    const spResult = await searchBuyerCatalogSpApi({ keyword: effectiveKeyword, maxResults: 10 });
+    if (!spResult.ok) return NextResponse.json({ error: spResult.error }, { status: 502 });
+    result = { ok: true, data: { items: spResult.data.items } };
+  }
 
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: 502 });
