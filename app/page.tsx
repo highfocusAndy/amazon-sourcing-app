@@ -456,57 +456,6 @@ function HowItWorksSection() {
   );
 }
 
-
-// ── Final CTA ─────────────────────────────────────────────────────────────────
-function CtaSection() {
-  return (
-    <section className="px-6 py-24">
-      <div className="mx-auto max-w-4xl">
-        <ScrollReveal>
-          <div
-            className="lp-grid-bg relative overflow-hidden rounded-3xl px-8 py-20 text-center"
-            style={{
-              background: `linear-gradient(160deg, rgba(201,168,76,0.09) 0%, rgba(201,168,76,0.03) 100%)`,
-              border: `1px solid ${G_BORD}`,
-            }}
-          >
-            {/* Ambient glow */}
-            <div
-              className="pointer-events-none absolute inset-x-0 top-0 h-72"
-              style={{
-                background: "radial-gradient(ellipse 80% 60% at 50% -15%, rgba(201,168,76,0.24), transparent 60%)",
-              }}
-              aria-hidden
-            />
-            <div className="relative z-10">
-              <h2
-                className="lp-h text-white"
-                style={{ fontSize: "clamp(2rem, 5vw, 3.5rem)", fontStyle: "italic", fontWeight: 600 }}
-              >
-                Start sourcing smarter today
-              </h2>
-              <p className="lp-b mx-auto mt-5 max-w-md text-slate-400">
-                14-day free trial. No credit card. Your first upload takes less than 60 seconds.
-              </p>
-              <div className="mt-9 flex flex-col items-center justify-center gap-4 sm:flex-row">
-                <Link
-                  href="#pricing"
-                  className="lp-btn-g lp-b inline-flex items-center gap-2.5 rounded-xl px-10 py-4 text-base font-bold text-black"
-                >
-                  See Plans &amp; Get Started →
-                </Link>
-                <Link href="/login" className="lp-b text-sm text-slate-500 transition hover:text-slate-300">
-                  Already have an account? Sign in
-                </Link>
-              </div>
-            </div>
-          </div>
-        </ScrollReveal>
-      </div>
-    </section>
-  );
-}
-
 // ── Footer ────────────────────────────────────────────────────────────────────
 function LandingFooter() {
   return (
@@ -570,7 +519,6 @@ export default async function HomePage() {
         subscriptionTrialDays={subscriptionTrialDays}
         buyerModeEnabled={buyerModeEnabled}
       />
-      <CtaSection />
       <LandingFooter />
     </div>
   );
