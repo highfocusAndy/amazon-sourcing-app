@@ -226,7 +226,7 @@ function HeroSection() {
         </div>
 
         {/* Badge */}
-        <Label>Professional Sourcing Platform</Label>
+        <Label>Amazon FBA Wholesale Intelligence</Label>
 
         {/* Headline */}
         <h1
