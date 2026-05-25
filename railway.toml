@@ -1,7 +1,8 @@
 # Deploy on https://railway.app — attach a volume at /data for SQLite (see DEPLOY.md).
 [build]
-builder = "NIXPACKS"
+builder = "DOCKERFILE"
 
 [deploy]
-# Ensure volume mount path exists before Prisma writes SQLite (see DEPLOY.md).
+# Secrets are runtime-only env vars injected by Railway — they are NOT baked into the image.
+# mkdir -p /data ensures the volume mount point exists before Prisma writes SQLite.
 startCommand = "mkdir -p /data && npm run start:deploy"
