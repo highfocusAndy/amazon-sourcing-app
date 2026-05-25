@@ -144,6 +144,7 @@ export function LandingPricingSection({
     cta: "Start Browsing Free →",
     action: "buyer" as CheckoutAction,
     badge: "Always Free",
+    pro: false,
     buyerPlan: true,
   };
 
