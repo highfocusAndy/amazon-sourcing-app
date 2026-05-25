@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Cormorant_Garamond, Montserrat } from "next/font/google";
 import { ScrollReveal } from "@/app/components/ScrollReveal";
 import { LandingPricingSection } from "@/app/components/LandingPricingSection";
+import { PromoCodeNavButton } from "@/app/components/PromoCodeNavButton";
 import { defaultTrialDays, isSubscriptionsPaused } from "@/lib/billing/access";
 import { isBuyerModeEnabled } from "@/lib/featureFlags";
 
@@ -163,7 +164,7 @@ function LandingNav() {
       <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
         <div className="flex items-center gap-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/HF_LOGO.png" alt="HIGH FOCUS" className="h-8 w-8 rounded-lg object-contain" style={{ filter: "invert(1) sepia(1) saturate(1.6) hue-rotate(5deg) brightness(0.92)" }} />
+          <img src="/HF_LOGO.png" alt="HIGH FOCUS" className="h-11 w-11 rounded-lg object-contain" style={{ filter: "invert(1) sepia(1) saturate(1.6) hue-rotate(5deg) brightness(0.92)" }} />
           <span className="lp-h text-[17px] font-semibold tracking-tight text-white">
             HIGH FOCUS{" "}
             <span className="lp-b text-[11px] font-medium uppercase tracking-[0.22em]" style={{ color: G }}>
@@ -173,6 +174,7 @@ function LandingNav() {
         </div>
 
         <div className="flex items-center gap-4">
+          <PromoCodeNavButton />
           <Link href="/login" className="lp-b text-sm font-medium text-slate-400 transition hover:text-white">
             Sign In
           </Link>
@@ -241,38 +243,6 @@ function HeroSection() {
           <br />
           <span className="lp-gold-text">At Scale.</span>
         </h1>
-
-        {/* Body */}
-        <p
-          className="lp-b mx-auto mt-8 max-w-2xl leading-relaxed text-slate-400"
-          style={{ fontSize: "1.075rem" }}
-        >
-          Upload your wholesale file. Pull{" "}
-          <span className="font-semibold text-slate-200">live Amazon SP-API data</span> — Buy Box
-          prices, FBA fees, competition, and restrictions. Get a{" "}
-          <span className="font-semibold text-slate-200">color-coded BUY / PASS decision</span>{" "}
-          for every product in minutes.
-        </p>
-
-        {/* CTAs */}
-        <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
-          <Link
-            href="#pricing"
-            className="lp-btn-g lp-b inline-flex items-center gap-2.5 rounded-xl px-9 py-4 text-[15px] font-bold text-black"
-          >
-            Start Free Trial <span aria-hidden>→</span>
-          </Link>
-          <Link
-            href="/login"
-            className="lp-btn-o lp-b inline-flex items-center gap-2.5 rounded-xl px-9 py-4 text-[15px] font-semibold text-slate-300"
-          >
-            Sign In
-          </Link>
-        </div>
-
-        <p className="lp-b mt-5 text-[13px]" style={{ color: "rgba(148,163,184,0.55)" }}>
-          No credit card required · 14-day free trial
-        </p>
 
         {/* Decision badges */}
         <div className="mt-14 flex flex-wrap justify-center gap-2.5">
