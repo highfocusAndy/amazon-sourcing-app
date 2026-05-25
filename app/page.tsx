@@ -239,9 +239,9 @@ function HeroSection() {
             letterSpacing: "-0.02em",
           }}
         >
-          Find Profitable Products.
+          Source with Certainty.
           <br />
-          <span className="lp-gold-text">At Scale.</span>
+          <span className="lp-gold-text">Win on Amazon.</span>
         </h1>
 
         {/* Body */}
