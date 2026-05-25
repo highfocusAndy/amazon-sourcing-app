@@ -244,6 +244,19 @@ function HeroSection() {
           <span className="lp-gold-text">At Scale.</span>
         </h1>
 
+        {/* Body */}
+        <p
+          className="lp-b mx-auto mt-8 max-w-2xl leading-relaxed text-slate-400"
+          style={{ fontSize: "1.075rem" }}
+        >
+          Search any product, upload a supplier list, or explore Amazon categories — all in one tool.
+          Every item is enriched with{" "}
+          <span className="font-semibold text-slate-200">live SP-API data</span>: Buy Box price, FBA
+          fees, competition, and restrictions. Walk away with a{" "}
+          <span className="font-semibold text-slate-200">clear BUY / PASS / WORTH UNGATING verdict</span>{" "}
+          and exact profit numbers for every product.
+        </p>
+
         {/* Decision badges */}
         <div className="mt-14 flex flex-wrap justify-center gap-2.5">
           {[
