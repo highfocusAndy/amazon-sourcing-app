@@ -249,12 +249,14 @@ function HeroSection() {
           className="lp-b mx-auto mt-8 max-w-2xl leading-relaxed text-slate-400"
           style={{ fontSize: "1.075rem" }}
         >
-          Search any product, upload a supplier list, or explore Amazon categories — all in one tool.
-          Every item is enriched with{" "}
-          <span className="font-semibold text-slate-200">live SP-API data</span>: Buy Box price, FBA
-          fees, competition, and restrictions. Walk away with a{" "}
-          <span className="font-semibold text-slate-200">clear BUY / PASS / WORTH UNGATING verdict</span>{" "}
-          and exact profit numbers for every product.
+          Stop guessing. Browse{" "}
+          <span className="font-semibold text-slate-200">Amazon categories by keyword</span>, analyze
+          single products, or drop your entire supplier list — and get{" "}
+          <span className="font-semibold text-slate-200">live Buy Box prices, FBA fees, competition scores,
+          and profit margins</span>{" "}
+          in seconds. Every product comes back with a decisive{" "}
+          <span className="font-semibold text-slate-200">BUY · PASS · WORTH UNGATING</span> verdict
+          so you source with confidence, not spreadsheets.
         </p>
 
         {/* Decision badges */}
