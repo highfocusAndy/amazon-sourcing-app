@@ -420,7 +420,7 @@ function AnalyzerPageContent() {
 
   useEffect(() => {
     if (llmInsight) {
-      trackAiInsightView({ asin: selectedProduct?.asin });
+      trackAiInsightView({ asin: selectedProduct?.asin ?? undefined });
     }
   }, [llmInsight, selectedProduct?.asin]);
 
