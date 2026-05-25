@@ -164,7 +164,7 @@ function LandingNav() {
       <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
         <div className="flex items-center gap-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/HF_LOGO.png" alt="HIGH FOCUS" className="h-14 w-14 rounded-lg object-contain" style={{ filter: "invert(1) sepia(1) saturate(1.6) hue-rotate(5deg) brightness(0.92)" }} />
+          <img src="/HF_LOGO.png" alt="HIGH FOCUS" className="h-16 w-16 rounded-lg object-contain" style={{ filter: "invert(1) sepia(1) saturate(1.6) hue-rotate(5deg) brightness(0.92)" }} />
           <span className="lp-h text-[17px] font-semibold tracking-tight text-white">
             HIGH FOCUS{" "}
             <span className="lp-b text-[11px] font-medium uppercase tracking-[0.22em]" style={{ color: G }}>
