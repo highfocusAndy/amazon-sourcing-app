@@ -115,7 +115,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       ? await analyzeProduct(input, await getSpApiClientForUser(gate.userId))
       : usePaApi
         ? await analyzeProductPublicOnly(input)
-        : await analyzeProduct(input, await getSpApiClientForUserOrGlobal(gate.userId));
+        : await analyzeProduct(input, await getSpApiClientForUserOrGlobal(gate.userId), { skipRestrictions: true });
 
     return NextResponse.json({
       ok: !result.error,

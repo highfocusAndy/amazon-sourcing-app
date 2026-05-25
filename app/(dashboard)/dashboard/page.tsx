@@ -1089,6 +1089,7 @@ const handleProductClick = useCallback(
               onProjectedMonthlyUnitsChange={setProjectedMonthlyUnits}
               openSellerModal={openSellerModal}
               variationDetail="explorer"
+              amazonConnected={amazonHeaderConnected}
             />
           )}
             </div>

@@ -1736,6 +1736,7 @@ function AnalyzerPageContent() {
         onProjectedMonthlyUnitsChange={setProjectedMonthlyUnits}
         openSellerModal={openSellerModal}
         variationDetail="analyzer"
+        amazonConnected={amazonHeaderConnected}
       >
         <ProductInsightBlurb
           product={selectedProduct}

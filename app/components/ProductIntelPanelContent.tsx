@@ -143,6 +143,8 @@ export type ProductIntelPanelContentProps = {
   openSellerModal: (e: MouseEvent<HTMLButtonElement>, filter: "all" | "FBA" | "FBM") => void;
   /** Analyzer shows an extra hint when scan identified a variation type */
   variationDetail?: "explorer" | "analyzer";
+  /** Whether the user has a connected Amazon seller account. When false, gating data is hidden. */
+  amazonConnected?: boolean;
   /** Optional content after structured sections (e.g. legacy ProductInsightBlurb) */
   children?: ReactNode;
 };
@@ -160,6 +162,7 @@ export function ProductIntelPanelContent({
   onProjectedMonthlyUnitsChange,
   openSellerModal,
   variationDetail = "explorer",
+  amazonConnected = true,
   children,
 }: ProductIntelPanelContentProps) {
   const competitionThresholds = useCompetitionThresholds();
@@ -350,29 +353,35 @@ export function ProductIntelPanelContent({
 
         <div className={HF_INNER_CARD_STATIC}>
           <p className={HF_KPI_LABEL}>Gated / eligible</p>
-          <div className="mt-1.5 flex flex-wrap gap-1.5">
-            {approvalRequiredEffective(selectedProduct) ? (
-              <span className="rounded-full border border-amber-400/35 bg-amber-950/50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_0_16px_-8px_rgba(251,191,36,0.2)] ring-1 ring-inset ring-amber-400/12">
-                Approval required
-              </span>
-            ) : selectedProduct.approvalRequired === false ? (
-              <span className="rounded-full border border-white/12 bg-slate-950/50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-300 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-                No approval required
-              </span>
-            ) : null}
-            {selectedProduct.listingRestricted === true ? (
-              <span className="rounded-full border border-amber-400/35 bg-amber-950/50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_0_16px_-8px_rgba(251,191,36,0.2)] ring-1 ring-inset ring-amber-400/12">
-                Listing restricted
-              </span>
-            ) : selectedProduct.listingRestricted === false ? (
-              <span className="rounded-full border border-white/12 bg-slate-950/50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-300 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-                Not restricted
-              </span>
-            ) : null}
-            {approvalEligibilityUnset(selectedProduct) && selectedProduct.listingRestricted == null ? (
-              <span className="text-[11px] text-slate-500">—</span>
-            ) : null}
-          </div>
+          {!amazonConnected ? (
+            <p className="mt-1.5 text-[11px] text-slate-500">
+              Connect your Amazon account to check your eligibility.
+            </p>
+          ) : (
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {approvalRequiredEffective(selectedProduct) ? (
+                <span className="rounded-full border border-amber-400/35 bg-amber-950/50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_0_16px_-8px_rgba(251,191,36,0.2)] ring-1 ring-inset ring-amber-400/12">
+                  Approval required
+                </span>
+              ) : selectedProduct.approvalRequired === false ? (
+                <span className="rounded-full border border-white/12 bg-slate-950/50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-300 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+                  No approval required
+                </span>
+              ) : null}
+              {selectedProduct.listingRestricted === true ? (
+                <span className="rounded-full border border-amber-400/35 bg-amber-950/50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_0_16px_-8px_rgba(251,191,36,0.2)] ring-1 ring-inset ring-amber-400/12">
+                  Listing restricted
+                </span>
+              ) : selectedProduct.listingRestricted === false ? (
+                <span className="rounded-full border border-white/12 bg-slate-950/50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-300 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+                  Not restricted
+                </span>
+              ) : null}
+              {approvalEligibilityUnset(selectedProduct) && selectedProduct.listingRestricted == null ? (
+                <span className="text-[11px] text-slate-500">—</span>
+              ) : null}
+            </div>
+          )}
         </div>
       </IntelSection>
 
