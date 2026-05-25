@@ -245,7 +245,16 @@ export function LandingPricingSection({
 
           {/* Footer links */}
           <ScrollReveal delay={270}>
-            <div className="mt-10 flex flex-wrap justify-center gap-x-4 gap-y-1 text-[12px] text-slate-600">
+            <div className="mt-10 flex flex-col items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setPromoOpen(true)}
+                className="lp-b sm:hidden rounded-xl border px-6 py-3 text-sm font-semibold text-slate-300 transition hover:border-amber-500/50 hover:bg-amber-950/20 hover:text-amber-200"
+                style={{ borderColor: C_BORD }}
+              >
+                Have a promo / invite code?
+              </button>
+            <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-[12px] text-slate-600">
               <Link href="/login" className="transition hover:text-slate-400">Already have an account? Sign in</Link>
               <span aria-hidden>·</span>
               <Link href="/signup/recover" className="transition hover:text-slate-400">Finish paid signup</Link>
@@ -253,6 +262,7 @@ export function LandingPricingSection({
               <Link href="/terms" className="transition hover:text-slate-400">Terms of Service</Link>
               <span aria-hidden>·</span>
               <Link href="/privacy" className="transition hover:text-slate-400">Privacy Policy</Link>
+            </div>
             </div>
           </ScrollReveal>
         </div>
