@@ -382,18 +382,18 @@ function HowItWorksSection() {
   const steps = [
     {
       n: "01",
-      title: "Upload Your List",
-      desc: "Drag and drop your supplier's file — Excel or CSV. Column headers are detected automatically, even with non-standard naming.",
+      title: "Find Your Products",
+      desc: "Browse Amazon by keyword or category in the Explorer, scan a single ASIN or barcode in the Analyzer, or drop your entire supplier list for bulk processing — your call.",
     },
     {
       n: "02",
-      title: "We Fetch the Data",
-      desc: "For every row, SP-API fires: catalog lookup, live pricing, FBA fee preview, offer count, and listing restrictions — all in parallel.",
+      title: "Get Live Amazon Data",
+      desc: "Every product is instantly enriched via SP-API: real Buy Box price, FBA fee breakdown, offer count, BSR, competition score, and listing restrictions.",
     },
     {
       n: "03",
-      title: "Make Your Move",
-      desc: "Get a color-coded dashboard and exportable spreadsheet. Every product shows profit, ROI, competition level, and a clear verdict.",
+      title: "Source with Confidence",
+      desc: "Walk away with exact profit, ROI, and a clear BUY · PASS · WORTH UNGATING verdict for every product — no guesswork, no spreadsheet math.",
     },
   ];
 
@@ -408,7 +408,7 @@ function HowItWorksSection() {
             className="lp-h mb-16 text-center text-white"
             style={{ fontSize: "clamp(2rem, 5vw, 3.2rem)", fontStyle: "italic", fontWeight: 600 }}
           >
-            Three steps from upload to decision
+            Three steps from search to profit
           </h2>
         </ScrollReveal>
 
