@@ -1162,7 +1162,7 @@ function AnalyzerPageContent() {
     setSelectedProduct(item);
     setPopupQuantity("");
     setDetailPanelCost("");
-    trackProductDetailView({ asin: item.asin, decision: item.decision });
+    trackProductDetailView({ asin: item.asin ?? undefined, decision: item.decision ?? undefined });
     setMobileDetailsOpen(true);
     if (item.asin && item.buyBoxPrice == null) {
       let settledRow: ProductAnalysis = item;
