@@ -130,9 +130,31 @@ export function LandingPricingSection({
     } finally { setPromoLoading(false); }
   };
 
-  const trialLabel = subscriptionTrialDays > 0 ? `${subscriptionTrialDays}-day free trial` : "free trial";
+  const trialLabel = subscriptionTrialDays > 0 ? `${subscriptionTrialDays}-day free trial` : "free";
 
-  const buyerPlan = {
+  type Plan = {
+    name: string; price: string; period: string; desc: string;
+    features: string[]; cta: string; action: CheckoutAction;
+    pro: boolean; badge?: string; buyerPlan: boolean;
+  };
+
+  const freeTrialPlan: Plan = {
+    name: "Free Trial", price: "$0", period: trialLabel,
+    desc: "Try before you commit.",
+    features: [
+      "10 product analyses",
+      "10 catalog searches",
+      "Live SP-API pricing & fees",
+      "BUY / PASS / WORTH UNGATING",
+      "Single-product manual search",
+    ],
+    cta: subscriptionsPaused ? "Use promo code" : "Start Free Trial",
+    action: "trial",
+    pro: false,
+    buyerPlan: false,
+  };
+
+  const buyerPlan: Plan = {
     name: "Buyer", price: "$0", period: "/ forever",
     desc: "Browse Amazon freely, no sourcing needed.",
     features: [
@@ -142,17 +164,13 @@ export function LandingPricingSection({
       "No credit card required",
     ],
     cta: "Start Browsing Free →",
-    action: "buyer" as CheckoutAction,
+    action: "buyer",
     badge: "Always Free",
     pro: false,
     buyerPlan: true,
   };
 
-  const sellerPlans: Array<{
-    name: string; price: string; period: string; desc: string;
-    features: string[]; cta: string; action: CheckoutAction;
-    pro?: boolean; badge?: string; buyerPlan?: boolean;
-  }> = [
+  const sellerPlans: Plan[] = [
     {
       name: "Starter", price: "$18.99", period: "/ month",
       desc: "Everything you need to source daily.",
@@ -164,9 +182,11 @@ export function LandingPricingSection({
         "Ungating opportunity scanner",
         "Export to XLSX",
       ],
-      cta: subscriptionsPaused ? "Use promo code" : `Start Free Trial`,
+      cta: subscriptionsPaused ? "Use promo code" : "Start Free Trial →",
       action: "starter",
       badge: trialLabel,
+      pro: false,
+      buyerPlan: false,
     },
     {
       name: "Pro", price: "$29.95", period: "/ month",
@@ -181,14 +201,17 @@ export function LandingPricingSection({
         "Export to XLSX",
         "Priority support",
       ],
-      cta: subscriptionsPaused ? "Use promo code" : `Start Free Trial`,
+      cta: subscriptionsPaused ? "Use promo code" : "Start Free Trial →",
       action: "pro",
       pro: true,
       badge: trialLabel,
+      buyerPlan: false,
     },
   ];
 
-  const plans = buyerModeEnabled ? [buyerPlan, ...sellerPlans] : sellerPlans;
+  // Buyer mode ON: 4 cards — Buyer + Free Trial + Starter + Pro.
+  // Buyer mode OFF: original 3 cards — Free Trial + Starter + Pro.
+  const plans = buyerModeEnabled ? [buyerPlan, freeTrialPlan, ...sellerPlans] : [freeTrialPlan, ...sellerPlans];
 
   return (
     <>
@@ -221,8 +244,8 @@ export function LandingPricingSection({
             </div>
           )}
 
-          <div className={`grid gap-6 ${buyerModeEnabled ? "sm:grid-cols-3" : "sm:grid-cols-2 mx-auto max-w-3xl w-full"}`}>
-            {plans.map(({ name, price, period, desc, features, cta, action, pro = false, badge, buyerPlan: isBuyerCard }, i) => (
+          <div className={`grid gap-6 ${buyerModeEnabled ? "sm:grid-cols-4" : "sm:grid-cols-3"}`}>
+            {plans.map(({ name, price, period, desc, features, cta, action, pro, badge, buyerPlan: isBuyerCard }, i) => (
               <ScrollReveal key={name} delay={i * 90}>
                 <div
                   className={`relative flex h-full flex-col rounded-2xl p-8 ${pro ? "lp-pro-glow" : ""}`}
