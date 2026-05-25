@@ -164,25 +164,26 @@ function LandingNav() {
       <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
         <div className="flex items-center gap-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/HF_LOGO.png" alt="HIGH FOCUS" className="h-16 w-16 rounded-lg object-contain" style={{ filter: "invert(1) sepia(1) saturate(1.6) hue-rotate(5deg) brightness(0.92)" }} />
-          <span className="lp-h text-[17px] font-semibold tracking-tight text-white">
+          <img src="/HF_LOGO.png" alt="HIGH FOCUS" className="h-10 w-10 sm:h-16 sm:w-16 rounded-lg object-contain" style={{ filter: "invert(1) sepia(1) saturate(1.6) hue-rotate(5deg) brightness(0.92)" }} />
+          <span className="lp-h text-[15px] sm:text-[17px] font-semibold tracking-tight text-white">
             HIGH FOCUS{" "}
-            <span className="lp-b text-[11px] font-medium uppercase tracking-[0.22em]" style={{ color: G }}>
+            <span className="lp-b text-[10px] sm:text-[11px] font-medium uppercase tracking-[0.22em]" style={{ color: G }}>
               Sourcing
             </span>
           </span>
         </div>
 
-        <div className="flex items-center gap-4">
-          <PromoCodeNavButton />
+        <div className="flex items-center gap-3 sm:gap-4">
+          <div className="hidden sm:block"><PromoCodeNavButton /></div>
           <Link href="/login" className="lp-b text-sm font-medium text-slate-400 transition hover:text-white">
             Sign In
           </Link>
           <Link
             href="#pricing"
-            className="lp-btn-g lp-b rounded-xl px-5 py-2.5 text-sm font-bold text-black"
+            className="lp-btn-g lp-b rounded-xl px-3 sm:px-5 py-2 sm:py-2.5 text-sm font-bold text-black"
           >
-            Start Free Trial
+            <span className="sm:hidden">Get Started</span>
+            <span className="hidden sm:inline">Start Free Trial</span>
           </Link>
         </div>
       </div>
@@ -232,7 +233,7 @@ function HeroSection() {
         <h1
           className="lp-h text-white"
           style={{
-            fontSize: "clamp(3.2rem, 9vw, 7.5rem)",
+            fontSize: "clamp(2.4rem, 9vw, 7.5rem)",
             lineHeight: 1.05,
             fontStyle: "italic",
             fontWeight: 600,
@@ -246,8 +247,7 @@ function HeroSection() {
 
         {/* Body */}
         <p
-          className="lp-b mx-auto mt-8 max-w-2xl leading-relaxed text-slate-400"
-          style={{ fontSize: "1.075rem" }}
+          className="lp-b mx-auto mt-8 max-w-2xl leading-relaxed text-slate-400 text-[0.95rem] sm:text-[1.075rem]"
         >
           Stop guessing. Browse{" "}
           <span className="font-semibold text-slate-200">Amazon categories by keyword</span>, analyze
