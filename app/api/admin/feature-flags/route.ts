@@ -24,8 +24,8 @@ const DEFAULT_FLAGS: { key: string; label: string; description: string }[] = [
   { key: "ff:analyzer_page", label: "Catalog Analyzer", description: "Enable the Analyzer / Explorer page" },
   {
     key: "ff:buyer_mode",
-    label: "Buyer Mode (PA-API)",
-    description: "Show buyer card on pricing, mode toggle in sidebar, and /buyer catalog page. Requires PA-API credentials. Default: OFF.",
+    label: "Buyer Mode",
+    description: "Show buyer card on pricing, mode toggle in sidebar, and /buyer catalog page. Uses PA-API if configured, otherwise falls back to SP-API. Default: OFF.",
   },
 ];
 

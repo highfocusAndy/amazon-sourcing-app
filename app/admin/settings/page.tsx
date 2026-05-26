@@ -270,6 +270,102 @@ function AdminThemeSection() {
   );
 }
 
+type FlagEntry = { key: string; label: string; description: string; enabled: boolean };
+
+function FeatureFlagsSection() {
+  const [flags, setFlags]     = useState<FlagEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving]   = useState<string | null>(null);
+  const [toast, setToast]     = useState<{ key: string; msg: string } | null>(null);
+
+  useEffect(() => {
+    fetch("/api/admin/feature-flags")
+      .then((r) => r.json() as Promise<{ ok: boolean; flags: FlagEntry[] }>)
+      .then((d) => { if (d.ok) setFlags(d.flags); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  async function toggle(key: string, enabled: boolean) {
+    setSaving(key);
+    try {
+      const res = await fetch("/api/admin/feature-flags", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key, enabled }),
+      });
+      const data = (await res.json()) as { ok?: boolean; error?: string };
+      if (res.ok && data.ok) {
+        setFlags((prev) => prev.map((f) => f.key === key ? { ...f, enabled } : f));
+        setToast({ key, msg: `${enabled ? "Enabled" : "Disabled"} successfully.` });
+        setTimeout(() => setToast(null), 3000);
+      } else {
+        setToast({ key, msg: data.error ?? "Failed to update flag." });
+        setTimeout(() => setToast(null), 4000);
+      }
+    } catch {
+      setToast({ key, msg: "Network error — please try again." });
+      setTimeout(() => setToast(null), 4000);
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  return (
+    <div className="rounded-2xl border border-white/[0.07] bg-gradient-to-b from-white/[0.04] to-transparent p-6 shadow-[0_20px_50px_-32px_rgba(0,0,0,0.8)]">
+      <h2 className="mb-1 text-base font-semibold text-white">Feature Flags</h2>
+      <p className="mb-6 text-sm text-slate-500">
+        Toggle features on or off. Changes take effect immediately for all users.
+      </p>
+
+      {loading ? (
+        <div className="space-y-3">
+          {[1, 2, 3].map((n) => (
+            <div key={n} className="h-16 animate-pulse rounded-xl border border-white/[0.05] bg-white/[0.02]" />
+          ))}
+        </div>
+      ) : (
+        <ul className="space-y-2">
+          {flags.map((flag) => {
+            const isSaving = saving === flag.key;
+            const isToast  = toast?.key === flag.key;
+            return (
+              <li key={flag.key}
+                className="flex items-center justify-between gap-4 rounded-xl border border-white/[0.05] bg-white/[0.02] px-4 py-3.5">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[13px] font-semibold text-white">{flag.label}</p>
+                  <p className="mt-0.5 text-[11px] text-slate-500">{flag.description}</p>
+                  {isToast && (
+                    <p className={`mt-1 text-[11px] font-medium ${flag.enabled ? "text-teal-400" : "text-slate-400"}`}>
+                      {toast!.msg}
+                    </p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={flag.enabled}
+                  disabled={isSaving}
+                  onClick={() => void toggle(flag.key, !flag.enabled)}
+                  className={`relative shrink-0 h-6 w-11 rounded-full transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 disabled:opacity-50 ${
+                    flag.enabled ? "bg-teal-500" : "bg-white/[0.12]"
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-200 ${
+                      flag.enabled ? "translate-x-5" : "translate-x-0"
+                    }`}
+                  />
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 type MaintenanceResult = {
   expiredCache: number;
   expiredChallenges: number;
@@ -438,6 +534,10 @@ export default function AdminSettingsPage() {
 
       <section>
         <AdminThemeSection />
+      </section>
+
+      <section>
+        <FeatureFlagsSection />
       </section>
 
       <section>
