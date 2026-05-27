@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { isBuyerModeEnabled } from "@/lib/featureFlags";
-import { searchBuyerCatalog } from "@/lib/paApiClient";
+import { searchBuyerCatalog, fetchCatalogItemsFromPaApi } from "@/lib/paApiClient";
 import { searchBuyerCatalogSpApi } from "@/lib/sp-api";
 import { prisma } from "@/lib/db";
 
@@ -76,12 +76,32 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   const seen = new Set<string>();
-  const items = result.data.items.filter((i) => {
+  let items: typeof result.data.items = result.data.items.filter((i) => {
     const a = (i as { asin?: string }).asin;
     if (!a || seen.has(a)) return false;
     seen.add(a);
     return true;
   });
+
+  // SearchItems rarely returns offer/price data — enrich via GetItems for any items missing a price.
+  const asinsMissingPrice = items
+    .filter((i) => (i as { price?: number | null }).price == null)
+    .map((i) => (i as { asin?: string }).asin)
+    .filter((a): a is string => !!a);
+
+  if (asinsMissingPrice.length > 0) {
+    const enriched = await fetchCatalogItemsFromPaApi(asinsMissingPrice);
+    if (enriched.ok) {
+      const priceMap = new Map(enriched.data.map((ei) => [ei.asin, ei.price]));
+      items = items.map((item) => {
+        const i = item as { asin?: string; price?: number | null };
+        if (i.price == null && i.asin && priceMap.has(i.asin)) {
+          return { ...item, price: priceMap.get(i.asin) ?? null };
+        }
+        return item;
+      });
+    }
+  }
 
   try {
     await prisma.apiResponseCache.upsert({

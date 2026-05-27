@@ -53,7 +53,7 @@ export function BuyerProductCard({ item }: { item: BuyerCatalogItem }) {
               ${item.price.toFixed(2)}
             </span>
           ) : (
-            <span className="text-[13px] text-slate-500">Price unavailable</span>
+            <span className="text-[12px] text-slate-500 italic">See price on Amazon</span>
           )}
           {item.isPrime && (
             <span
