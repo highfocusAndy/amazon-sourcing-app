@@ -75,7 +75,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     result = { ok: true, data: { items: spResult.data.items } };
   }
 
-  const items = result.data.items;
+  const seen = new Set<string>();
+  const items = result.data.items.filter((i) => {
+    const a = (i as { asin?: string }).asin;
+    if (!a || seen.has(a)) return false;
+    seen.add(a);
+    return true;
+  });
 
   try {
     await prisma.apiResponseCache.upsert({
