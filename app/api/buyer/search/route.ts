@@ -125,16 +125,16 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const sortBy = SORT_MAP[sortKey];
 
   // Build the seed list used for continuation pagination.
-  // - When the user typed a keyword, the primary seed IS that keyword (with optional subcategory appended).
-  // - When no keyword, we walk through category-specific or global seeds to keep the well of results deep.
+  // - If the user typed a keyword (or picked a subcategory), respect their exact intent —
+  //   do NOT chain into unrelated continuation seeds. Search ends naturally when SP-API
+  //   has no more results for that query.
+  // - When no keyword and no subcategory, we walk through category-specific or global
+  //   seeds to provide Amazon-like infinite browsing.
   const userPrimary = [keyword, subcategory].filter(Boolean).join(" ").trim();
   const seedList: string[] = (() => {
     if (userPrimary) {
-      // Start with the user query, then expand with broader category/global variations once exhausted.
-      const followUp = category && CATEGORY_SEEDS[category]
-        ? CATEGORY_SEEDS[category]
-        : GLOBAL_SEEDS;
-      return [userPrimary, ...followUp];
+      // Strict keyword mode — no continuation chaining.
+      return [userPrimary];
     }
     if (category && CATEGORY_SEEDS[category]) return CATEGORY_SEEDS[category];
     return GLOBAL_SEEDS;
