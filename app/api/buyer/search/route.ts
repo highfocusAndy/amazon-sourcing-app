@@ -42,6 +42,7 @@ type RawItem = {
   title?: string;
   starRating?: number | null;
   salesRank?: number | null;
+  isPrime?: boolean;
 };
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
@@ -64,6 +65,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const brandFilter = (sp.get("brand") ?? "").trim().toLowerCase();
   const priceSource = sp.get("priceSource") === "lowest" ? "lowest" : "buybox";
   const bsrMax = parseInt(sp.get("bsrMax") ?? "0", 10) || 0;
+  const primeOnly = sp.get("primeOnly") === "true";
   const startPageToken = sp.get("pageToken") ?? "";
 
   const searchIndex = CATEGORY_TO_SEARCH_INDEX[category] ?? "All";
@@ -75,7 +77,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     category ||
     "best sellers";
 
-  const cacheKey = `buyer:search:v2:${searchIndex}:${effectiveKeyword}:${sortKey}:${startPageToken}:${brandFilter}`;
+  const cacheKey = `buyer:search:v3:${searchIndex}:${effectiveKeyword}:${sortKey}:${startPageToken}:${brandFilter}`;
 
   // Cache hit fast path (filters applied after).
   try {
@@ -88,6 +90,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         minRating,
         priceSource,
         bsrMax,
+        primeOnly,
       });
       const sorted = sortItems(filtered, sortKey, priceSource);
       return NextResponse.json({
@@ -186,7 +189,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             const o = offerMap.get(i.asin);
             const buyBox = o?.buyBoxPrice ?? null;
             const low = o?.lowestPrice ?? null;
-            return { ...item, buyBoxPrice: buyBox, lowestPrice: low, price: buyBox ?? low };
+            return {
+              ...item,
+              buyBoxPrice: buyBox,
+              lowestPrice: low,
+              price: buyBox ?? low,
+              isPrime: o?.isPrime ?? (item.isPrime as boolean | undefined) ?? false,
+            };
           }
           return item;
         });
@@ -210,7 +219,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     });
   } catch { /* ignore cache write errors */ }
 
-  const filtered = postFilter(items, { minPrice, maxPrice, minRating, priceSource, bsrMax });
+  const filtered = postFilter(items, { minPrice, maxPrice, minRating, priceSource, bsrMax, primeOnly });
   const sorted = sortItems(filtered, sortKey, priceSource);
   return NextResponse.json({ ok: true, items: sorted, nextPageToken });
 }
@@ -218,8 +227,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 async function offersBatch(
   asins: string[],
   concurrency: number,
-): Promise<Array<{ buyBoxPrice: number | null; lowestPrice: number | null } | null>> {
-  const results: Array<{ buyBoxPrice: number | null; lowestPrice: number | null } | null> =
+): Promise<Array<{ buyBoxPrice: number | null; lowestPrice: number | null; isPrime: boolean } | null>> {
+  const results: Array<{ buyBoxPrice: number | null; lowestPrice: number | null; isPrime: boolean } | null> =
     new Array(asins.length).fill(null);
   let next = 0;
   async function worker(): Promise<void> {
@@ -228,7 +237,7 @@ async function offersBatch(
       next += 1;
       try {
         const r = await fetchOffersForAsin(asins[i]);
-        results[i] = { buyBoxPrice: r.buyBoxPrice, lowestPrice: r.lowestPrice };
+        results[i] = { buyBoxPrice: r.buyBoxPrice, lowestPrice: r.lowestPrice, isPrime: r.isPrime };
       } catch {
         results[i] = null;
       }
@@ -247,7 +256,14 @@ function effectivePrice(item: RawItem, priceSource: "buybox" | "lowest"): number
 
 function postFilter(
   items: unknown[],
-  opts: { minPrice: number; maxPrice: number; minRating: number; priceSource: "buybox" | "lowest"; bsrMax: number },
+  opts: {
+    minPrice: number;
+    maxPrice: number;
+    minRating: number;
+    priceSource: "buybox" | "lowest";
+    bsrMax: number;
+    primeOnly: boolean;
+  },
 ): Record<string, unknown>[] {
   return items
     .filter((item) => {
@@ -258,6 +274,7 @@ function postFilter(
       if (opts.maxPrice > 0 && (price == null || price > opts.maxPrice)) return false;
       if (opts.minRating > 0 && (i.starRating == null || i.starRating < opts.minRating)) return false;
       if (opts.bsrMax > 0 && (i.salesRank == null || i.salesRank > opts.bsrMax)) return false;
+      if (opts.primeOnly && i.isPrime !== true) return false;
       return true;
     })
     .map((item) => {

@@ -126,6 +126,7 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
       if (params.minRating > 0) q.set("minRating", String(params.minRating));
       if (params.brand) q.set("brand", params.brand);
       if (params.bsrMax > 0) q.set("bsrMax", String(params.bsrMax));
+      if (params.primeOnly) q.set("primeOnly", "true");
       if (pageToken) q.set("pageToken", pageToken);
 
       const res = await fetch(`/api/buyer/search?${q.toString()}`);
@@ -140,10 +141,7 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
         if (!append) setItems([]);
         return;
       }
-      let fetched = data.items;
-      if (params.primeOnly) {
-        fetched = fetched.filter((i) => i.isPrime === true);
-      }
+      const fetched = data.items;
       setItems((prev) => (append ? [...prev, ...fetched] : fetched));
       setNextPageToken(data.nextPageToken ?? null);
     } catch {

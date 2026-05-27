@@ -29,6 +29,8 @@ interface OffersBasics {
   /** Lowest available landed price across all offers (may be lower than buy box). */
   lowestPrice: number | null;
   amazonIsSeller: boolean;
+  /** True when at least one offer is Prime-eligible (FBA or Seller-Fulfilled Prime). */
+  isPrime: boolean;
 }
 
 const AMAZON_SELLER_ID = "ATVPDKIKX0DER";
@@ -325,12 +327,27 @@ function extractOffersBasics(payload: unknown): OffersBasics {
   if (buyBoxPrice === null) buyBoxPrice = lowestPrice;
 
   let amazonIsSeller = false;
+  let isPrime = false;
   for (const offerRaw of offers) {
     const offer = asObject(offerRaw);
     const sellerId = readString(offer?.SellerId);
-    if (sellerId === AMAZON_SELLER_ID) {
-      amazonIsSeller = true;
-      break;
+    if (sellerId === AMAZON_SELLER_ID) amazonIsSeller = true;
+    // Prime detection: FBA offer OR PrimeInformation.IsPrime === true OR IsFulfilledByAmazon === true.
+    const isFba = offer?.IsFulfilledByAmazon === true;
+    const primeInfo = asObject(offer?.PrimeInformation);
+    const primeFlag = primeInfo?.IsPrime === true;
+    if (isFba || primeFlag) isPrime = true;
+  }
+  // Buy-box-only Prime hint when offers array is empty/sparse (some categories).
+  if (!isPrime) {
+    for (const bb of buyBoxPrices) {
+      const bbObj = asObject(bb);
+      const condition = readString(bbObj?.condition);
+      const offerType = readString(bbObj?.offerType);
+      if (offerType === "B2C" || condition === "New") {
+        // Heuristic only — leave isPrime false unless explicit.
+        break;
+      }
     }
   }
 
@@ -338,6 +355,7 @@ function extractOffersBasics(payload: unknown): OffersBasics {
     buyBoxPrice: roundCurrency(buyBoxPrice),
     lowestPrice: roundCurrency(lowestPrice),
     amazonIsSeller,
+    isPrime,
   };
 }
 
@@ -622,6 +640,7 @@ export async function searchBuyerCatalogSpApi(options: {
         buyBoxPrice,
         lowestPrice,
         price: buyBoxPrice ?? lowestPrice,
+        isPrime: o?.isPrime ?? false,
       };
     });
 
