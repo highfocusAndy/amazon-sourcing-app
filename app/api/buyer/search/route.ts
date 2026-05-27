@@ -8,8 +8,8 @@ import { prisma } from "@/lib/db";
 export const runtime = "nodejs";
 
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
-const TARGET_PAGE_SIZE = 50; // items returned per "page" to the UI
-const SP_API_MAX_PAGE = 20; // SP-API hard cap per request
+const TARGET_PAGE_SIZE = 50;
+const SP_API_MAX_PAGE = 20;
 
 const CATEGORY_TO_SEARCH_INDEX: Record<string, string> = {
   Electronics: "Electronics",
@@ -29,8 +29,36 @@ const SORT_MAP: Record<string, string> = {
   price_asc: "Price:LowToHigh",
   price_desc: "Price:HighToLow",
   rating: "AvgCustomerReviews",
-  bestsellers: "Relevance", // SP-API has no native bestseller sort; we sort in-memory by salesRank
+  bestsellers: "Relevance",
   newest: "NewestArrivals",
+};
+
+// Continuation seeds — when SP-API exhausts its native pagination for a given query, we transparently
+// chain through variations so users see effectively endless results (Amazon-like infinite scroll).
+const GLOBAL_SEEDS = [
+  "best sellers",
+  "top rated",
+  "popular items",
+  "amazon choice",
+  "trending now",
+  "new arrivals",
+  "deals",
+  "top picks",
+  "highly rated",
+  "must have",
+];
+
+const CATEGORY_SEEDS: Record<string, string[]> = {
+  Electronics: ["popular electronics", "headphones", "phones", "computers", "cameras", "tv audio", "smart home", "gaming gear", "wearables", "best electronics"],
+  "Home & Kitchen": ["popular home", "cookware", "furniture", "bedding", "bathroom", "storage", "decor", "appliances", "vacuums", "best home kitchen"],
+  "Beauty & Personal Care": ["popular beauty", "makeup", "skincare", "hair care", "fragrance", "men's grooming", "beauty tools", "nail care", "bath body", "best beauty"],
+  "Sports & Outdoors": ["popular sports", "fitness equipment", "outdoor gear", "cycling", "camping", "water sports", "hunting", "team sports", "running gear", "yoga"],
+  "Toys & Games": ["popular toys", "board games", "puzzles", "action figures", "building sets", "dolls", "stuffed animals", "outdoor toys", "educational toys", "remote control"],
+  Books: ["bestseller books", "fiction", "non-fiction", "children's books", "cookbooks", "self-help", "biography", "business books", "sci-fi fantasy", "mystery thriller"],
+  Clothing: ["popular clothing", "men's clothing", "women's clothing", "kids clothing", "shoes", "accessories", "activewear", "jewelry", "watches", "bags"],
+  "Pet Supplies": ["popular pet", "dog supplies", "cat supplies", "fish aquarium", "bird supplies", "small animals", "reptile supplies", "pet food", "pet toys", "pet grooming"],
+  Automotive: ["car accessories", "car tools", "car interior", "car exterior", "car electronics", "tires wheels", "oil fluids", "motorcycle", "rv accessories", "best automotive"],
+  "Office Products": ["office supplies", "paper", "pens writing", "desk organization", "office furniture", "office tech", "calendars", "school supplies", "art supplies", "best office"],
 };
 
 type RawItem = {
@@ -44,6 +72,30 @@ type RawItem = {
   salesRank?: number | null;
   isPrime?: boolean;
 };
+
+type Cursor = {
+  /** Index into the seed list when no user keyword was provided. -1 = still on the user's primary keyword. */
+  s: number;
+  /** SP-API pagination token within the current seed. */
+  t: string | null;
+};
+
+function encodeCursor(c: Cursor): string {
+  return Buffer.from(JSON.stringify(c)).toString("base64url");
+}
+
+function decodeCursor(raw: string): Cursor | null {
+  if (!raw) return null;
+  try {
+    const decoded = JSON.parse(Buffer.from(raw, "base64url").toString("utf8")) as Cursor;
+    if (typeof decoded.s === "number" && (decoded.t === null || typeof decoded.t === "string")) {
+      return decoded;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const session = await auth();
@@ -66,79 +118,105 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const priceSource = sp.get("priceSource") === "lowest" ? "lowest" : "buybox";
   const bsrMax = parseInt(sp.get("bsrMax") ?? "0", 10) || 0;
   const primeOnly = sp.get("primeOnly") === "true";
-  const startPageToken = sp.get("pageToken") ?? "";
+  const incomingCursor = decodeCursor(sp.get("pageToken") ?? "");
 
   const searchIndex = CATEGORY_TO_SEARCH_INDEX[category] ?? "All";
   const sortBy = SORT_MAP[sortKey];
 
-  // Best-sellers landing: when no keyword, no category, no subcategory — use a curated seed.
-  const effectiveKeyword =
-    [keyword, subcategory].filter(Boolean).join(" ") ||
-    category ||
-    "best sellers";
+  // Build the seed list used for continuation pagination.
+  // - When the user typed a keyword, the primary seed IS that keyword (with optional subcategory appended).
+  // - When no keyword, we walk through category-specific or global seeds to keep the well of results deep.
+  const userPrimary = [keyword, subcategory].filter(Boolean).join(" ").trim();
+  const seedList: string[] = (() => {
+    if (userPrimary) {
+      // Start with the user query, then expand with broader category/global variations once exhausted.
+      const followUp = category && CATEGORY_SEEDS[category]
+        ? CATEGORY_SEEDS[category]
+        : GLOBAL_SEEDS;
+      return [userPrimary, ...followUp];
+    }
+    if (category && CATEGORY_SEEDS[category]) return CATEGORY_SEEDS[category];
+    return GLOBAL_SEEDS;
+  })();
 
-  const cacheKey = `buyer:search:v3:${searchIndex}:${effectiveKeyword}:${sortKey}:${startPageToken}:${brandFilter}`;
+  // Resume from incoming cursor, or start fresh at the first seed.
+  let seedIndex = incomingCursor?.s ?? 0;
+  let spApiToken: string | undefined = incomingCursor?.t ?? undefined;
 
-  // Cache hit fast path (filters applied after).
+  const cacheKey =
+    `buyer:search:v4:${searchIndex}:${seedList[seedIndex] ?? ""}:${seedIndex}:${spApiToken ?? ""}:${sortKey}:${brandFilter}`;
+
+  // Cache hit fast path.
   try {
     const cached = await prisma.apiResponseCache.findUnique({ where: { cacheKey } });
     if (cached && cached.expiresAt > new Date()) {
       const raw = JSON.parse(cached.payload) as { items: unknown[]; nextPageToken: string | null };
-      const filtered = postFilter(raw.items, {
-        minPrice,
-        maxPrice,
-        minRating,
-        priceSource,
-        bsrMax,
-        primeOnly,
-      });
+      const filtered = postFilter(raw.items, { minPrice, maxPrice, minRating, priceSource, bsrMax, primeOnly });
       const sorted = sortItems(filtered, sortKey, priceSource);
-      return NextResponse.json({
-        ok: true,
-        items: sorted,
-        nextPageToken: raw.nextPageToken,
-        fromCache: true,
-      });
+      return NextResponse.json({ ok: true, items: sorted, nextPageToken: raw.nextPageToken, fromCache: true });
     }
-  } catch { /* ignore cache errors */ }
+  } catch { /* ignore */ }
 
-  // Try PA-API first (single 10-item page; 403 if Associates ineligibility).
-  const paResult = await searchBuyerCatalog({
-    keyword: effectiveKeyword,
-    searchIndex,
-    sortBy,
-    maxResults: 10,
-    itemPage: 1,
-  });
-
+  // Try PA-API only on the initial request (seed 0, no SP token) — purely opportunistic.
+  const initialRequest = seedIndex === 0 && !spApiToken;
   let collected: unknown[] = [];
-  let nextPageToken: string | null = null;
+  let nextCursor: Cursor | null = null;
 
-  if (paResult.ok) {
-    collected = paResult.data.items as unknown[];
-  } else {
-    // SP-API fallback. Chain pages until we reach TARGET_PAGE_SIZE or run out.
-    let token: string | undefined = startPageToken || undefined;
-    while (collected.length < TARGET_PAGE_SIZE) {
-      const remaining = TARGET_PAGE_SIZE - collected.length;
-      const pageSize = Math.min(SP_API_MAX_PAGE, remaining);
-      const spResult = await searchBuyerCatalogSpApi({
-        keyword: effectiveKeyword,
-        maxResults: pageSize,
-        pageToken: token,
-        brandNames: brandFilter ? [brandFilter] : undefined,
-      });
-      if (!spResult.ok) {
-        if (collected.length === 0) {
-          return NextResponse.json({ error: spResult.error }, { status: 502 });
-        }
-        break; // partial results still useful
-      }
-      collected.push(...(spResult.data.items as unknown[]));
-      token = spResult.data.nextToken;
-      if (!token) break;
+  if (initialRequest) {
+    const paResult = await searchBuyerCatalog({
+      keyword: seedList[0] || "best sellers",
+      searchIndex,
+      sortBy,
+      maxResults: 10,
+      itemPage: 1,
+    });
+    if (paResult.ok && paResult.data.items.length > 0) {
+      collected.push(...(paResult.data.items as unknown[]));
     }
-    nextPageToken = token ?? null;
+  }
+
+  // SP-API: chain pages until we hit TARGET_PAGE_SIZE, walking through seeds when one runs dry.
+  outer: while (collected.length < TARGET_PAGE_SIZE && seedIndex < seedList.length) {
+    const currentSeed = seedList[seedIndex];
+    const remaining = TARGET_PAGE_SIZE - collected.length;
+    const pageSize = Math.min(SP_API_MAX_PAGE, remaining);
+
+    const spResult = await searchBuyerCatalogSpApi({
+      keyword: currentSeed,
+      maxResults: pageSize,
+      pageToken: spApiToken,
+      brandNames: brandFilter ? [brandFilter] : undefined,
+    });
+
+    if (!spResult.ok) {
+      // If we already have items, return what we have; advance the seed so next request retries.
+      if (collected.length > 0) {
+        seedIndex += 1;
+        spApiToken = undefined;
+        nextCursor = seedIndex < seedList.length ? { s: seedIndex, t: null } : null;
+        break outer;
+      }
+      // No items + first call failed → bubble up the error.
+      return NextResponse.json({ error: spResult.error }, { status: 502 });
+    }
+
+    collected.push(...(spResult.data.items as unknown[]));
+    spApiToken = spResult.data.nextToken;
+
+    if (!spApiToken) {
+      // Exhausted this seed → advance.
+      seedIndex += 1;
+    }
+  }
+
+  // Build the continuation cursor: either current seed + remaining spApiToken,
+  // or the next seed if we exhausted this one mid-iteration.
+  if (!nextCursor) {
+    if (seedIndex < seedList.length) {
+      nextCursor = { s: seedIndex, t: spApiToken ?? null };
+    } else {
+      nextCursor = null;
+    }
   }
 
   // De-dupe by ASIN.
@@ -152,14 +230,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     })
     .map((i) => ({ ...(i as Record<string, unknown>) }));
 
-  // PA-API SearchItems rarely returns offer/price data — enrich for any items missing buy box.
+  // Price enrichment (when PA-API SearchItems returned items without prices).
   const missingPriceAsins = items
     .filter((i) => (i as RawItem).buyBoxPrice == null && (i as RawItem).price == null)
     .map((i) => (i as RawItem).asin)
     .filter((a): a is string => !!a);
 
   if (missingPriceAsins.length > 0) {
-    // 1) PA-API GetItems batch enrichment (single price field).
     const enriched = await fetchCatalogItemsFromPaApi(missingPriceAsins);
     if (enriched.ok) {
       const priceMap = new Map(enriched.data.map((ei) => [ei.asin, ei.price]));
@@ -173,7 +250,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       });
     }
 
-    // 2) SP-API individual offers — populates buyBoxPrice AND lowestPrice.
     const stillMissing = items
       .filter((i) => (i as RawItem).buyBoxPrice == null)
       .map((i) => (i as RawItem).asin)
@@ -203,21 +279,16 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
   }
 
-  // Persist to cache (raw items + nextPageToken).
+  const nextPageToken = nextCursor ? encodeCursor(nextCursor) : null;
+
+  // Persist to cache.
   try {
     await prisma.apiResponseCache.upsert({
       where: { cacheKey },
-      update: {
-        payload: JSON.stringify({ items, nextPageToken }),
-        expiresAt: new Date(Date.now() + CACHE_TTL_MS),
-      },
-      create: {
-        cacheKey,
-        payload: JSON.stringify({ items, nextPageToken }),
-        expiresAt: new Date(Date.now() + CACHE_TTL_MS),
-      },
+      update: { payload: JSON.stringify({ items, nextPageToken }), expiresAt: new Date(Date.now() + CACHE_TTL_MS) },
+      create: { cacheKey, payload: JSON.stringify({ items, nextPageToken }), expiresAt: new Date(Date.now() + CACHE_TTL_MS) },
     });
-  } catch { /* ignore cache write errors */ }
+  } catch { /* ignore */ }
 
   const filtered = postFilter(items, { minPrice, maxPrice, minRating, priceSource, bsrMax, primeOnly });
   const sorted = sortItems(filtered, sortKey, priceSource);
@@ -269,7 +340,6 @@ function postFilter(
     .filter((item) => {
       const i = item as RawItem;
       const price = effectivePrice(i, opts.priceSource);
-
       if (opts.minPrice > 0 && (price == null || price < opts.minPrice)) return false;
       if (opts.maxPrice > 0 && (price == null || price > opts.maxPrice)) return false;
       if (opts.minRating > 0 && (i.starRating == null || i.starRating < opts.minRating)) return false;

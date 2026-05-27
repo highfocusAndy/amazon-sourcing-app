@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { BuyerProductCard } from "./BuyerProductCard";
 import type { BuyerCatalogItem } from "@/lib/paApiClient";
 import Link from "next/link";
@@ -104,6 +104,16 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
   const [error, setError] = useState<string | null>(null);
   const [nextPageToken, setNextPageToken] = useState<string | null>(null);
 
+  // Infinite scroll sentinel.
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  // Refs to avoid re-creating IntersectionObserver on every render.
+  const stateRef = useRef(state);
+  const tokenRef = useRef(nextPageToken);
+  const loadingRef = useRef(loading);
+  stateRef.current = state;
+  tokenRef.current = nextPageToken;
+  loadingRef.current = loading;
+
   const isBuyer = userMode === "buyer";
 
   const fetchProducts = useCallback(async (
@@ -155,6 +165,23 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
   // Initial landing — best sellers.
   useEffect(() => {
     void fetchProducts(INITIAL_STATE, null, false);
+  }, [fetchProducts]);
+
+  // Infinite scroll — auto-load next page as the sentinel becomes visible.
+  useEffect(() => {
+    const node = loadMoreRef.current;
+    if (!node) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (entry?.isIntersecting && !loadingRef.current && tokenRef.current) {
+          void fetchProducts(stateRef.current, tokenRef.current, true);
+        }
+      },
+      { rootMargin: "600px" },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
   }, [fetchProducts]);
 
   function handleSearch(e: React.FormEvent) {
@@ -438,17 +465,29 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
             {loading && Array.from({ length: 12 }).map((_, i) => <SkeletonCard key={i} />)}
           </div>
 
-          {!loading && nextPageToken && items.length > 0 && (
-            <div className="mt-6 flex justify-center">
-              <button
-                type="button"
-                onClick={handleLoadMore}
-                className="rounded-xl border px-8 py-3 text-sm font-semibold transition hover:opacity-80"
-                style={{ borderColor: G_BORD, background: G_DIM, color: G }}
-              >
-                Load more
-              </button>
-            </div>
+          {/* Infinite scroll sentinel + manual fallback button. */}
+          {items.length > 0 && nextPageToken && (
+            <>
+              <div ref={loadMoreRef} aria-hidden className="h-1 w-full" />
+              {!loading && (
+                <div className="mt-6 flex justify-center">
+                  <button
+                    type="button"
+                    onClick={handleLoadMore}
+                    className="rounded-xl border px-8 py-3 text-sm font-semibold transition hover:opacity-80"
+                    style={{ borderColor: G_BORD, background: G_DIM, color: G }}
+                  >
+                    Load more
+                  </button>
+                </div>
+              )}
+              {loading && (
+                <p className="mt-4 text-center text-[12px] text-slate-500">Loading more products…</p>
+              )}
+            </>
+          )}
+          {items.length > 0 && !nextPageToken && !loading && (
+            <p className="mt-6 text-center text-[12px] text-slate-600">No more results.</p>
           )}
 
           {/* Bottom banner for buyer users */}
