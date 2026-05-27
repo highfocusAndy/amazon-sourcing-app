@@ -495,10 +495,7 @@ export interface BuyerCatalogItem extends PaApiCatalogItem {
   isPrime?: boolean;
 }
 
-const BUYER_CATALOG_RESOURCES = [
-  ...CATALOG_ITEM_RESOURCES,
-  "offersV2.listings.deliveryInfo.isPrimeEligible",
-];
+const BUYER_CATALOG_RESOURCES = [...CATALOG_ITEM_RESOURCES];
 
 function parseBuyerCatalogItems(json: unknown): BuyerCatalogItem[] {
   const base = parseCatalogItems(json);
