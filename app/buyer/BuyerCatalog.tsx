@@ -153,7 +153,14 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
         return;
       }
       const fetched = data.items;
-      setItems((prev) => (append ? [...prev, ...fetched] : fetched));
+      // Cross-page ASIN dedupe — seed continuation can surface the same product
+      // in multiple variations, so we filter against everything already shown.
+      setItems((prev) => {
+        if (!append) return fetched;
+        const seen = new Set(prev.map((p) => p.asin));
+        const fresh = fetched.filter((p) => p.asin && !seen.has(p.asin));
+        return [...prev, ...fresh];
+      });
       setNextPageToken(data.nextPageToken ?? null);
     } catch {
       setError("Network error. Please try again.");
