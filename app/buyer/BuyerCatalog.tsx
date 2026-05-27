@@ -215,11 +215,6 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
     void fetchProducts(next, null, false);
   }
 
-  function handleLoadMore() {
-    if (!nextPageToken) return;
-    void fetchProducts(state, nextPageToken, true);
-  }
-
   function resetFilters() {
     setSearchInput("");
     setState(INITIAL_STATE);
@@ -479,29 +474,17 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
             {loading && Array.from({ length: 12 }).map((_, i) => <SkeletonCard key={i} />)}
           </div>
 
-          {/* Infinite scroll sentinel + manual fallback button. */}
+          {/* Infinite scroll sentinel — auto-loads as the user nears the bottom. */}
           {items.length > 0 && nextPageToken && (
             <>
               <div ref={loadMoreRef} aria-hidden className="h-1 w-full" />
-              {!loading && (
-                <div className="mt-6 flex justify-center">
-                  <button
-                    type="button"
-                    onClick={handleLoadMore}
-                    className="rounded-xl border px-8 py-3 text-sm font-semibold transition hover:opacity-80"
-                    style={{ borderColor: G_BORD, background: G_DIM, color: G }}
-                  >
-                    Load more
-                  </button>
-                </div>
-              )}
               {loading && (
-                <p className="mt-4 text-center text-[12px] text-slate-500">Loading more products…</p>
+                <p className="mt-4 text-center text-[12px] text-slate-500">Loading more…</p>
               )}
             </>
           )}
           {items.length > 0 && !nextPageToken && !loading && (
-            <p className="mt-6 text-center text-[12px] text-slate-600">No more results.</p>
+            <p className="mt-6 text-center text-[12px] text-slate-600">— End of results —</p>
           )}
 
           {/* Bottom banner for buyer users */}
