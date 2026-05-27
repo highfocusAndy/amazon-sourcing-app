@@ -2,15 +2,28 @@
 
 import type { BuyerCatalogItem } from "@/lib/paApiClient";
 
-// Catalog item may carry both buy box and lowest prices from SP-API (set by the buyer search route).
+// Catalog item may carry extra fields from the SP-API enrichment path.
 type ExtendedItem = BuyerCatalogItem & {
   buyBoxPrice?: number | null;
   lowestPrice?: number | null;
+  offerCount?: number;
 };
+
+const PARTNER_TAG = "cherenfantand-20";
+
+function affiliateUrl(asin: string, given: string | null | undefined): string {
+  if (given) return given;
+  return `https://www.amazon.com/dp/${asin}?tag=${PARTNER_TAG}`;
+}
+
+/** Amazon's "Other sellers on Amazon" listing page for the ASIN — Associate-tagged. */
+function offerListingUrl(asin: string): string {
+  return `https://www.amazon.com/gp/offer-listing/${asin}?ie=UTF8&condition=new&tag=${PARTNER_TAG}`;
+}
 
 export function BuyerProductCard({
   item,
-  priceSource = "buybox",
+  priceSource = "lowest",
 }: {
   item: BuyerCatalogItem;
   priceSource?: "buybox" | "lowest";
@@ -24,7 +37,6 @@ export function BuyerProductCard({
       ? ext.lowestPrice ?? item.price ?? ext.buyBoxPrice ?? null
       : ext.buyBoxPrice ?? item.price ?? ext.lowestPrice ?? null;
 
-  // Show the secondary price too when it's meaningfully different (>1% delta).
   const secondary =
     priceSource === "lowest" ? ext.buyBoxPrice ?? null : ext.lowestPrice ?? null;
   const showSecondary =
@@ -32,6 +44,8 @@ export function BuyerProductCard({
     secondary != null &&
     Math.abs(primary - secondary) > 0.01 &&
     Math.abs(primary - secondary) / primary > 0.01;
+
+  const offerCount = ext.offerCount ?? 0;
 
   return (
     <div
@@ -111,7 +125,7 @@ export function BuyerProductCard({
 
         {/* CTA */}
         <a
-          href={item.affiliateUrl ?? `https://www.amazon.com/dp/${item.asin}?tag=cherenfantand-20`}
+          href={affiliateUrl(item.asin, item.affiliateUrl)}
           target="_blank"
           rel="noopener noreferrer"
           className="mt-auto block w-full rounded-xl py-2.5 text-center text-[12px] font-bold transition hover:opacity-90"
@@ -119,6 +133,18 @@ export function BuyerProductCard({
         >
           View on Amazon →
         </a>
+
+        {/* Sellers link — opens Amazon's "Other sellers" listing for this ASIN */}
+        {offerCount > 0 && (
+          <a
+            href={offerListingUrl(item.asin)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block w-full text-center text-[11px] text-slate-400 underline-offset-2 hover:underline hover:text-slate-200"
+          >
+            {offerCount} {offerCount === 1 ? "seller" : "sellers"} on Amazon →
+          </a>
+        )}
       </div>
     </div>
   );

@@ -34,6 +34,7 @@ const SUBCATEGORIES: Record<string, string[]> = {
 };
 
 const SORT_OPTIONS = [
+  { label: "Sort by…", value: "" },
   { label: "Best Match", value: "relevance" },
   { label: "Best Sellers (BSR)", value: "bestsellers" },
   { label: "Price: Low to High", value: "price_asc" },
@@ -85,13 +86,13 @@ const INITIAL_STATE: SearchParamsState = {
   keyword: "",
   category: "All",
   subcategory: "",
-  sort: "bestsellers",
+  sort: "",
   minPrice: "",
   maxPrice: "",
   minRating: 0,
   primeOnly: false,
   brand: "",
-  priceSource: "buybox",
+  priceSource: "lowest",
   bsrMax: 0,
 };
 
@@ -186,13 +187,12 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
 
   function handleSearch(e: React.FormEvent) {
     e.preventDefault();
-    // A fresh keyword search clears any active category/subcategory filter so results
-    // are driven purely by the user's query (Amazon-like behavior).
+    // A fresh keyword search wipes all filters back to defaults so results are
+    // driven purely by the user's query (Amazon-like behavior). Sort stays empty
+    // until the user explicitly picks one.
     const next: SearchParamsState = {
-      ...state,
+      ...INITIAL_STATE,
       keyword: searchInput,
-      category: "All",
-      subcategory: "",
     };
     setState(next);
     void fetchProducts(next, null, false);

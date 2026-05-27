@@ -71,6 +71,7 @@ type RawItem = {
   starRating?: number | null;
   salesRank?: number | null;
   isPrime?: boolean;
+  offerCount?: number;
 };
 
 type Cursor = {
@@ -144,7 +145,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   let spApiToken: string | undefined = incomingCursor?.t ?? undefined;
 
   const cacheKey =
-    `buyer:search:v4:${searchIndex}:${seedList[seedIndex] ?? ""}:${seedIndex}:${spApiToken ?? ""}:${sortKey}:${brandFilter}`;
+    `buyer:search:v5:${searchIndex}:${seedList[seedIndex] ?? ""}:${seedIndex}:${spApiToken ?? ""}:${sortKey}:${brandFilter}`;
 
   // Cache hit fast path.
   try {
@@ -271,6 +272,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
               lowestPrice: low,
               price: buyBox ?? low,
               isPrime: o?.isPrime ?? (item.isPrime as boolean | undefined) ?? false,
+              offerCount: o?.offerCount ?? (item.offerCount as number | undefined) ?? 0,
             };
           }
           return item;
@@ -298,8 +300,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 async function offersBatch(
   asins: string[],
   concurrency: number,
-): Promise<Array<{ buyBoxPrice: number | null; lowestPrice: number | null; isPrime: boolean } | null>> {
-  const results: Array<{ buyBoxPrice: number | null; lowestPrice: number | null; isPrime: boolean } | null> =
+): Promise<Array<{ buyBoxPrice: number | null; lowestPrice: number | null; isPrime: boolean; offerCount: number } | null>> {
+  const results: Array<{ buyBoxPrice: number | null; lowestPrice: number | null; isPrime: boolean; offerCount: number } | null> =
     new Array(asins.length).fill(null);
   let next = 0;
   async function worker(): Promise<void> {
@@ -308,7 +310,12 @@ async function offersBatch(
       next += 1;
       try {
         const r = await fetchOffersForAsin(asins[i]);
-        results[i] = { buyBoxPrice: r.buyBoxPrice, lowestPrice: r.lowestPrice, isPrime: r.isPrime };
+        results[i] = {
+          buyBoxPrice: r.buyBoxPrice,
+          lowestPrice: r.lowestPrice,
+          isPrime: r.isPrime,
+          offerCount: r.offerCount,
+        };
       } catch {
         results[i] = null;
       }

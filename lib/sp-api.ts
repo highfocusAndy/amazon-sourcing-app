@@ -31,6 +31,8 @@ interface OffersBasics {
   amazonIsSeller: boolean;
   /** True when at least one offer is Prime-eligible (FBA or Seller-Fulfilled Prime). */
   isPrime: boolean;
+  /** Total number of competing offers (sellers) returned in the offers payload. */
+  offerCount: number;
 }
 
 const AMAZON_SELLER_ID = "ATVPDKIKX0DER";
@@ -356,6 +358,7 @@ function extractOffersBasics(payload: unknown): OffersBasics {
     lowestPrice: roundCurrency(lowestPrice),
     amazonIsSeller,
     isPrime,
+    offerCount: offers.length,
   };
 }
 
@@ -524,6 +527,8 @@ export interface SpApiBuyerItem {
   starRating: number | null;
   reviewCount: number | null;
   isPrime?: boolean;
+  /** Number of competing sellers (offers) on the listing. */
+  offerCount?: number;
 }
 
 export async function searchBuyerCatalogSpApi(options: {
@@ -641,6 +646,7 @@ export async function searchBuyerCatalogSpApi(options: {
         lowestPrice,
         price: buyBoxPrice ?? lowestPrice,
         isPrime: o?.isPrime ?? false,
+        offerCount: o?.offerCount ?? 0,
       };
     });
 
