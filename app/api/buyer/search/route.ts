@@ -69,14 +69,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     itemPage: page,
   });
 
-  if (!result.ok && result.error.includes("not configured")) {
+  if (!result.ok) {
     const spResult = await searchBuyerCatalogSpApi({ keyword: effectiveKeyword, maxResults: 10 });
     if (!spResult.ok) return NextResponse.json({ error: spResult.error }, { status: 502 });
     result = { ok: true, data: { items: spResult.data.items } };
-  }
-
-  if (!result.ok) {
-    return NextResponse.json({ error: result.error }, { status: 502 });
   }
 
   const items = result.data.items;
