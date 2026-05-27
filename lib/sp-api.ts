@@ -178,13 +178,20 @@ async function spApiRequest<T>(
   method: RequestMethod,
   path: string,
   options?: {
-    query?: Record<string, string>;
+    query?: Record<string, string | string[]>;
     body?: unknown;
   },
 ): Promise<T> {
   const env = getServerEnv();
   const [accessToken, awsCredentials] = await Promise.all([getLwaAccessToken(env), getAwsCredentials(env)]);
-  const queryString = options?.query ? `?${new URLSearchParams(options.query).toString()}` : "";
+  const queryString = options?.query ? (() => {
+    const params = new URLSearchParams();
+    for (const [k, v] of Object.entries(options.query!)) {
+      if (Array.isArray(v)) v.forEach((val) => params.append(k, val));
+      else params.append(k, v);
+    }
+    return `?${params.toString()}`;
+  })() : "";
   const requestBody = options?.body ? JSON.stringify(options.body) : undefined;
   const signedRequest = aws4.sign(
     {
@@ -421,6 +428,41 @@ export async function fetchOffersForAsin(asin: string): Promise<OffersBasics> {
   return extractOffersBasics(offers);
 }
 
+async function fetchBatchBuyBoxPrices(asins: string[]): Promise<Map<string, number>> {
+  const priceMap = new Map<string, number>();
+  if (asins.length === 0) return priceMap;
+  try {
+    const env = getServerEnv();
+    const response = await spApiRequest<unknown>("GET", "/products/pricing/v0/price", {
+      query: {
+        MarketplaceId: env.marketplaceId,
+        ItemType: "Asin",
+        Asins: asins,
+      },
+    });
+    const root = asObject(response);
+    const payload = asArray(root?.payload);
+    for (const entryRaw of payload) {
+      const entry = asObject(entryRaw);
+      const asin = readString(entry?.ASIN);
+      if (!asin) continue;
+      const product = asObject(asObject(entry?.Product));
+      const competitive = asObject(asObject(product?.CompetitivePricing));
+      const prices = asArray(competitive?.CompetitivePrices);
+      for (const priceRaw of prices) {
+        const p = asObject(priceRaw);
+        if (readString(p?.CompetitivePriceId) !== "1") continue;
+        const priceObj = asObject(p?.Price);
+        const landed = asObject(priceObj?.LandedPrice);
+        const listing = asObject(priceObj?.ListingPrice);
+        const amount = readNumber(landed?.Amount) ?? readNumber(listing?.Amount);
+        if (amount !== null) { priceMap.set(asin, amount); break; }
+      }
+    }
+  } catch { /* prices are best-effort */ }
+  return priceMap;
+}
+
 export interface SpApiBuyerItem {
   asin: string;
   title: string;
@@ -505,7 +547,13 @@ export async function searchBuyerCatalogSpApi(options: {
       return { asin, title, brand, imageUrl, price: null, salesRank, salesRankCategory, affiliateUrl, starRating: null, reviewCount: null };
     }).filter((i) => i.asin !== "");
 
-    return { ok: true, data: { items: mapped, nextToken } };
+    const priceMap = await fetchBatchBuyBoxPrices(mapped.map((i) => i.asin));
+    const withPrices = mapped.map((i) => ({
+      ...i,
+      price: priceMap.get(i.asin) ?? null,
+    }));
+
+    return { ok: true, data: { items: withPrices, nextToken } };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "SP-API catalog search failed" };
   }
