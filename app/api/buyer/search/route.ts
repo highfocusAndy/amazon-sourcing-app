@@ -198,7 +198,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   let spApiToken: string | undefined = incomingCursor?.t ?? undefined;
 
   const cacheKey =
-    `buyer:search:v5:${searchIndex}:${seedList[seedIndex] ?? ""}:${seedIndex}:${spApiToken ?? ""}:${sortKey}:${brandFilter}`;
+    `buyer:search:v6:${searchIndex}:${seedList[seedIndex] ?? ""}:${seedIndex}:${spApiToken ?? ""}:${sortKey}:${brandFilter}`;
 
   // Cache hit fast path.
   try {
@@ -336,14 +336,25 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const nextPageToken = nextCursor ? encodeCursor(nextCursor) : null;
 
-  // Persist to cache.
-  try {
-    await prisma.apiResponseCache.upsert({
-      where: { cacheKey },
-      update: { payload: JSON.stringify({ items, nextPageToken }), expiresAt: new Date(Date.now() + CACHE_TTL_MS) },
-      create: { cacheKey, payload: JSON.stringify({ items, nextPageToken }), expiresAt: new Date(Date.now() + CACHE_TTL_MS) },
-    });
-  } catch { /* ignore */ }
+  // Quality gate: only cache pages where most items have usable prices.
+  // SP-API offer fetches can throttle/fail transiently — caching a broken page
+  // for an hour would surface "See price on Amazon" for everyone until expiry.
+  const pricedCount = items.filter((i) => {
+    const r = i as RawItem;
+    return r.buyBoxPrice != null || r.lowestPrice != null || r.price != null;
+  }).length;
+  const priceCoverage = items.length === 0 ? 0 : pricedCount / items.length;
+  const shouldCache = items.length === 0 || priceCoverage >= 0.5;
+
+  if (shouldCache) {
+    try {
+      await prisma.apiResponseCache.upsert({
+        where: { cacheKey },
+        update: { payload: JSON.stringify({ items, nextPageToken }), expiresAt: new Date(Date.now() + CACHE_TTL_MS) },
+        create: { cacheKey, payload: JSON.stringify({ items, nextPageToken }), expiresAt: new Date(Date.now() + CACHE_TTL_MS) },
+      });
+    } catch { /* ignore */ }
+  }
 
   const filtered = postFilter(items, { minPrice, maxPrice, minRating, priceSource, bsrMax, primeOnly });
   const sorted = sortItems(filtered, sortKey, priceSource);
