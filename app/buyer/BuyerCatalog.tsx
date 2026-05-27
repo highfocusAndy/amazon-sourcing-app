@@ -127,6 +127,17 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const searchBoxRef = useRef<HTMLDivElement | null>(null);
 
+  // Mobile filter drawer.
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  // Lock body scroll while drawer is open.
+  useEffect(() => {
+    if (mobileFiltersOpen) {
+      const prev = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      return () => { document.body.style.overflow = prev; };
+    }
+  }, [mobileFiltersOpen]);
+
   // Infinite scroll sentinel.
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   // Refs to avoid re-creating IntersectionObserver on every render.
@@ -284,6 +295,184 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
 
   const activeSubcats = SUBCATEGORIES[state.category] ?? [];
 
+  // Count of non-default active filters (for the mobile button badge).
+  const activeFilterCount = [
+    state.category !== "All",
+    state.subcategory !== "",
+    state.sort !== "",
+    state.minPrice !== "",
+    state.maxPrice !== "",
+    state.minRating > 0,
+    state.primeOnly,
+    state.brand !== "",
+    state.priceSource !== "lowest",
+    state.bsrMax > 0,
+    state.audience !== "",
+  ].filter(Boolean).length;
+
+  const renderFilters = () => (
+    <>
+      <div>
+        <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-500">Category</p>
+        <select
+          value={state.category}
+          onChange={(e) => updateState({ category: e.target.value })}
+          className={selectCls}
+          style={{ borderColor: "rgba(71,85,105,0.6)" }}
+        >
+          {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
+      </div>
+
+      <div>
+        <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-500">Sort By</p>
+        <select
+          value={state.sort}
+          onChange={(e) => updateState({ sort: e.target.value })}
+          className={selectCls}
+          style={{ borderColor: "rgba(71,85,105,0.6)" }}
+        >
+          {SORT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+      </div>
+
+      <div>
+        <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-500">Price Source</p>
+        <div className="flex gap-1.5">
+          <button
+            type="button"
+            onClick={() => updateState({ priceSource: "buybox" })}
+            className="flex-1 rounded-lg border py-1.5 text-[11px] font-semibold transition"
+            style={{
+              borderColor: state.priceSource === "buybox" ? G_BORD : "rgba(71,85,105,0.5)",
+              background: state.priceSource === "buybox" ? G_DIM : "transparent",
+              color: state.priceSource === "buybox" ? G : "rgb(148 163 184)",
+            }}
+          >
+            Buy Box
+          </button>
+          <button
+            type="button"
+            onClick={() => updateState({ priceSource: "lowest" })}
+            className="flex-1 rounded-lg border py-1.5 text-[11px] font-semibold transition"
+            style={{
+              borderColor: state.priceSource === "lowest" ? G_BORD : "rgba(71,85,105,0.5)",
+              background: state.priceSource === "lowest" ? G_DIM : "transparent",
+              color: state.priceSource === "lowest" ? G : "rgb(148 163 184)",
+            }}
+          >
+            Lowest
+          </button>
+        </div>
+      </div>
+
+      <div>
+        <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-500">Price Range</p>
+        <div className="flex gap-2">
+          <input
+            type="number"
+            inputMode="numeric"
+            min="0"
+            placeholder="Min"
+            value={state.minPrice}
+            onChange={(e) => setState((s) => ({ ...s, minPrice: e.target.value }))}
+            onBlur={() => updateState({ minPrice: state.minPrice })}
+            className={inputCls}
+          />
+          <input
+            type="number"
+            inputMode="numeric"
+            min="0"
+            placeholder="Max"
+            value={state.maxPrice}
+            onChange={(e) => setState((s) => ({ ...s, maxPrice: e.target.value }))}
+            onBlur={() => updateState({ maxPrice: state.maxPrice })}
+            className={inputCls}
+          />
+        </div>
+      </div>
+
+      <div>
+        <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-500">Min Rating</p>
+        <div className="flex gap-1.5">
+          {[3, 4, 4.5].map((r) => (
+            <button
+              key={r}
+              type="button"
+              onClick={() => updateState({ minRating: state.minRating === r ? 0 : r })}
+              className="flex-1 rounded-lg border py-1.5 text-[11px] font-semibold transition"
+              style={{
+                borderColor: state.minRating === r ? G_BORD : "rgba(71,85,105,0.5)",
+                background: state.minRating === r ? G_DIM : "transparent",
+                color: state.minRating === r ? G : "rgb(148 163 184)",
+              }}
+            >
+              {r}★
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-500">Best Sellers Rank</p>
+        <div className="flex flex-wrap gap-1.5">
+          {BSR_OPTIONS.map((o) => (
+            <button
+              key={o.value}
+              type="button"
+              onClick={() => updateState({ bsrMax: o.value })}
+              className="rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition"
+              style={{
+                borderColor: state.bsrMax === o.value ? G_BORD : "rgba(71,85,105,0.5)",
+                background: state.bsrMax === o.value ? G_DIM : "transparent",
+                color: state.bsrMax === o.value ? G : "rgb(148 163 184)",
+              }}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-500">Brand</p>
+        <input
+          type="text"
+          placeholder="e.g. Sony, Apple"
+          value={state.brand}
+          onChange={(e) => setState((s) => ({ ...s, brand: e.target.value }))}
+          onBlur={() => updateState({ brand: state.brand })}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); updateState({ brand: state.brand }); } }}
+          className={inputCls}
+        />
+      </div>
+
+      <div>
+        <button
+          type="button"
+          onClick={() => updateState({ primeOnly: !state.primeOnly })}
+          className="flex w-full items-center gap-2 rounded-xl border px-3 py-2 text-[12px] font-medium transition"
+          style={{
+            borderColor: state.primeOnly ? G_BORD : "rgba(71,85,105,0.5)",
+            background: state.primeOnly ? G_DIM : "transparent",
+            color: state.primeOnly ? G : "rgb(148 163 184)",
+          }}
+        >
+          <span className="text-[14px]" style={{ color: "#00A8E0" }}>P</span>
+          Prime only
+        </button>
+      </div>
+
+      <button
+        type="button"
+        onClick={resetFilters}
+        className="w-full rounded-xl border border-slate-700/60 px-3 py-2 text-[11px] font-semibold text-slate-400 transition hover:text-slate-200"
+      >
+        Reset all filters
+      </button>
+    </>
+  );
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {/* Search bar */}
@@ -317,7 +506,7 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
           {/* Autocomplete dropdown */}
           {showSuggestions && suggestions.length > 0 && (
             <div
-              className="absolute left-0 right-[80px] top-full z-20 mt-1 max-h-72 overflow-y-auto rounded-xl border border-slate-700/60 bg-slate-900 shadow-2xl"
+              className="absolute left-0 right-0 top-full z-20 mt-1 max-h-72 overflow-y-auto rounded-xl border border-slate-700/60 bg-slate-900 shadow-2xl sm:right-[88px]"
               role="listbox"
             >
               {suggestions.map((s, i) => (
@@ -396,164 +585,9 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
       </div>
 
       <div className="flex min-h-0 flex-1">
-        {/* Left sidebar — filters */}
+        {/* Desktop sidebar — filters (md+) */}
         <aside className="hidden w-56 shrink-0 flex-col gap-4 overflow-y-auto border-r border-slate-700/60 bg-slate-900/40 p-4 md:flex">
-          <div>
-            <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-500">Category</p>
-            <select
-              value={state.category}
-              onChange={(e) => updateState({ category: e.target.value })}
-              className={selectCls}
-              style={{ borderColor: "rgba(71,85,105,0.6)" }}
-            >
-              {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
-          </div>
-
-          <div>
-            <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-500">Sort By</p>
-            <select
-              value={state.sort}
-              onChange={(e) => updateState({ sort: e.target.value })}
-              className={selectCls}
-              style={{ borderColor: "rgba(71,85,105,0.6)" }}
-            >
-              {SORT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-          </div>
-
-          <div>
-            <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-500">Price Source</p>
-            <div className="flex gap-1.5">
-              <button
-                type="button"
-                onClick={() => updateState({ priceSource: "buybox" })}
-                className="flex-1 rounded-lg border py-1.5 text-[11px] font-semibold transition"
-                style={{
-                  borderColor: state.priceSource === "buybox" ? G_BORD : "rgba(71,85,105,0.5)",
-                  background: state.priceSource === "buybox" ? G_DIM : "transparent",
-                  color: state.priceSource === "buybox" ? G : "rgb(148 163 184)",
-                }}
-              >
-                Buy Box
-              </button>
-              <button
-                type="button"
-                onClick={() => updateState({ priceSource: "lowest" })}
-                className="flex-1 rounded-lg border py-1.5 text-[11px] font-semibold transition"
-                style={{
-                  borderColor: state.priceSource === "lowest" ? G_BORD : "rgba(71,85,105,0.5)",
-                  background: state.priceSource === "lowest" ? G_DIM : "transparent",
-                  color: state.priceSource === "lowest" ? G : "rgb(148 163 184)",
-                }}
-              >
-                Lowest
-              </button>
-            </div>
-          </div>
-
-          <div>
-            <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-500">Price Range</p>
-            <div className="flex gap-2">
-              <input
-                type="number"
-                min="0"
-                placeholder="Min"
-                value={state.minPrice}
-                onChange={(e) => setState((s) => ({ ...s, minPrice: e.target.value }))}
-                onBlur={() => updateState({ minPrice: state.minPrice })}
-                className={inputCls}
-              />
-              <input
-                type="number"
-                min="0"
-                placeholder="Max"
-                value={state.maxPrice}
-                onChange={(e) => setState((s) => ({ ...s, maxPrice: e.target.value }))}
-                onBlur={() => updateState({ maxPrice: state.maxPrice })}
-                className={inputCls}
-              />
-            </div>
-          </div>
-
-          <div>
-            <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-500">Min Rating</p>
-            <div className="flex gap-1.5">
-              {[3, 4, 4.5].map((r) => (
-                <button
-                  key={r}
-                  type="button"
-                  onClick={() => updateState({ minRating: state.minRating === r ? 0 : r })}
-                  className="flex-1 rounded-lg border py-1.5 text-[11px] font-semibold transition"
-                  style={{
-                    borderColor: state.minRating === r ? G_BORD : "rgba(71,85,105,0.5)",
-                    background: state.minRating === r ? G_DIM : "transparent",
-                    color: state.minRating === r ? G : "rgb(148 163 184)",
-                  }}
-                >
-                  {r}★
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-500">Best Sellers Rank</p>
-            <div className="flex flex-wrap gap-1.5">
-              {BSR_OPTIONS.map((o) => (
-                <button
-                  key={o.value}
-                  type="button"
-                  onClick={() => updateState({ bsrMax: o.value })}
-                  className="rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition"
-                  style={{
-                    borderColor: state.bsrMax === o.value ? G_BORD : "rgba(71,85,105,0.5)",
-                    background: state.bsrMax === o.value ? G_DIM : "transparent",
-                    color: state.bsrMax === o.value ? G : "rgb(148 163 184)",
-                  }}
-                >
-                  {o.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-500">Brand</p>
-            <input
-              type="text"
-              placeholder="e.g. Sony, Apple"
-              value={state.brand}
-              onChange={(e) => setState((s) => ({ ...s, brand: e.target.value }))}
-              onBlur={() => updateState({ brand: state.brand })}
-              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); updateState({ brand: state.brand }); } }}
-              className={inputCls}
-            />
-          </div>
-
-          <div>
-            <button
-              type="button"
-              onClick={() => updateState({ primeOnly: !state.primeOnly })}
-              className="flex w-full items-center gap-2 rounded-xl border px-3 py-2 text-[12px] font-medium transition"
-              style={{
-                borderColor: state.primeOnly ? G_BORD : "rgba(71,85,105,0.5)",
-                background: state.primeOnly ? G_DIM : "transparent",
-                color: state.primeOnly ? G : "rgb(148 163 184)",
-              }}
-            >
-              <span className="text-[14px]" style={{ color: "#00A8E0" }}>P</span>
-              Prime only
-            </button>
-          </div>
-
-          <button
-            type="button"
-            onClick={resetFilters}
-            className="w-full rounded-xl border border-slate-700/60 px-3 py-2 text-[11px] font-semibold text-slate-400 transition hover:text-slate-200"
-          >
-            Reset all filters
-          </button>
+          {renderFilters()}
         </aside>
 
         {/* Product grid */}
@@ -574,9 +608,29 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
           {items.length > 0 && (
             <div className="mb-3 flex items-center justify-between text-[11px] text-slate-500">
               <span>{items.length} products</span>
-              <span>
-                Showing <span className="text-slate-300">{state.priceSource === "lowest" ? "Lowest" : "Buy Box"}</span> price
-              </span>
+              <div className="flex items-center gap-3">
+                {/* Mobile Filters button (hidden on desktop where the sidebar is visible). */}
+                <button
+                  type="button"
+                  onClick={() => setMobileFiltersOpen(true)}
+                  className="flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-semibold transition md:hidden"
+                  style={{ borderColor: G_BORD, background: G_DIM, color: G }}
+                  aria-label="Open filters"
+                >
+                  <span>☰</span> Filters
+                  {activeFilterCount > 0 && (
+                    <span
+                      className="ml-1 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[10px] font-bold"
+                      style={{ background: G, color: "#0a0800" }}
+                    >
+                      {activeFilterCount}
+                    </span>
+                  )}
+                </button>
+                <span>
+                  Showing <span className="text-slate-300">{state.priceSource === "lowest" ? "Lowest" : "Buy Box"}</span> price
+                </span>
+              </div>
             </div>
           )}
 
@@ -623,6 +677,75 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
           )}
         </main>
       </div>
+
+      {/* Floating mobile Filters FAB — always reachable while scrolling. */}
+      <button
+        type="button"
+        onClick={() => setMobileFiltersOpen(true)}
+        className="fixed bottom-5 right-5 z-30 flex items-center gap-2 rounded-full px-5 py-3 text-[12px] font-bold shadow-2xl transition active:scale-95 md:hidden"
+        style={{ background: G, color: "#0a0800" }}
+        aria-label="Open filters"
+      >
+        <span>☰</span> Filters
+        {activeFilterCount > 0 && (
+          <span
+            className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-slate-900 px-1.5 text-[10px] font-bold text-white"
+          >
+            {activeFilterCount}
+          </span>
+        )}
+      </button>
+
+      {/* Mobile filter drawer (slides up from bottom). */}
+      {mobileFiltersOpen && (
+        <div className="fixed inset-0 z-40 md:hidden" role="dialog" aria-modal="true" aria-label="Filters">
+          <button
+            type="button"
+            aria-label="Close filters"
+            onClick={() => setMobileFiltersOpen(false)}
+            className="absolute inset-0 bg-slate-950/70 backdrop-blur-[2px]"
+          />
+          <div
+            className="absolute inset-x-0 bottom-0 flex max-h-[85vh] flex-col rounded-t-2xl border-t border-slate-700/60"
+            style={{ background: "#0f172a" }}
+          >
+            <div className="flex items-center justify-between border-b border-slate-700/60 px-4 py-3">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold text-slate-100">Filters</span>
+                {activeFilterCount > 0 && (
+                  <span
+                    className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-[10px] font-bold"
+                    style={{ background: G, color: "#0a0800" }}
+                  >
+                    {activeFilterCount}
+                  </span>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setMobileFiltersOpen(false)}
+                className="text-2xl leading-none text-slate-400 hover:text-slate-100"
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-4">
+              {renderFilters()}
+            </div>
+            <div className="border-t border-slate-700/60 px-4 py-3">
+              <button
+                type="button"
+                onClick={() => setMobileFiltersOpen(false)}
+                className="w-full rounded-xl py-3 text-sm font-bold transition active:scale-[0.99]"
+                style={{ background: G, color: "#0a0800" }}
+              >
+                Show {items.length} results
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
