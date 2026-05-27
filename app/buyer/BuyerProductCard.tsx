@@ -2,9 +2,36 @@
 
 import type { BuyerCatalogItem } from "@/lib/paApiClient";
 
-export function BuyerProductCard({ item }: { item: BuyerCatalogItem }) {
+// Catalog item may carry both buy box and lowest prices from SP-API (set by the buyer search route).
+type ExtendedItem = BuyerCatalogItem & {
+  buyBoxPrice?: number | null;
+  lowestPrice?: number | null;
+};
+
+export function BuyerProductCard({
+  item,
+  priceSource = "buybox",
+}: {
+  item: BuyerCatalogItem;
+  priceSource?: "buybox" | "lowest";
+}) {
+  const ext = item as ExtendedItem;
   const stars = item.starRating != null ? Math.round(item.starRating * 2) / 2 : null;
   const starsStr = stars != null ? "★".repeat(Math.floor(stars)) + (stars % 1 ? "½" : "") : null;
+
+  const primary =
+    priceSource === "lowest"
+      ? ext.lowestPrice ?? item.price ?? ext.buyBoxPrice ?? null
+      : ext.buyBoxPrice ?? item.price ?? ext.lowestPrice ?? null;
+
+  // Show the secondary price too when it's meaningfully different (>1% delta).
+  const secondary =
+    priceSource === "lowest" ? ext.buyBoxPrice ?? null : ext.lowestPrice ?? null;
+  const showSecondary =
+    primary != null &&
+    secondary != null &&
+    Math.abs(primary - secondary) > 0.01 &&
+    Math.abs(primary - secondary) / primary > 0.01;
 
   return (
     <div
@@ -36,6 +63,12 @@ export function BuyerProductCard({ item }: { item: BuyerCatalogItem }) {
           {item.title}
         </p>
 
+        {item.brand && (
+          <p className="text-[11px] text-slate-500 truncate" title={item.brand}>
+            {item.brand}
+          </p>
+        )}
+
         {/* Rating */}
         {starsStr && (
           <div className="flex items-center gap-1.5">
@@ -46,14 +79,25 @@ export function BuyerProductCard({ item }: { item: BuyerCatalogItem }) {
           </div>
         )}
 
+        {/* BSR */}
+        {item.salesRank != null && (
+          <p className="text-[11px] text-slate-500">
+            #{item.salesRank.toLocaleString()}
+            {item.salesRankCategory ? <span className="text-slate-600"> in {item.salesRankCategory}</span> : null}
+          </p>
+        )}
+
         {/* Price + Prime */}
-        <div className="flex items-center gap-2">
-          {item.price != null ? (
-            <span className="text-[15px] font-bold text-white">
-              ${item.price.toFixed(2)}
-            </span>
+        <div className="flex items-center gap-2 flex-wrap">
+          {primary != null ? (
+            <span className="text-[15px] font-bold text-white">${primary.toFixed(2)}</span>
           ) : (
             <span className="text-[12px] text-slate-500 italic">See price on Amazon</span>
+          )}
+          {showSecondary && secondary != null && (
+            <span className="text-[11px] text-slate-500">
+              {priceSource === "lowest" ? "Buy Box" : "Lowest"} ${secondary.toFixed(2)}
+            </span>
           )}
           {item.isPrime && (
             <span

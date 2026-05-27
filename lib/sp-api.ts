@@ -26,6 +26,8 @@ interface CatalogBasics {
 
 interface OffersBasics {
   buyBoxPrice: number | null;
+  /** Lowest available landed price across all offers (may be lower than buy box). */
+  lowestPrice: number | null;
   amazonIsSeller: boolean;
 }
 
@@ -296,12 +298,31 @@ function extractOffersBasics(payload: unknown): OffersBasics {
   const landedPrice = asObject(buyBox?.LandedPrice);
   buyBoxPrice = readNumber(landedPrice?.Amount);
 
-  if (buyBoxPrice === null) {
-    const lowestPrices = asArray(summary?.LowestPrices);
-    const lowest = asObject(lowestPrices[0]);
-    const lowLanded = asObject(lowest?.LandedPrice);
-    buyBoxPrice = readNumber(lowLanded?.Amount);
+  // Lowest landed price across all offer condition groups (separate from buy box).
+  let lowestPrice: number | null = null;
+  const lowestPrices = asArray(summary?.LowestPrices);
+  for (const lpRaw of lowestPrices) {
+    const lp = asObject(lpRaw);
+    const lpLanded = asObject(lp?.LandedPrice);
+    const amount = readNumber(lpLanded?.Amount);
+    if (amount !== null && (lowestPrice === null || amount < lowestPrice)) {
+      lowestPrice = amount;
+    }
   }
+  // Also scan individual offers (in case Summary.LowestPrices is empty).
+  for (const offerRaw of offers) {
+    const offer = asObject(offerRaw);
+    const listingPrice = asObject(offer?.ListingPrice);
+    const shipping = asObject(offer?.Shipping);
+    const lp = readNumber(listingPrice?.Amount);
+    const sh = readNumber(shipping?.Amount) ?? 0;
+    if (lp !== null) {
+      const landed = lp + sh;
+      if (lowestPrice === null || landed < lowestPrice) lowestPrice = landed;
+    }
+  }
+  // Fallback: if buy box missing but lowest known, surface lowest as buy box too.
+  if (buyBoxPrice === null) buyBoxPrice = lowestPrice;
 
   let amazonIsSeller = false;
   for (const offerRaw of offers) {
@@ -315,6 +336,7 @@ function extractOffersBasics(payload: unknown): OffersBasics {
 
   return {
     buyBoxPrice: roundCurrency(buyBoxPrice),
+    lowestPrice: roundCurrency(lowestPrice),
     amazonIsSeller,
   };
 }
@@ -472,6 +494,11 @@ export interface SpApiBuyerItem {
   title: string;
   brand: string;
   imageUrl: string | null;
+  /** Buy Box price (Amazon's recommended seller price). May be null when no offers. */
+  buyBoxPrice: number | null;
+  /** Lowest landed price across all offers. May be lower than buy box. */
+  lowestPrice: number | null;
+  /** Convenience: the active "display" price the route applied (buy box or lowest). */
   price: number | null;
   salesRank: number | null;
   salesRankCategory: string | null;
@@ -485,15 +512,19 @@ export async function searchBuyerCatalogSpApi(options: {
   keyword: string;
   maxResults?: number;
   pageToken?: string;
+  brandNames?: string[];
 }): Promise<{ ok: true; data: { items: SpApiBuyerItem[]; nextToken?: string } } | { ok: false; error: string }> {
   const env = getServerEnv();
   const query: Record<string, string> = {
     marketplaceIds: env.marketplaceId,
     keywords: options.keyword,
     includedData: "summaries,images,salesRanks",
-    pageSize: String(Math.min(options.maxResults ?? 10, 20)),
+    pageSize: String(Math.min(Math.max(options.maxResults ?? 20, 1), 20)),
   };
   if (options.pageToken) query.pageToken = options.pageToken;
+  if (options.brandNames && options.brandNames.length > 0) {
+    query.brandNames = options.brandNames.join(",");
+  }
 
   try {
     const response = await spApiRequest<unknown>("GET", "/catalog/2022-04-01/items", { query });
@@ -548,15 +579,50 @@ export async function searchBuyerCatalogSpApi(options: {
       const partnerTag = process.env.PA_API_PARTNER_TAG ?? "";
       const affiliateUrl = `https://www.amazon.com/dp/${asin}${partnerTag ? `?tag=${partnerTag}` : ""}`;
 
-      return { asin, title, brand, imageUrl, price: null, salesRank, salesRankCategory, affiliateUrl, starRating: null, reviewCount: null };
+      return {
+        asin,
+        title,
+        brand,
+        imageUrl,
+        buyBoxPrice: null,
+        lowestPrice: null,
+        price: null,
+        salesRank,
+        salesRankCategory,
+        affiliateUrl,
+        starRating: null,
+        reviewCount: null,
+      } as SpApiBuyerItem;
     }).filter((i) => i.asin !== "");
 
-    // Fetch buy-box prices in parallel via the individual offers endpoint (more reliable than batch pricing).
-    const offerResults = await Promise.allSettled(mapped.map((i) => fetchOffersForAsin(i.asin)));
-    const withPrices = mapped.map((item, idx) => {
-      const res = offerResults[idx];
-      const price = res.status === "fulfilled" ? res.value.buyBoxPrice : null;
-      return { ...item, price };
+    // Fetch offers with bounded concurrency (avoid hammering SP-API and triggering 429s).
+    const concurrency = 8;
+    const offers: Array<OffersBasics | null> = new Array(mapped.length).fill(null);
+    let nextIdx = 0;
+    async function offerWorker(): Promise<void> {
+      while (nextIdx < mapped.length) {
+        const i = nextIdx;
+        nextIdx += 1;
+        try {
+          offers[i] = await fetchOffersForAsin(mapped[i].asin);
+        } catch {
+          offers[i] = null;
+        }
+      }
+    }
+    await Promise.all(
+      Array.from({ length: Math.min(concurrency, mapped.length) }, () => offerWorker()),
+    );
+    const withPrices: SpApiBuyerItem[] = mapped.map((item, idx) => {
+      const o = offers[idx];
+      const buyBoxPrice = o?.buyBoxPrice ?? null;
+      const lowestPrice = o?.lowestPrice ?? null;
+      return {
+        ...item,
+        buyBoxPrice,
+        lowestPrice,
+        price: buyBoxPrice ?? lowestPrice,
+      };
     });
 
     return { ok: true, data: { items: withPrices, nextToken } };
