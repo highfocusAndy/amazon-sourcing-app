@@ -428,7 +428,7 @@ export async function fetchOffersForAsin(asin: string): Promise<OffersBasics> {
   return extractOffersBasics(offers);
 }
 
-async function fetchBatchBuyBoxPrices(asins: string[]): Promise<Map<string, number>> {
+export async function fetchBatchBuyBoxPrices(asins: string[]): Promise<Map<string, number>> {
   const priceMap = new Map<string, number>();
   if (asins.length === 0) return priceMap;
   try {
@@ -441,7 +441,9 @@ async function fetchBatchBuyBoxPrices(asins: string[]): Promise<Map<string, numb
       },
     });
     const root = asObject(response);
+    console.log("[fetchBatchBuyBoxPrices] root keys:", root ? Object.keys(root) : null);
     const payload = asArray(root?.payload);
+    console.log("[fetchBatchBuyBoxPrices] payload length:", payload.length);
     for (const entryRaw of payload) {
       const entry = asObject(entryRaw);
       const asin = readString(entry?.ASIN);
@@ -459,7 +461,9 @@ async function fetchBatchBuyBoxPrices(asins: string[]): Promise<Map<string, numb
         if (amount !== null) { priceMap.set(asin, amount); break; }
       }
     }
-  } catch { /* prices are best-effort */ }
+  } catch (err) {
+    console.error("[fetchBatchBuyBoxPrices] error:", err instanceof Error ? err.message : err);
+  }
   return priceMap;
 }
 

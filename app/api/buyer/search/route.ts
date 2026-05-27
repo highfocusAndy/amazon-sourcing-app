@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { isBuyerModeEnabled } from "@/lib/featureFlags";
 import { searchBuyerCatalog, fetchCatalogItemsFromPaApi } from "@/lib/paApiClient";
-import { searchBuyerCatalogSpApi } from "@/lib/sp-api";
+import { searchBuyerCatalogSpApi, fetchBatchBuyBoxPrices } from "@/lib/sp-api";
 import { prisma } from "@/lib/db";
 
 export const runtime = "nodejs";
@@ -83,13 +83,16 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return true;
   });
 
-  // SearchItems rarely returns offer/price data — enrich via GetItems for any items missing a price.
-  const asinsMissingPrice = items
-    .filter((i) => (i as { price?: number | null }).price == null)
-    .map((i) => (i as { asin?: string }).asin)
-    .filter((a): a is string => !!a);
+  // SearchItems rarely returns offer/price data. Try PA-API GetItems first, then SP-API buy-box prices.
+  const getMissingPriceAsins = () =>
+    items
+      .filter((i) => (i as { price?: number | null }).price == null)
+      .map((i) => (i as { asin?: string }).asin)
+      .filter((a): a is string => !!a);
 
+  const asinsMissingPrice = getMissingPriceAsins();
   if (asinsMissingPrice.length > 0) {
+    // 1) PA-API GetItems enrichment
     const enriched = await fetchCatalogItemsFromPaApi(asinsMissingPrice);
     if (enriched.ok) {
       const priceMap = new Map(enriched.data.map((ei) => [ei.asin, ei.price]));
@@ -100,6 +103,23 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         }
         return item;
       });
+    }
+
+    // 2) SP-API buy-box prices for anything still missing
+    const stillMissing = getMissingPriceAsins();
+    if (stillMissing.length > 0) {
+      try {
+        const spPrices = await fetchBatchBuyBoxPrices(stillMissing);
+        if (spPrices.size > 0) {
+          items = items.map((item) => {
+            const i = item as { asin?: string; price?: number | null };
+            if (i.price == null && i.asin && spPrices.has(i.asin)) {
+              return { ...item, price: spPrices.get(i.asin) ?? null };
+            }
+            return item;
+          });
+        }
+      } catch { /* SP-API pricing is best-effort; don't fail the whole request */ }
     }
   }
 
