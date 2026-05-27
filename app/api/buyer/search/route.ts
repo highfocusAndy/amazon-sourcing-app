@@ -172,6 +172,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const priceSource = sp.get("priceSource") === "lowest" ? "lowest" : "buybox";
   const bsrMax = parseInt(sp.get("bsrMax") ?? "0", 10) || 0;
   const primeOnly = sp.get("primeOnly") === "true";
+  const audience = (sp.get("audience") ?? "").trim().toLowerCase();
   const incomingCursor = decodeCursor(sp.get("pageToken") ?? "");
 
   const searchIndex = CATEGORY_TO_SEARCH_INDEX[category] ?? "All";
@@ -183,7 +184,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   //   results stay relevant while still allowing deep pagination.
   // - When no keyword and no subcategory, we walk through category-specific or global
   //   seeds to provide Amazon-like infinite browsing.
-  const userPrimary = [keyword, subcategory].filter(Boolean).join(" ").trim();
+  const userPrimary = [audience, keyword, subcategory].filter(Boolean).join(" ").trim();
   const seedList: string[] = (() => {
     if (userPrimary) {
       return expandKeyword(userPrimary);

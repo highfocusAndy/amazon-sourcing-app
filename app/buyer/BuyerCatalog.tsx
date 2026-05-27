@@ -68,6 +68,8 @@ function SkeletonCard() {
   );
 }
 
+type Audience = "" | "men" | "women" | "kids" | "boys" | "girls";
+
 type SearchParamsState = {
   keyword: string;
   category: string;
@@ -80,7 +82,21 @@ type SearchParamsState = {
   brand: string;
   priceSource: "buybox" | "lowest";
   bsrMax: number;
+  audience: Audience;
 };
+
+// Keywords that benefit from an audience facet (gender / age group).
+const AUDIENCE_TRIGGER_PATTERN =
+  /\b(shirt|t-shirt|tshirt|tee|pants|jeans|shoes|sneakers|boots|sandals|sweater|hoodie|jacket|coat|dress|skirt|shorts|hat|cap|socks|underwear|swimwear|polo|tracksuit|tank|leggings|pajamas|belt|wallet|bag|backpack|sunglasses|watch|gloves|scarf|clothing|outfit)\b/i;
+
+const AUDIENCE_OPTIONS: { label: string; value: Audience }[] = [
+  { label: "Any", value: "" },
+  { label: "Men", value: "men" },
+  { label: "Women", value: "women" },
+  { label: "Kids", value: "kids" },
+  { label: "Boys", value: "boys" },
+  { label: "Girls", value: "girls" },
+];
 
 const INITIAL_STATE: SearchParamsState = {
   keyword: "",
@@ -94,6 +110,7 @@ const INITIAL_STATE: SearchParamsState = {
   brand: "",
   priceSource: "lowest",
   bsrMax: 0,
+  audience: "",
 };
 
 export function BuyerCatalog({ userMode }: { userMode: string | null }) {
@@ -104,6 +121,11 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [nextPageToken, setNextPageToken] = useState<string | null>(null);
+
+  // Autocomplete suggestions.
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const searchBoxRef = useRef<HTMLDivElement | null>(null);
 
   // Infinite scroll sentinel.
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
@@ -138,6 +160,7 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
       if (params.brand) q.set("brand", params.brand);
       if (params.bsrMax > 0) q.set("bsrMax", String(params.bsrMax));
       if (params.primeOnly) q.set("primeOnly", "true");
+      if (params.audience) q.set("audience", params.audience);
       if (pageToken) q.set("pageToken", pageToken);
 
       const res = await fetch(`/api/buyer/search?${q.toString()}`);
@@ -175,6 +198,37 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
     void fetchProducts(INITIAL_STATE, null, false);
   }, [fetchProducts]);
 
+  // Debounced autocomplete fetch as the user types.
+  useEffect(() => {
+    const trimmed = searchInput.trim();
+    if (trimmed.length < 2) {
+      setSuggestions([]);
+      return;
+    }
+    const handle = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/buyer/suggestions?q=${encodeURIComponent(trimmed)}`);
+        const data = (await res.json()) as { suggestions?: string[] };
+        setSuggestions(data.suggestions ?? []);
+      } catch {
+        setSuggestions([]);
+      }
+    }, 180);
+    return () => clearTimeout(handle);
+  }, [searchInput]);
+
+  // Click-outside to dismiss the suggestion dropdown.
+  useEffect(() => {
+    function onDocMouseDown(e: MouseEvent) {
+      if (!searchBoxRef.current) return;
+      if (!searchBoxRef.current.contains(e.target as Node)) {
+        setShowSuggestions(false);
+      }
+    }
+    document.addEventListener("mousedown", onDocMouseDown);
+    return () => document.removeEventListener("mousedown", onDocMouseDown);
+  }, []);
+
   // Infinite scroll — auto-load next page as the sentinel becomes visible.
   useEffect(() => {
     const node = loadMoreRef.current;
@@ -194,12 +248,16 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
 
   function handleSearch(e: React.FormEvent) {
     e.preventDefault();
-    // A fresh keyword search wipes all filters back to defaults so results are
-    // driven purely by the user's query (Amazon-like behavior). Sort stays empty
-    // until the user explicitly picks one.
+    submitSearch(searchInput);
+  }
+
+  // Fresh keyword search — wipes all filters back to defaults.
+  function submitSearch(keyword: string) {
+    setSearchInput(keyword);
+    setShowSuggestions(false);
     const next: SearchParamsState = {
       ...INITIAL_STATE,
-      keyword: searchInput,
+      keyword,
     };
     setState(next);
     void fetchProducts(next, null, false);
@@ -230,23 +288,78 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
     <div className="flex min-h-0 flex-1 flex-col">
       {/* Search bar */}
       <div className="border-b border-slate-700/60 bg-slate-900/80 px-4 py-3">
-        <form onSubmit={handleSearch} className="flex gap-2">
-          <input
-            type="text"
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Search Amazon products…"
-            className="flex-1 rounded-xl border border-slate-700/60 bg-slate-800/60 px-4 py-2.5 text-sm text-slate-100 placeholder-slate-500 outline-none focus:border-[#C9A84C]/60 focus:ring-1 focus:ring-[#C9A84C]/30"
-          />
-          <button
-            type="submit"
-            disabled={loading}
-            className="rounded-xl px-5 py-2.5 text-sm font-semibold transition disabled:opacity-50"
-            style={{ background: G, color: "#0a0800" }}
-          >
-            Search
-          </button>
-        </form>
+        <div ref={searchBoxRef} className="relative">
+          <form onSubmit={handleSearch} className="flex gap-2">
+            <input
+              type="text"
+              value={searchInput}
+              onChange={(e) => {
+                setSearchInput(e.target.value);
+                setShowSuggestions(true);
+              }}
+              onFocus={() => {
+                if (suggestions.length > 0) setShowSuggestions(true);
+              }}
+              placeholder="Search Amazon products…"
+              className="flex-1 rounded-xl border border-slate-700/60 bg-slate-800/60 px-4 py-2.5 text-sm text-slate-100 placeholder-slate-500 outline-none focus:border-[#C9A84C]/60 focus:ring-1 focus:ring-[#C9A84C]/30"
+              autoComplete="off"
+            />
+            <button
+              type="submit"
+              disabled={loading}
+              className="rounded-xl px-5 py-2.5 text-sm font-semibold transition disabled:opacity-50"
+              style={{ background: G, color: "#0a0800" }}
+            >
+              Search
+            </button>
+          </form>
+
+          {/* Autocomplete dropdown */}
+          {showSuggestions && suggestions.length > 0 && (
+            <div
+              className="absolute left-0 right-[80px] top-full z-20 mt-1 max-h-72 overflow-y-auto rounded-xl border border-slate-700/60 bg-slate-900 shadow-2xl"
+              role="listbox"
+            >
+              {suggestions.map((s, i) => (
+                <button
+                  key={`${s}-${i}`}
+                  type="button"
+                  role="option"
+                  aria-selected={false}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    submitSearch(s);
+                  }}
+                  className="block w-full truncate px-4 py-2 text-left text-sm text-slate-200 transition hover:bg-slate-800"
+                >
+                  <span className="text-slate-500">🔍</span> {s}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Audience chips — appear when the active keyword suggests apparel / personal items. */}
+        {AUDIENCE_TRIGGER_PATTERN.test(state.keyword) && (
+          <div className="mt-3 flex flex-wrap items-center gap-1.5">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">For</span>
+            {AUDIENCE_OPTIONS.map((opt) => (
+              <button
+                key={opt.value || "any"}
+                type="button"
+                onClick={() => updateState({ audience: opt.value })}
+                className="rounded-full border px-3 py-1 text-[11px] font-semibold transition"
+                style={{
+                  borderColor: state.audience === opt.value ? G_BORD : "rgba(71,85,105,0.5)",
+                  background: state.audience === opt.value ? G_DIM : "transparent",
+                  color: state.audience === opt.value ? G : "rgb(148 163 184)",
+                }}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Sub-category chips */}
         {activeSubcats.length > 0 && (
