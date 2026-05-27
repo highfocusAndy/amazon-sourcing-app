@@ -376,7 +376,6 @@ function AnalyzerPageContent() {
   const [selectedProduct, setSelectedProduct] = useState<ProductAnalysis | null>(null);
   const [mobileDetailsOpen, setMobileDetailsOpen] = useState(false);
   /** Popover on lg+; full-height sheet from the right on smaller screens (mirrors left nav direction). */
-  const [, setPopupQuantity] = useState("");
   const [sellerModal, setSellerModal] = useState<
     | null
     | { filter: "all" | "FBA" | "FBM"; layout: "sheet" }
@@ -1134,7 +1133,6 @@ function AnalyzerPageContent() {
   async function handleSelectProduct(item: ProductAnalysis): Promise<void> {
     setPendingProductId(item.id);
     setSelectedProduct(item);
-    setPopupQuantity("");
     setDetailPanelCost("");
     setMobileDetailsOpen(true);
     if (item.asin && item.buyBoxPrice == null) {
@@ -2365,7 +2363,6 @@ function AnalyzerPageContent() {
                 onClick={() => {
                   setMobileDetailsOpen(false);
                   setSelectedProduct(null);
-                  setPopupQuantity("");
                   setDetailPanelCost("");
                 }}
                 className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-600 bg-slate-700 text-xl leading-none text-slate-100 hover:bg-slate-600 lg:hidden"
@@ -2378,7 +2375,6 @@ function AnalyzerPageContent() {
                   type="button"
                   onClick={() => {
                     setSelectedProduct(null);
-                    setPopupQuantity("");
                     setDetailPanelCost("");
                     setMobileDetailsOpen(false);
                   }}
