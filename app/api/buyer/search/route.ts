@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { isBuyerModeEnabled } from "@/lib/featureFlags";
 import { searchBuyerCatalog, fetchCatalogItemsFromPaApi } from "@/lib/paApiClient";
-import { searchBuyerCatalogSpApi, fetchBatchBuyBoxPrices } from "@/lib/sp-api";
+import { searchBuyerCatalogSpApi, fetchOffersForAsin } from "@/lib/sp-api";
 import { prisma } from "@/lib/db";
 
 export const runtime = "nodejs";
@@ -105,21 +105,24 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       });
     }
 
-    // 2) SP-API buy-box prices for anything still missing
+    // 2) SP-API individual offers for anything still missing (reliable buy-box price per ASIN)
     const stillMissing = getMissingPriceAsins();
     if (stillMissing.length > 0) {
       try {
-        const spPrices = await fetchBatchBuyBoxPrices(stillMissing);
-        if (spPrices.size > 0) {
-          items = items.map((item) => {
-            const i = item as { asin?: string; price?: number | null };
-            if (i.price == null && i.asin && spPrices.has(i.asin)) {
-              return { ...item, price: spPrices.get(i.asin) ?? null };
-            }
-            return item;
-          });
-        }
-      } catch { /* SP-API pricing is best-effort; don't fail the whole request */ }
+        const offerResults = await Promise.allSettled(stillMissing.map((asin) => fetchOffersForAsin(asin)));
+        const spPriceMap = new Map<string, number | null>();
+        stillMissing.forEach((asin, idx) => {
+          const res = offerResults[idx];
+          spPriceMap.set(asin, res.status === "fulfilled" ? res.value.buyBoxPrice : null);
+        });
+        items = items.map((item) => {
+          const i = item as { asin?: string; price?: number | null };
+          if (i.price == null && i.asin && spPriceMap.has(i.asin)) {
+            return { ...item, price: spPriceMap.get(i.asin) ?? null };
+          }
+          return item;
+        });
+      } catch { /* best-effort; don't fail the whole request */ }
     }
   }
 

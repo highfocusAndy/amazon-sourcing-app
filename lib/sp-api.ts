@@ -551,11 +551,13 @@ export async function searchBuyerCatalogSpApi(options: {
       return { asin, title, brand, imageUrl, price: null, salesRank, salesRankCategory, affiliateUrl, starRating: null, reviewCount: null };
     }).filter((i) => i.asin !== "");
 
-    const priceMap = await fetchBatchBuyBoxPrices(mapped.map((i) => i.asin));
-    const withPrices = mapped.map((i) => ({
-      ...i,
-      price: priceMap.get(i.asin) ?? null,
-    }));
+    // Fetch buy-box prices in parallel via the individual offers endpoint (more reliable than batch pricing).
+    const offerResults = await Promise.allSettled(mapped.map((i) => fetchOffersForAsin(i.asin)));
+    const withPrices = mapped.map((item, idx) => {
+      const res = offerResults[idx];
+      const price = res.status === "fulfilled" ? res.value.buyBoxPrice : null;
+      return { ...item, price };
+    });
 
     return { ok: true, data: { items: withPrices, nextToken } };
   } catch (err) {
