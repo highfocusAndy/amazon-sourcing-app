@@ -81,6 +81,59 @@ type Cursor = {
   t: string | null;
 };
 
+/**
+ * Generate on-topic variations of a user-supplied keyword so we can keep paginating
+ * after SP-API exhausts its native results for the exact query. All variants still
+ * contain the original term so results stay relevant.
+ */
+function expandKeyword(query: string): string[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+
+  const variants = new Set<string>();
+  variants.add(q);
+
+  // Plural / singular flip.
+  if (q.endsWith("s") && q.length > 3) variants.add(q.slice(0, -1));
+  else variants.add(`${q}s`);
+
+  // Demographic + qualifier prefixes that are universally on-topic.
+  const prefixes = [
+    "best",
+    "popular",
+    "top",
+    "new",
+    "cheap",
+    "premium",
+    "men's",
+    "women's",
+    "kids",
+    "boys",
+    "girls",
+    "vintage",
+    "modern",
+  ];
+  for (const p of prefixes) variants.add(`${p} ${q}`);
+
+  // Demographic + qualifier suffixes.
+  const suffixes = [
+    "for men",
+    "for women",
+    "for kids",
+    "for boys",
+    "for girls",
+    "set",
+    "bundle",
+    "pack",
+    "deluxe",
+    "professional",
+    "gift",
+  ];
+  for (const s of suffixes) variants.add(`${q} ${s}`);
+
+  return Array.from(variants);
+}
+
 function encodeCursor(c: Cursor): string {
   return Buffer.from(JSON.stringify(c)).toString("base64url");
 }
@@ -125,16 +178,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const sortBy = SORT_MAP[sortKey];
 
   // Build the seed list used for continuation pagination.
-  // - If the user typed a keyword (or picked a subcategory), respect their exact intent —
-  //   do NOT chain into unrelated continuation seeds. Search ends naturally when SP-API
-  //   has no more results for that query.
+  // - If the user typed a keyword (or picked a subcategory), expand it into on-topic
+  //   variations only (e.g. "shirt" → "shirts", "men's shirt", "polo shirt"...) so
+  //   results stay relevant while still allowing deep pagination.
   // - When no keyword and no subcategory, we walk through category-specific or global
   //   seeds to provide Amazon-like infinite browsing.
   const userPrimary = [keyword, subcategory].filter(Boolean).join(" ").trim();
   const seedList: string[] = (() => {
     if (userPrimary) {
-      // Strict keyword mode — no continuation chaining.
-      return [userPrimary];
+      return expandKeyword(userPrimary);
     }
     if (category && CATEGORY_SEEDS[category]) return CATEGORY_SEEDS[category];
     return GLOBAL_SEEDS;
