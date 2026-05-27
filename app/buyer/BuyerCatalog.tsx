@@ -186,7 +186,14 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
 
   function handleSearch(e: React.FormEvent) {
     e.preventDefault();
-    const next = { ...state, keyword: searchInput, subcategory: "" };
+    // A fresh keyword search clears any active category/subcategory filter so results
+    // are driven purely by the user's query (Amazon-like behavior).
+    const next: SearchParamsState = {
+      ...state,
+      keyword: searchInput,
+      category: "All",
+      subcategory: "",
+    };
     setState(next);
     void fetchProducts(next, null, false);
   }
