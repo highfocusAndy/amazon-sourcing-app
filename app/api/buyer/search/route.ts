@@ -72,6 +72,7 @@ type RawItem = {
   salesRank?: number | null;
   isPrime?: boolean;
   offerCount?: number;
+  hasOffersInRequestedCondition?: boolean;
 };
 
 type Cursor = {
@@ -203,14 +204,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   let spApiToken: string | undefined = incomingCursor?.t ?? undefined;
 
   const cacheKey =
-    `buyer:search:v10:${searchIndex}:${seedList[seedIndex] ?? ""}:${seedIndex}:${spApiToken ?? ""}:${sortKey}:${brandFilter}:${condition}`;
+    `buyer:search:v11:${searchIndex}:${seedList[seedIndex] ?? ""}:${seedIndex}:${spApiToken ?? ""}:${sortKey}:${brandFilter}:${condition}`;
 
   // Cache hit fast path.
   try {
     const cached = await prisma.apiResponseCache.findUnique({ where: { cacheKey } });
     if (cached && cached.expiresAt > new Date()) {
       const raw = JSON.parse(cached.payload) as { items: unknown[]; nextPageToken: string | null };
-      const filtered = postFilter(raw.items, { minPrice, maxPrice, minRating, priceSource, bsrMax, primeOnly });
+      const filtered = postFilter(raw.items, { minPrice, maxPrice, minRating, priceSource, bsrMax, primeOnly, condition });
       const sorted = sortItems(filtered, sortKey, priceSource);
       return NextResponse.json({ ok: true, items: sorted, nextPageToken: raw.nextPageToken, fromCache: true });
     }
@@ -332,6 +333,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
               price: buyBox ?? low,
               isPrime: o?.isPrime ?? (item.isPrime as boolean | undefined) ?? false,
               offerCount: o?.offerCount ?? (item.offerCount as number | undefined) ?? 0,
+              hasOffersInRequestedCondition:
+                o?.hasOffersInRequestedCondition ?? (item.hasOffersInRequestedCondition as boolean | undefined) ?? false,
             };
           }
           return item;
@@ -362,18 +365,25 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     } catch { /* ignore */ }
   }
 
-  const filtered = postFilter(items, { minPrice, maxPrice, minRating, priceSource, bsrMax, primeOnly });
+  const filtered = postFilter(items, { minPrice, maxPrice, minRating, priceSource, bsrMax, primeOnly, condition });
   const sorted = sortItems(filtered, sortKey, priceSource);
   return NextResponse.json({ ok: true, items: sorted, nextPageToken });
 }
+
+type OffersBatchEntry = {
+  buyBoxPrice: number | null;
+  lowestPrice: number | null;
+  isPrime: boolean;
+  offerCount: number;
+  hasOffersInRequestedCondition: boolean;
+};
 
 async function offersBatch(
   asins: string[],
   concurrency: number,
   condition: ItemCondition,
-): Promise<Array<{ buyBoxPrice: number | null; lowestPrice: number | null; isPrime: boolean; offerCount: number } | null>> {
-  const results: Array<{ buyBoxPrice: number | null; lowestPrice: number | null; isPrime: boolean; offerCount: number } | null> =
-    new Array(asins.length).fill(null);
+): Promise<Array<OffersBatchEntry | null>> {
+  const results: Array<OffersBatchEntry | null> = new Array(asins.length).fill(null);
   let next = 0;
   async function worker(): Promise<void> {
     while (next < asins.length) {
@@ -386,6 +396,7 @@ async function offersBatch(
           lowestPrice: r.lowestPrice,
           isPrime: r.isPrime,
           offerCount: r.offerCount,
+          hasOffersInRequestedCondition: r.hasOffersInRequestedCondition,
         };
       } catch {
         results[i] = null;
@@ -412,6 +423,7 @@ function postFilter(
     priceSource: "buybox" | "lowest";
     bsrMax: number;
     primeOnly: boolean;
+    condition: ItemCondition;
   },
 ): Record<string, unknown>[] {
   return items
@@ -423,6 +435,8 @@ function postFilter(
       if (opts.minRating > 0 && (i.starRating == null || i.starRating < opts.minRating)) return false;
       if (opts.bsrMax > 0 && (i.salesRank == null || i.salesRank > opts.bsrMax)) return false;
       if (opts.primeOnly && i.isPrime !== true) return false;
+      // Hard condition filter (skipped for New, the implicit default).
+      if (opts.condition !== "new" && i.hasOffersInRequestedCondition !== true) return false;
       return true;
     })
     .map((item) => {

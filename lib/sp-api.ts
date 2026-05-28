@@ -31,8 +31,10 @@ interface OffersBasics {
   amazonIsSeller: boolean;
   /** True when at least one offer is Prime-eligible (FBA or Seller-Fulfilled Prime). */
   isPrime: boolean;
-  /** Total number of competing offers (sellers) returned in the offers payload. */
+  /** Total number of competing offers across ALL conditions. */
   offerCount: number;
+  /** True when the requested condition has at least one offer for this product. */
+  hasOffersInRequestedCondition: boolean;
 }
 
 const AMAZON_SELLER_ID = "ATVPDKIKX0DER";
@@ -374,11 +376,15 @@ function extractOffersBasics(payload: unknown, condition: ItemCondition = "new")
   // Total offer count across ALL conditions (matches Amazon's "Other sellers" page).
   // Summary.NumberOfOffers is an array of { condition, fulfillmentChannel, OfferCount }.
   let offerCount = 0;
+  let conditionOfferCount = 0;
   const numberOfOffers = asArray(summary?.NumberOfOffers);
   for (const noRaw of numberOfOffers) {
     const no = asObject(noRaw);
     const c = readNumber(no?.OfferCount);
-    if (c !== null) offerCount += c;
+    if (c !== null) {
+      offerCount += c;
+      if (matchesCondition(no?.condition)) conditionOfferCount += c;
+    }
   }
   // Fallbacks if Summary.NumberOfOffers absent.
   if (offerCount === 0) {
@@ -387,12 +393,18 @@ function extractOffersBasics(payload: unknown, condition: ItemCondition = "new")
     else offerCount = offers.length;
   }
 
+  // Does the requested condition have any offers? Two signals: the
+  // condition-specific NumberOfOffers count, or a non-empty Offers list
+  // (the API filters that list to the requested ItemCondition).
+  const hasOffersInRequestedCondition = conditionOfferCount > 0 || offers.length > 0;
+
   return {
     buyBoxPrice: roundCurrency(buyBoxPrice),
     lowestPrice: roundCurrency(lowestPrice),
     amazonIsSeller,
     isPrime,
     offerCount,
+    hasOffersInRequestedCondition,
   };
 }
 
@@ -565,6 +577,8 @@ export interface SpApiBuyerItem {
   isPrime?: boolean;
   /** Number of competing sellers (offers) on the listing. */
   offerCount?: number;
+  /** True when the requested ItemCondition has at least one offer for this product. */
+  hasOffersInRequestedCondition?: boolean;
 }
 
 export async function searchBuyerCatalogSpApi(options: {
@@ -685,6 +699,7 @@ export async function searchBuyerCatalogSpApi(options: {
         price: buyBoxPrice ?? lowestPrice,
         isPrime: o?.isPrime ?? false,
         offerCount: o?.offerCount ?? 0,
+        hasOffersInRequestedCondition: o?.hasOffersInRequestedCondition ?? false,
       };
     });
 
