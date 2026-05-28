@@ -3,26 +3,21 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
 import { signOut } from "next-auth/react";
 import { useEffect, useState } from "react";
-import { BrandBackdrop } from "@/app/components/BrandBackdrop";
 import { AmazonSmile } from "./AmazonSmile";
 import { AppearanceSection } from "@/app/settings/AppearanceSection";
-import { persistAppearanceCookies } from "@/lib/theme";
-
-const G = "#C9A84C";
-const G_DIM = "rgba(201,168,76,0.10)";
-const G_BORD = "rgba(201,168,76,0.28)";
+import { persistAppearanceCookies, initAppearance } from "@/lib/theme";
 
 export function BuyerShell({
   children,
   userMode,
+  userDisplayName,
 }: {
   children: React.ReactNode;
   userMode: string | null;
+  userDisplayName: string;
 }) {
-  const { data: session } = useSession();
   const router = useRouter();
   const isBuyer = userMode === "buyer";
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -30,6 +25,7 @@ export function BuyerShell({
 
   // Restore saved theme / mode on mount — same as seller dashboard.
   useEffect(() => {
+    initAppearance();
     persistAppearanceCookies();
   }, []);
 
@@ -43,14 +39,10 @@ export function BuyerShell({
   }, [settingsOpen, mobileMenuOpen]);
 
   return (
-    <div className="relative flex h-[100dvh] max-h-[100dvh] w-full flex-col overflow-hidden bg-slate-900/50">
-      {/* Repeating HF watermark — same as seller dashboard. */}
-      <BrandBackdrop variant="onDark" />
-
+    <div id="buyer-shell" className="relative flex h-[100dvh] max-h-[100dvh] w-full flex-col overflow-hidden">
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <header
-        className="relative z-[2] flex h-14 shrink-0 items-center gap-2 border-b border-slate-700/60 px-4 backdrop-blur-md sm:gap-3"
-        style={{ background: "rgba(15,23,42,0.88)" }}
+        className="buyer-header relative z-[2] flex h-14 shrink-0 items-center gap-2 border-b px-3 sm:gap-3 sm:px-4"
       >
         {/* Logo + title */}
         <Link
@@ -62,41 +54,33 @@ export function BuyerShell({
             src="/HF_LOGO.png"
             alt=""
             aria-hidden
-            className="h-9 w-auto object-contain transition duration-300 group-hover:scale-[1.04]"
-            style={{ filter: "brightness(0) invert(1) drop-shadow(0 0 7px rgba(201,168,76,0.28))" }}
+            className="buyer-logo h-10 w-auto object-contain transition duration-300 group-hover:scale-[1.04]"
           />
           <span
             aria-hidden
-            className="hidden h-7 w-px sm:block"
-            style={{ background: "linear-gradient(to bottom, transparent, rgba(201,168,76,0.38), transparent)" }}
+            className="buyer-title-divider hidden h-7 w-px sm:block"
           />
           <span className="flex flex-col leading-tight">
             <span
-              className="text-[14px] font-semibold tracking-tight sm:text-[15px]"
+              className="buyer-title text-[14px] font-semibold tracking-tight sm:text-[15px]"
               style={{
-                color: G,
                 fontFamily: "Georgia, serif",
                 fontStyle: "italic",
-                textShadow: "0 0 7px rgba(201,168,76,0.13)",
               }}
             >
               Buyer Catalog
             </span>
-            <span className="mt-0.5 hidden items-center gap-1 text-[9px] font-semibold uppercase tracking-[0.10em] text-slate-500 sm:inline-flex">
-              <AmazonSmile className="h-2.5 w-2.5" />
+            <span className="buyer-header-subtitle mt-0.5 hidden items-center gap-1 text-[9px] font-semibold uppercase tracking-[0.10em] sm:inline-flex">
+              <AmazonSmile className="h-2.5 w-2.5" color="currentColor" />
               Powered by Amazon Associates
             </span>
           </span>
         </Link>
 
-        <div className="flex-1" />
-
+        <div className="ml-auto flex min-w-0 shrink-0 items-center gap-2 sm:gap-3">
         {/* Mode toggle — inline, hidden on very small screens */}
         <div className="hidden items-center sm:flex">
-          <div
-            className="flex h-8 overflow-hidden rounded-xl border"
-            style={{ borderColor: G_BORD }}
-          >
+          <div className="buyer-mode-toggle flex h-8 overflow-hidden rounded-xl border">
             {isBuyer ? (
               <button
                 type="button"
@@ -115,11 +99,8 @@ export function BuyerShell({
                 Seller
               </button>
             )}
-            <div className="w-px shrink-0" style={{ background: G_BORD }} />
-            <span
-              className="flex items-center px-3 text-[11px] font-semibold"
-              style={{ background: G_DIM, color: G }}
-            >
+            <div className="buyer-mode-toggle__divider w-px shrink-0" />
+            <span className="buyer-mode-toggle__active flex items-center px-3 text-[11px] font-semibold">
               🛍️ Buyer
             </span>
           </div>
@@ -129,44 +110,50 @@ export function BuyerShell({
         <button
           type="button"
           onClick={() => setSettingsOpen(true)}
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-700/70 bg-slate-800/50 text-slate-400 transition hover:border-slate-600 hover:text-slate-200"
+          className="buyer-icon-btn flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition"
           aria-label="App settings"
           title="Appearance settings"
         >
           ⚙
         </button>
 
-        {/* User / sign-out — desktop only */}
-        {session?.user && (
-          <div className="hidden items-center gap-2 md:flex">
-            <span className="max-w-[9rem] truncate text-[13px] text-slate-400">
-              {session.user.name || session.user.email}
-            </span>
-            <button
-              type="button"
-              onClick={() => void signOut({ callbackUrl: "/login" })}
-              className="text-[12px] text-slate-500 underline underline-offset-2 transition hover:text-slate-300"
-            >
-              Sign out
-            </button>
-          </div>
-        )}
+        {/* User / sign-out — always visible (name from server session) */}
+        <div className="buyer-header-user flex shrink-0 items-center gap-2">
+          <span className="buyer-header-user-name max-w-[7rem] truncate text-[11px] sm:max-w-[9rem] sm:text-[13px]">
+            {userDisplayName}
+          </span>
+          <button
+            type="button"
+            onClick={() => void signOut({ callbackUrl: "/login" })}
+            className="buyer-header-signout shrink-0 text-[11px] underline underline-offset-2 sm:text-[12px]"
+          >
+            Sign out
+          </button>
+        </div>
 
-        {/* Mobile hamburger */}
+        {/* Mobile hamburger — only when header is too tight */}
         <button
           type="button"
           onClick={() => setMobileMenuOpen(true)}
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-700 bg-slate-800/50 text-slate-300 sm:hidden"
+          className="buyer-icon-btn flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border md:hidden"
           aria-label="Menu"
         >
           ☰
         </button>
+        </div>
       </header>
 
       {/* ── Main (just children — one filter sidebar inside BuyerCatalog) ─── */}
       <div className="relative z-[1] flex min-h-0 flex-1 overflow-hidden">
         {children}
       </div>
+
+      {/* Amazon Associates disclosure — always visible (affiliate program requirement). */}
+      <footer
+        className="buyer-disclosure relative z-[2] shrink-0 border-t px-4 py-2.5 text-center text-[11px] leading-relaxed"
+      >
+        As an Amazon Associate, we earn from qualifying purchases.
+      </footer>
 
       {/* ── Mobile nav drawer ──────────────────────────────────────────────── */}
       {mobileMenuOpen && (
@@ -175,11 +162,10 @@ export function BuyerShell({
             type="button"
             aria-label="Close menu"
             onClick={() => setMobileMenuOpen(false)}
-            className="absolute inset-0 bg-slate-950/65 backdrop-blur-[2px]"
+            className="buyer-overlay absolute inset-0 backdrop-blur-[2px]"
           />
           <div
-            className="absolute left-0 top-0 flex h-full w-64 flex-col border-r border-slate-700/60"
-            style={{ background: "#0f172a" }}
+            className="buyer-drawer-panel absolute left-0 top-0 flex h-full w-64 flex-col border-r"
           >
             <div className="flex items-center justify-between border-b border-slate-700/60 px-4 py-3">
               <span className="text-sm font-semibold text-slate-200">Menu</span>
@@ -195,10 +181,7 @@ export function BuyerShell({
             {/* Mode toggle */}
             <div className="border-b border-slate-700/60 px-4 py-3">
               <p className="mb-2 text-[9px] font-bold uppercase tracking-widest text-slate-500">Mode</p>
-              <div
-                className="flex h-8 overflow-hidden rounded-xl border"
-                style={{ borderColor: G_BORD }}
-              >
+              <div className="buyer-mode-toggle flex h-8 overflow-hidden rounded-xl border">
                 {isBuyer ? (
                   <button type="button" disabled className="flex-1 cursor-not-allowed text-[11px] font-semibold text-slate-600">
                     🔒 Seller
@@ -212,11 +195,8 @@ export function BuyerShell({
                     Seller
                   </button>
                 )}
-                <div className="w-px" style={{ background: G_BORD }} />
-                <span
-                  className="flex flex-1 items-center justify-center text-[11px] font-semibold"
-                  style={{ background: G_DIM, color: G }}
-                >
+                <div className="buyer-mode-toggle__divider w-px" />
+                <span className="buyer-mode-toggle__active flex flex-1 items-center justify-center text-[11px] font-semibold">
                   🛍️ Buyer
                 </span>
               </div>
@@ -226,8 +206,7 @@ export function BuyerShell({
               <Link
                 href="/buyer"
                 onClick={() => setMobileMenuOpen(false)}
-                className="flex items-center gap-2 rounded-lg px-3 py-2 text-[13px] font-medium transition"
-                style={{ color: G }}
+                className="buyer-nav-link--active flex items-center gap-2 rounded-lg px-3 py-2 text-[13px] font-medium transition"
               >
                 🛍️ Browse Catalog
               </Link>
@@ -243,18 +222,14 @@ export function BuyerShell({
             </div>
 
             <div className="mt-auto border-t border-slate-700/60 px-4 py-4">
-              {session?.user && (
-                <>
-                  <p className="truncate text-[12px] text-slate-400">{session.user.name || session.user.email}</p>
-                  <button
-                    type="button"
-                    onClick={() => void signOut({ callbackUrl: "/login" })}
-                    className="mt-1 text-[11px] text-slate-500 underline underline-offset-2 hover:text-slate-300"
-                  >
-                    Sign out
-                  </button>
-                </>
-              )}
+              <p className="truncate text-[12px] text-slate-400">{userDisplayName}</p>
+              <button
+                type="button"
+                onClick={() => void signOut({ callbackUrl: "/login" })}
+                className="mt-1 text-[11px] text-slate-500 underline underline-offset-2 hover:text-slate-300"
+              >
+                Sign out
+              </button>
             </div>
           </div>
         </div>
@@ -267,9 +242,9 @@ export function BuyerShell({
             type="button"
             aria-label="Close settings"
             onClick={() => setSettingsOpen(false)}
-            className="absolute inset-0 bg-slate-950/60 backdrop-blur-[2px]"
+            className="buyer-overlay absolute inset-0 backdrop-blur-[2px]"
           />
-          <div className="relative flex w-full max-w-sm flex-col overflow-hidden border-l border-slate-700/60 shadow-2xl">
+          <div className="buyer-drawer-panel relative flex w-full max-w-sm flex-col overflow-hidden border-l shadow-2xl">
             {/* Drawer header */}
             <div
               className="flex shrink-0 items-center justify-between border-b border-slate-200/80 px-5 py-4"

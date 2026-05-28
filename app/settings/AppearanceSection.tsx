@@ -82,7 +82,7 @@ export function AppearanceSection({ className = "" }: { className?: string }) {
           Each theme sets the accent colour, background, sidebar, and display mode together.{" "}
           <strong className="text-slate-600">Light Clean</strong> switches to light mode automatically.
         </p>
-        <div className="grid grid-cols-4 gap-3 sm:grid-cols-8">
+        <div className="grid grid-cols-4 gap-3 sm:grid-cols-5 lg:grid-cols-9">
           {THEMES.map((theme) => {
             const isActive = activeTheme === theme.id;
             const isLight = theme.mode === "light";

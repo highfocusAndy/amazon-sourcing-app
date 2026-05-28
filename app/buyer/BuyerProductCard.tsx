@@ -57,16 +57,9 @@ export function BuyerProductCard({
   const offerCount = ext.offerCount ?? 0;
 
   return (
-    <div
-      className="group flex flex-col rounded-2xl overflow-hidden transition-all duration-300 ease-out will-change-transform hover:-translate-y-0.5 hover:border-[rgba(201,168,76,0.35)] hover:shadow-xl hover:shadow-amber-500/[0.07]"
-      style={{
-        background: "rgba(255,255,255,0.03)",
-        border: "1px solid rgba(255,255,255,0.07)",
-        backdropFilter: "blur(2px)",
-      }}
-    >
-      {/* Image */}
-      <div className="aspect-square w-full overflow-hidden bg-slate-800/40">
+    <div className="buyer-product-card group flex h-full flex-col rounded-2xl transition-all duration-300 ease-out will-change-transform hover:-translate-y-0.5">
+      {/* Image — fixed aspect */}
+      <div className="buyer-card-image aspect-square w-full shrink-0 overflow-hidden rounded-t-2xl">
         {item.imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -81,81 +74,87 @@ export function BuyerProductCard({
         )}
       </div>
 
-      {/* Info */}
-      <div className="flex flex-1 flex-col gap-2 p-3">
-        <p className="line-clamp-2 text-[13px] font-medium leading-snug text-slate-200" title={item.title}>
+      {/* Info — flex column fills card; footer pinned to bottom for aligned CTAs */}
+      <div className="buyer-product-card__body flex min-h-0 flex-1 flex-col gap-1.5 p-3">
+        <p
+          className="line-clamp-2 min-h-[2.5rem] shrink-0 text-[13px] font-medium leading-snug text-slate-200"
+          title={item.title}
+        >
           {item.title}
         </p>
 
-        {item.brand && (
-          <p className="text-[11px] text-slate-500 truncate" title={item.brand}>
-            {item.brand}
-          </p>
-        )}
-
-        {/* Rating — SVG stars with fractional fill */}
-        {starValue != null && (
-          <div className="flex items-center gap-1.5">
-            <StarRating value={starValue} size={12} />
-            <span className="text-[11px] font-medium text-slate-300">{starValue.toFixed(1)}</span>
-            {item.reviewCount != null && (
-              <span className="text-[11px] text-slate-500">({item.reviewCount.toLocaleString()})</span>
-            )}
-          </div>
-        )}
-
-        {/* BSR */}
-        {item.salesRank != null && (
-          <p className="text-[11px] text-slate-500">
-            #{item.salesRank.toLocaleString()}
-            {item.salesRankCategory ? <span className="text-slate-600"> in {item.salesRankCategory}</span> : null}
-          </p>
-        )}
-
-        {/* Price + Prime */}
-        <div className="flex items-center gap-2 flex-wrap">
-          {primary != null ? (
-            <span className="text-[15px] font-bold text-white">${primary.toFixed(2)}</span>
-          ) : (
-            <span className="text-[12px] text-slate-500 italic">See price on Amazon</span>
+        <div className="buyer-product-card__meta flex min-h-0 flex-col gap-1">
+          {item.salesRank != null && (
+            <p className="text-[11px] leading-snug text-slate-500">
+              #{item.salesRank.toLocaleString()}
+              {item.salesRankCategory ? (
+                <span className="text-slate-600"> in {item.salesRankCategory}</span>
+              ) : null}
+            </p>
           )}
-          {showSecondary && secondary != null && (
-            <span className="text-[11px] text-slate-500">
-              {priceSource === "lowest" ? "Buy Box" : "Lowest"} ${secondary.toFixed(2)}
-            </span>
+
+          {item.brand && (
+            <p className="truncate text-[11px] text-slate-500" title={item.brand}>
+              {item.brand}
+            </p>
           )}
-          {item.isPrime && (
-            <span
-              className="rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white"
-              style={{ background: "#00A8E0" }}
-            >
-              Prime
-            </span>
+
+          {starValue != null && (
+            <div className="flex items-center gap-1.5">
+              <StarRating value={starValue} size={12} />
+              <span className="text-[11px] font-medium text-slate-300">{starValue.toFixed(1)}</span>
+              {item.reviewCount != null && (
+                <span className="text-[11px] text-slate-500">({item.reviewCount.toLocaleString()})</span>
+              )}
+            </div>
           )}
         </div>
 
-        {/* CTA */}
-        <a
-          href={affiliateUrl(item.asin, item.affiliateUrl)}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="mt-auto block w-full rounded-xl py-2.5 text-center text-[12px] font-bold shadow-md shadow-amber-500/10 transition-all duration-300 ease-out hover:-translate-y-px hover:shadow-lg hover:shadow-amber-500/25"
-          style={{ background: "#C9A84C", color: "#0a0800" }}
-        >
-          View on Amazon →
-        </a>
+        <div className="buyer-product-card__footer mt-auto flex flex-col gap-1.5 pt-0.5">
+          {/* Price + Prime */}
+          <div className="flex min-h-[2.75rem] flex-wrap items-center gap-2">
+            {primary != null ? (
+              <span className="buyer-card-price text-[15px] font-bold">${primary.toFixed(2)}</span>
+            ) : (
+              <span className="text-[12px] italic text-slate-500">See price on Amazon</span>
+            )}
+            {showSecondary && secondary != null && (
+              <span className="text-[11px] text-slate-500">
+                {priceSource === "lowest" ? "Buy Box" : "Lowest"} ${secondary.toFixed(2)}
+              </span>
+            )}
+            {item.isPrime && (
+              <span
+                className="rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white"
+                style={{ background: "#00A8E0" }}
+              >
+                Prime
+              </span>
+            )}
+          </div>
 
-        {/* Sellers link — opens Amazon's "Other sellers" listing for this ASIN */}
-        {offerCount > 0 && (
           <a
-            href={offerListingUrl(item.asin)}
+            href={affiliateUrl(item.asin, item.affiliateUrl)}
             target="_blank"
             rel="noopener noreferrer"
-            className="block w-full text-center text-[11px] text-slate-400 underline-offset-2 hover:underline hover:text-slate-200"
+            className="buyer-amazon-cta"
           >
-            {offerCount} {offerCount === 1 ? "seller" : "sellers"} on Amazon →
+            View on Amazon →
           </a>
-        )}
+
+          <div className="min-h-[1.125rem]">
+            {offerCount > 0 && (
+              <a
+                href={offerListingUrl(item.asin)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="buyer-sellers-link block pt-0.5 text-center text-[11px] text-slate-400 underline-offset-2 hover:text-slate-200 hover:underline"
+              >
+                {offerCount} {offerCount === 1 ? "seller" : "sellers"} on Amazon →
+              </a>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

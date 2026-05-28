@@ -279,25 +279,36 @@ function FeatureFlagsSection() {
   const [toast, setToast]     = useState<{ key: string; msg: string } | null>(null);
 
   useEffect(() => {
-    fetch("/api/admin/feature-flags")
+    let cancelled = false;
+    fetch("/api/admin/feature-flags", { cache: "no-store" })
       .then((r) => r.json() as Promise<{ ok: boolean; flags: FlagEntry[] }>)
-      .then((d) => { if (d.ok) setFlags(d.flags); })
+      .then((d) => {
+        if (!cancelled && d.ok) setFlags(d.flags);
+      })
       .catch(() => {})
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   async function toggle(key: string, enabled: boolean) {
+    if (saving) return;
     setSaving(key);
     try {
       const res = await fetch("/api/admin/feature-flags", {
         method: "PUT",
+        cache: "no-store",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ key, enabled }),
       });
-      const data = (await res.json()) as { ok?: boolean; error?: string };
+      const data = (await res.json()) as { ok?: boolean; enabled?: boolean; error?: string };
       if (res.ok && data.ok) {
-        setFlags((prev) => prev.map((f) => f.key === key ? { ...f, enabled } : f));
-        setToast({ key, msg: `${enabled ? "Enabled" : "Disabled"} successfully.` });
+        const saved = data.enabled === true;
+        setFlags((prev) => prev.map((f) => (f.key === key ? { ...f, enabled: saved } : f)));
+        setToast({ key, msg: `${saved ? "Enabled" : "Disabled"} successfully.` });
         setTimeout(() => setToast(null), 3000);
       } else {
         setToast({ key, msg: data.error ?? "Failed to update flag." });

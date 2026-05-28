@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { BuyerProductCard } from "./BuyerProductCard";
 import type { BuyerCatalogItem } from "@/lib/paApiClient";
 import Link from "next/link";
+import { BrandBackdrop } from "@/app/components/BrandBackdrop";
 
 const CATEGORIES = [
   "All",
@@ -50,19 +51,21 @@ const BSR_OPTIONS = [
   { label: "Top 100k", value: 100000 },
 ];
 
-const G = "#C9A84C";
-const G_DIM = "rgba(201,168,76,0.12)";
-const G_BORD = "rgba(201,168,76,0.3)";
+function filterChipClass(active: boolean, extra = ""): string {
+  return `buyer-filter-chip ${active ? "is-active" : ""} ${extra}`.trim();
+}
 
 function SkeletonCard() {
   return (
-    <div className="animate-pulse rounded-2xl overflow-hidden" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
-      <div className="aspect-square bg-slate-800" />
-      <div className="p-3 space-y-2">
-        <div className="h-3 rounded bg-slate-700 w-full" />
-        <div className="h-3 rounded bg-slate-700 w-4/5" />
-        <div className="h-4 rounded bg-slate-700/60 w-1/3 mt-2" />
-        <div className="h-8 rounded-xl bg-slate-700/40 mt-2" />
+    <div className="buyer-skeleton buyer-product-card flex h-full animate-pulse flex-col overflow-hidden rounded-2xl">
+      <div className="buyer-card-image aspect-square shrink-0" />
+      <div className="flex min-h-0 flex-1 flex-col gap-2 p-3">
+        <div className="h-3 w-full rounded bg-slate-700" />
+        <div className="h-3 w-4/5 rounded bg-slate-700" />
+        <div className="mt-auto space-y-2">
+          <div className="h-4 w-1/3 rounded bg-slate-700/60" />
+          <div className="h-10 rounded-xl bg-slate-700/40" />
+        </div>
       </div>
     </div>
   );
@@ -129,6 +132,7 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
 
   const [items, setItems] = useState<BuyerCatalogItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [nextPageToken, setNextPageToken] = useState<string | null>(null);
 
@@ -148,15 +152,34 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
     }
   }, [mobileFiltersOpen]);
 
-  // Infinite scroll sentinel.
+  // Infinite scroll — scroll root is .buyer-main (not the viewport).
+  const mainRef = useRef<HTMLElement | null>(null);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
-  // Refs to avoid re-creating IntersectionObserver on every render.
   const stateRef = useRef(state);
   const tokenRef = useRef(nextPageToken);
-  const loadingRef = useRef(loading);
+  const loadingRef = useRef(loading || loadingMore);
+  const fetchGenRef = useRef(0);
+  const dupSkipRef = useRef(0);
+  const fetchProductsRef = useRef<
+    (params: SearchParamsState, pageToken: string | null, append: boolean) => Promise<void>
+  >(() => Promise.resolve());
   stateRef.current = state;
   tokenRef.current = nextPageToken;
-  loadingRef.current = loading;
+  loadingRef.current = loading || loadingMore;
+
+  const LOAD_ROOT_MARGIN_PX = 400;
+
+  const tryLoadMore = useCallback(() => {
+    if (loadingRef.current || !tokenRef.current) return;
+    const node = loadMoreRef.current;
+    const root = mainRef.current;
+    if (!node || !root) return;
+    const nodeRect = node.getBoundingClientRect();
+    const rootRect = root.getBoundingClientRect();
+    if (nodeRect.top <= rootRect.bottom + LOAD_ROOT_MARGIN_PX) {
+      void fetchProductsRef.current(stateRef.current, tokenRef.current, true);
+    }
+  }, []);
 
   const isBuyer = userMode === "buyer";
 
@@ -165,8 +188,25 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
     pageToken: string | null,
     append: boolean,
   ) => {
-    setLoading(true);
+    if (append && loadingRef.current) return;
+
+    if (!append) {
+      fetchGenRef.current += 1;
+      tokenRef.current = null;
+      setNextPageToken(null);
+      dupSkipRef.current = 0;
+    }
+
+    const gen = fetchGenRef.current;
+    loadingRef.current = true;
+    if (append) setLoadingMore(true);
+    else setLoading(true);
     setError(null);
+
+    let fetched: BuyerCatalogItem[] = [];
+    let nextToken: string | null = null;
+    let addedCount = 0;
+
     try {
       const q = new URLSearchParams({
         keyword: params.keyword,
@@ -186,6 +226,8 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
       if (pageToken) q.set("pageToken", pageToken);
 
       const res = await fetch(`/api/buyer/search?${q.toString()}`);
+      if (gen !== fetchGenRef.current) return;
+
       const data = (await res.json()) as {
         ok?: boolean;
         items?: BuyerCatalogItem[];
@@ -197,23 +239,57 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
         if (!append) setItems([]);
         return;
       }
-      const fetched = data.items;
-      // Cross-page ASIN dedupe — seed continuation can surface the same product
-      // in multiple variations, so we filter against everything already shown.
+
+      fetched = data.items;
+      addedCount = fetched.length;
       setItems((prev) => {
         if (!append) return fetched;
         const seen = new Set(prev.map((p) => p.asin));
         const fresh = fetched.filter((p) => p.asin && !seen.has(p.asin));
+        addedCount = fresh.length;
         return [...prev, ...fresh];
       });
-      setNextPageToken(data.nextPageToken ?? null);
+
+      nextToken = data.nextPageToken ?? null;
+      if (append && addedCount === 0) {
+        if (!nextToken || nextToken === pageToken) {
+          nextToken = null;
+          dupSkipRef.current = 0;
+        } else {
+          dupSkipRef.current += 1;
+          // Overlap across seeds/cycles can yield duplicate-only pages — keep going, but cap retries.
+          if (dupSkipRef.current > 10) {
+            nextToken = null;
+            dupSkipRef.current = 0;
+          }
+        }
+      } else {
+        dupSkipRef.current = 0;
+      }
+      tokenRef.current = nextToken;
+      setNextPageToken(nextToken);
     } catch {
+      if (gen !== fetchGenRef.current) return;
       setError("Network error. Please try again.");
       if (!append) setItems([]);
     } finally {
+      if (gen !== fetchGenRef.current) return;
+      loadingRef.current = false;
       setLoading(false);
+      setLoadingMore(false);
+      const shouldPrefetch =
+        Boolean(nextToken) &&
+        (append ? addedCount > 0 || nextToken !== pageToken : fetched.length > 0);
+      if (shouldPrefetch) {
+        requestAnimationFrame(() => {
+          if (gen !== fetchGenRef.current) return;
+          tryLoadMore();
+        });
+      }
     }
-  }, []);
+  }, [tryLoadMore]);
+
+  fetchProductsRef.current = fetchProducts;
 
   // Initial landing — best sellers.
   useEffect(() => {
@@ -251,26 +327,21 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
     return () => document.removeEventListener("mousedown", onDocMouseDown);
   }, []);
 
-  // Infinite scroll — re-run whenever nextPageToken changes so the observer
-  // connects to the sentinel AFTER it first renders (it's null on mount).
+  // Infinite scroll — observe sentinel inside the scrolling main panel (not the viewport).
   useEffect(() => {
+    const root = mainRef.current;
     const node = loadMoreRef.current;
-    if (!node) return;
+    if (!root || !node) return;
+
     const observer = new IntersectionObserver(
       (entries) => {
-        const entry = entries[0];
-        if (entry?.isIntersecting && !loadingRef.current && tokenRef.current) {
-          void fetchProducts(stateRef.current, tokenRef.current, true);
-        }
+        if (entries[0]?.isIntersecting) tryLoadMore();
       },
-      { rootMargin: "800px" },
+      { root, rootMargin: `${LOAD_ROOT_MARGIN_PX}px`, threshold: 0 },
     );
     observer.observe(node);
     return () => observer.disconnect();
-  // nextPageToken in deps: when it changes from null → value the sentinel
-  // just rendered, this effect re-fires and actually connects the observer.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetchProducts, nextPageToken]);
+  }, [tryLoadMore]);
 
   function handleSearch(e: React.FormEvent) {
     e.preventDefault();
@@ -305,8 +376,8 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
     void fetchProducts(INITIAL_STATE, null, false);
   }
 
-  const selectCls = "w-full rounded-xl border bg-slate-800/80 px-3 py-2 text-sm text-slate-200 outline-none focus:border-[#C9A84C]/60 focus:ring-1 focus:ring-[#C9A84C]/30";
-  const inputCls = "w-full rounded-xl border border-slate-700/60 bg-slate-800/60 px-3 py-2 text-sm text-slate-200 placeholder-slate-600 outline-none focus:border-[#C9A84C]/60 focus:ring-1 focus:ring-[#C9A84C]/30";
+  const selectCls = "buyer-select w-full rounded-xl border px-3 py-2 text-sm outline-none";
+  const inputCls = "buyer-input w-full rounded-xl border px-3 py-2 text-sm outline-none";
 
   const activeSubcats = SUBCATEGORIES[state.category] ?? [];
 
@@ -329,43 +400,36 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
   const renderFilters = () => (
     <>
       <div>
-        <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-500">Category</p>
+        <p className="buyer-filter-label mb-1.5 text-[10px] font-bold uppercase tracking-widest">Category</p>
         <select
           value={state.category}
           onChange={(e) => updateState({ category: e.target.value })}
           className={selectCls}
-          style={{ borderColor: "rgba(71,85,105,0.6)" }}
         >
           {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
         </select>
       </div>
 
       <div>
-        <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-500">Sort By</p>
+        <p className="buyer-filter-label mb-1.5 text-[10px] font-bold uppercase tracking-widest">Sort By</p>
         <select
           value={state.sort}
           onChange={(e) => updateState({ sort: e.target.value })}
           className={selectCls}
-          style={{ borderColor: "rgba(71,85,105,0.6)" }}
         >
           {SORT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
       </div>
 
       <div>
-        <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-500">Condition</p>
+        <p className="buyer-filter-label mb-1.5 text-[10px] font-bold uppercase tracking-widest">Condition</p>
         <div className="grid grid-cols-2 gap-1.5">
           {CONDITION_OPTIONS.map((o) => (
             <button
               key={o.value}
               type="button"
               onClick={() => updateState({ condition: o.value })}
-              className="rounded-lg border py-1.5 text-[11px] font-semibold transition"
-              style={{
-                borderColor: state.condition === o.value ? G_BORD : "rgba(71,85,105,0.5)",
-                background: state.condition === o.value ? G_DIM : "transparent",
-                color: state.condition === o.value ? G : "rgb(148 163 184)",
-              }}
+              className={filterChipClass(state.condition === o.value, "rounded-lg py-1.5 text-[11px] font-semibold")}
             >
               {o.label}
             </button>
@@ -374,29 +438,19 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
       </div>
 
       <div>
-        <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-500">Price Source</p>
+        <p className="buyer-filter-label mb-1.5 text-[10px] font-bold uppercase tracking-widest">Price Source</p>
         <div className="flex gap-1.5">
           <button
             type="button"
             onClick={() => updateState({ priceSource: "buybox" })}
-            className="flex-1 rounded-lg border py-1.5 text-[11px] font-semibold transition"
-            style={{
-              borderColor: state.priceSource === "buybox" ? G_BORD : "rgba(71,85,105,0.5)",
-              background: state.priceSource === "buybox" ? G_DIM : "transparent",
-              color: state.priceSource === "buybox" ? G : "rgb(148 163 184)",
-            }}
+            className={filterChipClass(state.priceSource === "buybox", "flex-1 rounded-lg py-1.5 text-[11px] font-semibold")}
           >
             Buy Box
           </button>
           <button
             type="button"
             onClick={() => updateState({ priceSource: "lowest" })}
-            className="flex-1 rounded-lg border py-1.5 text-[11px] font-semibold transition"
-            style={{
-              borderColor: state.priceSource === "lowest" ? G_BORD : "rgba(71,85,105,0.5)",
-              background: state.priceSource === "lowest" ? G_DIM : "transparent",
-              color: state.priceSource === "lowest" ? G : "rgb(148 163 184)",
-            }}
+            className={filterChipClass(state.priceSource === "lowest", "flex-1 rounded-lg py-1.5 text-[11px] font-semibold")}
           >
             Lowest
           </button>
@@ -404,7 +458,7 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
       </div>
 
       <div>
-        <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-500">Price Range</p>
+        <p className="buyer-filter-label mb-1.5 text-[10px] font-bold uppercase tracking-widest">Price Range</p>
         <div className="flex gap-2">
           <input
             type="number"
@@ -430,19 +484,14 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
       </div>
 
       <div>
-        <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-500">Min Rating</p>
+        <p className="buyer-filter-label mb-1.5 text-[10px] font-bold uppercase tracking-widest">Min Rating</p>
         <div className="flex gap-1.5">
           {[3, 4, 4.5].map((r) => (
             <button
               key={r}
               type="button"
               onClick={() => updateState({ minRating: state.minRating === r ? 0 : r })}
-              className="flex-1 rounded-lg border py-1.5 text-[11px] font-semibold transition"
-              style={{
-                borderColor: state.minRating === r ? G_BORD : "rgba(71,85,105,0.5)",
-                background: state.minRating === r ? G_DIM : "transparent",
-                color: state.minRating === r ? G : "rgb(148 163 184)",
-              }}
+              className={filterChipClass(state.minRating === r, "flex-1 rounded-lg py-1.5 text-[11px] font-semibold")}
             >
               {r}★
             </button>
@@ -451,19 +500,14 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
       </div>
 
       <div>
-        <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-500">Best Sellers Rank</p>
+        <p className="buyer-filter-label mb-1.5 text-[10px] font-bold uppercase tracking-widest">Best Sellers Rank</p>
         <div className="flex flex-wrap gap-1.5">
           {BSR_OPTIONS.map((o) => (
             <button
               key={o.value}
               type="button"
               onClick={() => updateState({ bsrMax: o.value })}
-              className="rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition"
-              style={{
-                borderColor: state.bsrMax === o.value ? G_BORD : "rgba(71,85,105,0.5)",
-                background: state.bsrMax === o.value ? G_DIM : "transparent",
-                color: state.bsrMax === o.value ? G : "rgb(148 163 184)",
-              }}
+              className={filterChipClass(state.bsrMax === o.value, "rounded-lg px-2.5 py-1.5 text-[11px] font-semibold")}
             >
               {o.label}
             </button>
@@ -472,7 +516,7 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
       </div>
 
       <div>
-        <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-500">Brand</p>
+        <p className="buyer-filter-label mb-1.5 text-[10px] font-bold uppercase tracking-widest">Brand</p>
         <input
           type="text"
           placeholder="e.g. Sony, Apple"
@@ -488,12 +532,7 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
         <button
           type="button"
           onClick={() => updateState({ primeOnly: !state.primeOnly })}
-          className="flex w-full items-center gap-2 rounded-xl border px-3 py-2 text-[12px] font-medium transition"
-          style={{
-            borderColor: state.primeOnly ? G_BORD : "rgba(71,85,105,0.5)",
-            background: state.primeOnly ? G_DIM : "transparent",
-            color: state.primeOnly ? G : "rgb(148 163 184)",
-          }}
+          className={filterChipClass(state.primeOnly, "flex w-full items-center gap-2 rounded-xl px-3 py-2 text-[12px] font-medium")}
         >
           <span className="text-[14px]" style={{ color: "#00A8E0" }}>P</span>
           Prime only
@@ -512,8 +551,8 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* Search bar — glassmorphism: translucent slate with backdrop blur. */}
-      <div className="border-b border-slate-700/40 bg-slate-900/40 px-4 py-3 backdrop-blur-md">
+      {/* Search bar */}
+      <div className="buyer-search-bar border-b px-4 py-3">
         <div ref={searchBoxRef} className="relative">
           <form onSubmit={handleSearch} className="flex gap-2">
             <input
@@ -527,14 +566,13 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
                 if (suggestions.length > 0) setShowSuggestions(true);
               }}
               placeholder="Search Amazon products…"
-              className="flex-1 rounded-xl border border-slate-700/40 bg-slate-800/30 px-4 py-2.5 text-sm text-slate-100 placeholder-slate-500 outline-none backdrop-blur-md transition focus:border-[#C9A84C]/60 focus:bg-slate-800/50 focus:ring-2 focus:ring-[#C9A84C]/20"
+              className="buyer-search-input flex-1 rounded-xl border px-4 py-2.5 text-sm outline-none transition"
               autoComplete="off"
             />
             <button
               type="submit"
               disabled={loading}
-              className="rounded-xl px-5 py-2.5 text-sm font-semibold shadow-lg shadow-amber-500/10 transition hover:shadow-amber-500/20 disabled:opacity-50"
-              style={{ background: G, color: "#0a0800" }}
+              className="buyer-btn-primary rounded-xl px-5 py-2.5 text-sm font-semibold disabled:opacity-50"
             >
               Search
             </button>
@@ -543,7 +581,7 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
           {/* Autocomplete dropdown */}
           {showSuggestions && suggestions.length > 0 && (
             <div
-              className="absolute left-0 right-0 top-full z-20 mt-1 max-h-72 overflow-y-auto rounded-xl border border-slate-700/60 bg-slate-900 shadow-2xl sm:right-[88px]"
+              className="buyer-suggest-menu absolute left-0 right-0 top-full z-20 mt-1 max-h-72 overflow-y-auto rounded-xl border shadow-2xl sm:right-[88px]"
               role="listbox"
             >
               {suggestions.map((s, i) => (
@@ -556,7 +594,7 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
                     e.preventDefault();
                     submitSearch(s);
                   }}
-                  className="block w-full truncate px-4 py-2 text-left text-sm text-slate-200 transition hover:bg-slate-800"
+                  className="buyer-suggest-item block w-full truncate px-4 py-2 text-left text-sm text-slate-200 transition"
                 >
                   <span className="text-slate-500">🔍</span> {s}
                 </button>
@@ -568,18 +606,13 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
         {/* Audience chips — appear when the active keyword suggests apparel / personal items. */}
         {AUDIENCE_TRIGGER_PATTERN.test(state.keyword) && (
           <div className="mt-3 flex flex-wrap items-center gap-1.5">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">For</span>
+            <span className="buyer-filter-label text-[10px] font-bold uppercase tracking-widest">For</span>
             {AUDIENCE_OPTIONS.map((opt) => (
               <button
                 key={opt.value || "any"}
                 type="button"
                 onClick={() => updateState({ audience: opt.value })}
-                className="rounded-full border px-3 py-1 text-[11px] font-semibold transition"
-                style={{
-                  borderColor: state.audience === opt.value ? G_BORD : "rgba(71,85,105,0.5)",
-                  background: state.audience === opt.value ? G_DIM : "transparent",
-                  color: state.audience === opt.value ? G : "rgb(148 163 184)",
-                }}
+                className={filterChipClass(state.audience === opt.value, "rounded-full px-3 py-1 text-[11px] font-semibold")}
               >
                 {opt.label}
               </button>
@@ -593,12 +626,7 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
             <button
               type="button"
               onClick={() => updateState({ subcategory: "" })}
-              className="rounded-full border px-3 py-1 text-[11px] font-semibold transition"
-              style={{
-                borderColor: state.subcategory === "" ? G_BORD : "rgba(71,85,105,0.5)",
-                background: state.subcategory === "" ? G_DIM : "transparent",
-                color: state.subcategory === "" ? G : "rgb(148 163 184)",
-              }}
+              className={filterChipClass(state.subcategory === "", "rounded-full px-3 py-1 text-[11px] font-semibold")}
             >
               All {state.category}
             </button>
@@ -607,12 +635,7 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
                 key={sub}
                 type="button"
                 onClick={() => updateState({ subcategory: sub })}
-                className="rounded-full border px-3 py-1 text-[11px] font-medium transition"
-                style={{
-                  borderColor: state.subcategory === sub ? G_BORD : "rgba(71,85,105,0.5)",
-                  background: state.subcategory === sub ? G_DIM : "transparent",
-                  color: state.subcategory === sub ? G : "rgb(148 163 184)",
-                }}
+                className={filterChipClass(state.subcategory === sub, "rounded-full px-3 py-1 text-[11px] font-medium")}
               >
                 {sub}
               </button>
@@ -623,12 +646,19 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
 
       <div className="flex min-h-0 flex-1">
         {/* Desktop sidebar — filters (md+) */}
-        <aside className="hidden w-56 shrink-0 flex-col gap-4 overflow-y-auto border-r border-slate-700/60 bg-slate-900/40 p-4 md:flex">
+        <aside className="buyer-sidebar hidden w-56 shrink-0 flex-col gap-4 overflow-y-auto border-r p-4 md:flex">
           {renderFilters()}
         </aside>
 
-        {/* Product grid */}
-        <main className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4 pb-6">
+        {/* Product grid — HF watermark only behind main content, not the filter sidebar */}
+        <main
+          ref={mainRef}
+          className="buyer-main relative flex min-h-0 flex-1 flex-col overflow-y-auto p-4 pb-6"
+        >
+          <div className="buyer-main-backdrop" aria-hidden>
+            <BrandBackdrop variant="onDark" opacity={0.04} />
+          </div>
+          <div className="relative z-[1] flex min-h-0 flex-1 flex-col">
           {error && (
             <p className="mb-4 rounded-xl border border-red-500/30 bg-red-950/20 px-4 py-3 text-center text-sm text-red-300">
               {error}
@@ -650,22 +680,18 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
                 <button
                   type="button"
                   onClick={() => setMobileFiltersOpen(true)}
-                  className="flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-semibold transition md:hidden"
-                  style={{ borderColor: G_BORD, background: G_DIM, color: G }}
+                  className={filterChipClass(activeFilterCount > 0, "flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-semibold md:hidden")}
                   aria-label="Open filters"
                 >
                   <span>☰</span> Filters
                   {activeFilterCount > 0 && (
-                    <span
-                      className="ml-1 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[10px] font-bold"
-                      style={{ background: G, color: "#0a0800" }}
-                    >
+                    <span className="buyer-accent-badge ml-1 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[10px] font-bold">
                       {activeFilterCount}
                     </span>
                   )}
                 </button>
                 <span>
-                  Showing <span className="text-slate-300">{state.priceSource === "lowest" ? "Lowest" : "Buy Box"}</span> price
+                  Showing <span className="buyer-accent-highlight">{state.priceSource === "lowest" ? "Lowest" : "Buy Box"}</span> price
                 </span>
               </div>
             </div>
@@ -675,25 +701,21 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
             {items.map((item) => (
               <BuyerProductCard key={item.asin} item={item} priceSource={state.priceSource} />
             ))}
-            {loading && Array.from({ length: 12 }).map((_, i) => <SkeletonCard key={i} />)}
+            {loading && items.length === 0 &&
+              Array.from({ length: 12 }).map((_, i) => <SkeletonCard key={`init-${i}`} />)}
+            {loadingMore &&
+              Array.from({ length: 8 }).map((_, i) => <SkeletonCard key={`more-${i}`} />)}
           </div>
 
-          {/* Sentinel is always present so loadMoreRef.current is set before
-              the observer effect runs. The callback checks tokenRef itself. */}
-          <div ref={loadMoreRef} aria-hidden className="h-1 w-full" />
-          {items.length > 0 && loading && (
-            <p className="mt-4 text-center text-[12px] text-slate-500">Loading more…</p>
-          )}
-          {items.length > 0 && !nextPageToken && !loading && (
+          {/* Sentinel sits after the grid (including load-more skeletons). */}
+          <div ref={loadMoreRef} aria-hidden className="h-4 w-full shrink-0" />
+          {items.length > 0 && !nextPageToken && !loading && !loadingMore && (
             <p className="mt-6 text-center text-[12px] text-slate-600">— End of results —</p>
           )}
 
           {/* Bottom banner for buyer users */}
           {isBuyer && (
-            <div
-              className="mt-8 flex flex-col items-center gap-4 rounded-2xl px-6 py-6 text-center sm:flex-row sm:justify-between sm:text-left"
-              style={{ background: G_DIM, border: `1px solid ${G_BORD}` }}
-            >
+            <div className="buyer-cta-banner mt-8 flex flex-col items-center gap-4 rounded-2xl px-6 py-6 text-center sm:flex-row sm:justify-between sm:text-left">
               <div>
                 <p className="font-semibold text-white">Want to source products professionally?</p>
                 <p className="mt-0.5 text-[13px] text-slate-400">
@@ -702,34 +724,26 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
               </div>
               <Link
                 href="/billing?plan=starter"
-                className="shrink-0 rounded-xl px-6 py-2.5 text-sm font-bold transition hover:opacity-90"
-                style={{ background: G, color: "#0a0800" }}
+                className="buyer-btn-primary shrink-0 rounded-xl px-6 py-2.5 text-sm font-bold"
               >
                 Start 14-day free trial →
               </Link>
             </div>
           )}
-
-          {/* Amazon Associates disclosure — required for the affiliate program. */}
-          <p className="mt-8 border-t border-slate-800/80 pt-4 text-center text-[11px] leading-relaxed text-slate-600">
-            As an Amazon Associate, we earn from qualifying purchases.
-          </p>
+          </div>
         </main>
       </div>
 
-      {/* Floating mobile Filters FAB — always reachable while scrolling. */}
+      {/* Floating mobile Filters FAB — sits above the always-visible disclosure footer. */}
       <button
         type="button"
         onClick={() => setMobileFiltersOpen(true)}
-        className="fixed bottom-5 right-5 z-30 flex items-center gap-2 rounded-full px-5 py-3 text-[12px] font-bold shadow-2xl transition active:scale-95 md:hidden"
-        style={{ background: G, color: "#0a0800" }}
+        className="buyer-btn-primary fixed bottom-14 right-5 z-30 flex items-center gap-2 rounded-full px-5 py-3 text-[12px] font-bold transition active:scale-95 md:hidden"
         aria-label="Open filters"
       >
         <span>☰</span> Filters
         {activeFilterCount > 0 && (
-          <span
-            className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-slate-900 px-1.5 text-[10px] font-bold text-white"
-          >
+          <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-white/25 px-1.5 text-[10px] font-bold text-white">
             {activeFilterCount}
           </span>
         )}
@@ -742,20 +756,16 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
             type="button"
             aria-label="Close filters"
             onClick={() => setMobileFiltersOpen(false)}
-            className="absolute inset-0 bg-slate-950/70 backdrop-blur-[2px]"
+            className="buyer-overlay absolute inset-0 backdrop-blur-[2px]"
           />
           <div
-            className="absolute inset-x-0 bottom-0 flex max-h-[85vh] flex-col rounded-t-2xl border-t border-slate-700/60"
-            style={{ background: "#0f172a" }}
+            className="buyer-drawer-panel absolute inset-x-0 bottom-0 flex max-h-[85vh] flex-col rounded-t-2xl border-t"
           >
             <div className="flex items-center justify-between border-b border-slate-700/60 px-4 py-3">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-semibold text-slate-100">Filters</span>
                 {activeFilterCount > 0 && (
-                  <span
-                    className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-[10px] font-bold"
-                    style={{ background: G, color: "#0a0800" }}
-                  >
+                  <span className="buyer-accent-badge inline-flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-[10px] font-bold">
                     {activeFilterCount}
                   </span>
                 )}
@@ -776,8 +786,7 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
               <button
                 type="button"
                 onClick={() => setMobileFiltersOpen(false)}
-                className="w-full rounded-xl py-3 text-sm font-bold transition active:scale-[0.99]"
-                style={{ background: G, color: "#0a0800" }}
+                className="buyer-btn-primary w-full rounded-xl py-3 text-sm font-bold transition active:scale-[0.99]"
               >
                 Show {items.length} results
               </button>

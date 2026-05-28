@@ -2,6 +2,8 @@
  * 5-star rating strip with per-star fractional fill (e.g. 4.3 → 4 full + 30% of the 5th).
  * Pure SVG, no external dependencies, scales cleanly with text.
  */
+import { useId } from "react";
+
 export function StarRating({
   value,
   size = 12,
@@ -14,12 +16,13 @@ export function StarRating({
   emptyColor?: string;
 }) {
   const clamped = Math.max(0, Math.min(5, value));
+  const baseId = useId();
 
   return (
     <span className="inline-flex items-center" aria-label={`${clamped.toFixed(1)} out of 5 stars`}>
       {[0, 1, 2, 3, 4].map((i) => {
         const fillPct = Math.max(0, Math.min(1, clamped - i));
-        const gradId = `star-fill-${i}-${Math.random().toString(36).slice(2, 7)}`;
+        const gradId = `${baseId}-star-${i}`;
         return (
           <svg
             key={i}

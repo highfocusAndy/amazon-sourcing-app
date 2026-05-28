@@ -9,6 +9,7 @@ import { requireAdminAccess } from "@/app/api/admin/guard";
 import { prisma } from "@/lib/db";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 const DEFAULT_FLAGS: { key: string; label: string; description: string }[] = [
   { key: "ff:image_search", label: "Image Search (Scan)", description: "Allow users to search by product photo" },
@@ -55,9 +56,9 @@ export async function PUT(req: NextRequest): Promise<NextResponse> {
   const gate = await requireAdminAccess();
   if (!gate.ok) return gate.response;
 
-  const body = (await req.json()) as { key?: string; enabled?: boolean };
+  const body = (await req.json()) as { key?: string; enabled?: boolean | string };
   const key = (body.key ?? "").trim();
-  const enabled = Boolean(body.enabled);
+  const enabled = body.enabled === true || body.enabled === "true";
 
   if (!key.startsWith("ff:") || !DEFAULT_FLAGS.some((f) => f.key === key)) {
     return NextResponse.json({ error: "Invalid flag key" }, { status: 400 });

@@ -18,9 +18,12 @@ export default async function BuyerLayout({ children }: { children: React.ReactN
     select: { userMode: true },
   });
   const userMode = user?.userMode ?? null;
+  const userDisplayName = session.user.name || session.user.email || "User";
   return (
     <AuthSessionProvider>
-      <BuyerShell userMode={userMode}>{children}</BuyerShell>
+      <BuyerShell userMode={userMode} userDisplayName={userDisplayName}>
+        {children}
+      </BuyerShell>
     </AuthSessionProvider>
   );
 }

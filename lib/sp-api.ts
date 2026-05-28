@@ -602,8 +602,10 @@ export async function searchBuyerCatalogSpApi(options: {
   pageToken?: string;
   brandNames?: string[];
   condition?: ItemCondition;
+  priceSource?: "buybox" | "lowest";
 }): Promise<{ ok: true; data: { items: SpApiBuyerItem[]; nextToken?: string } } | { ok: false; error: string }> {
   const condition = options.condition ?? "new";
+  const priceSource = options.priceSource ?? "lowest";
   const env = getServerEnv();
   const query: Record<string, string> = {
     marketplaceIds: env.marketplaceId,
@@ -685,10 +687,30 @@ export async function searchBuyerCatalogSpApi(options: {
       } as SpApiBuyerItem;
     }).filter((i) => i.asin !== "");
 
-    // Fetch offers with bounded concurrency. SP-API getItemOffers allows ~0.5 req/s;
-    // keeping this at 4 workers (with built-in 429 retry in fetchOffersForAsin) is
-    // a good balance between speed and avoiding sustained throttling.
-    const concurrency = 4;
+    // Batch buy-box lookup (1 API call for up to 20 ASINs) — much faster than per-ASIN offers.
+    const batchBuyBox = new Map<string, number>();
+    const asinList = mapped.map((m) => m.asin);
+    for (let i = 0; i < asinList.length; i += 20) {
+      const chunk = asinList.slice(i, i + 20);
+      const chunkPrices = await fetchBatchBuyBoxPrices(chunk);
+      chunkPrices.forEach((price, asin) => batchBuyBox.set(asin, price));
+    }
+
+    if (priceSource === "buybox") {
+      const withPrices: SpApiBuyerItem[] = mapped.map((item) => {
+        const buyBoxPrice = batchBuyBox.get(item.asin) ?? null;
+        return {
+          ...item,
+          buyBoxPrice,
+          lowestPrice: buyBoxPrice,
+          price: buyBoxPrice,
+        };
+      });
+      return { ok: true, data: { items: withPrices, nextToken } };
+    }
+
+    // Lowest price needs getItemOffers per ASIN (~0.5 req/s). Use low concurrency to avoid 429 storms.
+    const concurrency = 2;
     const offers: Array<OffersBasics | null> = new Array(mapped.length).fill(null);
     let nextIdx = 0;
     async function offerWorker(): Promise<void> {
@@ -707,8 +729,8 @@ export async function searchBuyerCatalogSpApi(options: {
     );
     const withPrices: SpApiBuyerItem[] = mapped.map((item, idx) => {
       const o = offers[idx];
-      const buyBoxPrice = o?.buyBoxPrice ?? null;
-      const lowestPrice = o?.lowestPrice ?? null;
+      const buyBoxPrice = o?.buyBoxPrice ?? batchBuyBox.get(item.asin) ?? null;
+      const lowestPrice = o?.lowestPrice ?? buyBoxPrice;
       return {
         ...item,
         buyBoxPrice,

@@ -236,40 +236,71 @@ export function AdminOverviewClient() {
   const [charts, setCharts] = useState<ChartResponse | null>(null);
   const [topUsers, setTopUsers] = useState<TopUsersResponse | null>(null);
   const [flags, setFlags] = useState<FlagResponse | null>(null);
+  const [savingFlagKey, setSavingFlagKey] = useState<string | null>(null);
   const [feed, setFeed] = useState<FeedItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
     Promise.all([
-      fetch("/api/admin/overview").then((r) => r.json() as Promise<OverviewResponse>),
-      fetch("/api/admin/activity").then((r) => r.json()) as Promise<{ items: FeedItem[] }>,
-      fetch("/api/admin/charts").then((r) => r.json() as Promise<ChartResponse>),
-      fetch("/api/admin/top-users").then((r) => r.json() as Promise<TopUsersResponse>),
-      fetch("/api/admin/feature-flags").then((r) => r.json() as Promise<FlagResponse>),
+      fetch("/api/admin/overview", { cache: "no-store" }).then((r) => r.json() as Promise<OverviewResponse>),
+      fetch("/api/admin/activity", { cache: "no-store" }).then((r) => r.json()) as Promise<{ items: FeedItem[] }>,
+      fetch("/api/admin/charts", { cache: "no-store" }).then((r) => r.json() as Promise<ChartResponse>),
+      fetch("/api/admin/top-users", { cache: "no-store" }).then((r) => r.json() as Promise<TopUsersResponse>),
+      fetch("/api/admin/feature-flags", { cache: "no-store" }).then((r) => r.json() as Promise<FlagResponse>),
     ])
       .then(([o, a, c, tu, f]) => {
+        if (cancelled) return;
         setOverview(o?.ok ? o : null);
         setFeed(Array.isArray((a as { items?: FeedItem[] })?.items) ? (a as { items: FeedItem[] }).items : []);
         setCharts(c?.ok ? c : null);
         setTopUsers(tu?.ok ? tu : null);
         setFlags(f?.ok ? f : null);
       })
-      .catch(() => setOverview(null))
-      .finally(() => setLoading(false));
+      .catch(() => {
+        if (!cancelled) setOverview(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const toggleFlag = useCallback(async (key: string, enabled: boolean) => {
+    if (savingFlagKey) return;
+    const snapshot = flags;
+    setSavingFlagKey(key);
     setFlags((prev) =>
       prev
         ? { ...prev, flags: prev.flags.map((f) => (f.key === key ? { ...f, enabled } : f)) }
         : prev,
     );
-    await fetch("/api/admin/feature-flags", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ key, enabled }),
-    }).catch(() => {});
-  }, []);
+    try {
+      const res = await fetch("/api/admin/feature-flags", {
+        method: "PUT",
+        cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key, enabled }),
+      });
+      const data = (await res.json()) as { ok?: boolean; enabled?: boolean; error?: string };
+      if (!res.ok || !data.ok) {
+        setFlags(snapshot);
+        return;
+      }
+      const saved = data.enabled === true;
+      setFlags((prev) =>
+        prev
+          ? { ...prev, flags: prev.flags.map((f) => (f.key === key ? { ...f, enabled: saved } : f)) }
+          : prev,
+      );
+    } catch {
+      setFlags(snapshot);
+    } finally {
+      setSavingFlagKey(null);
+    }
+  }, [flags, savingFlagKey]);
 
   const m = overview?.metrics;
   const h = overview?.health;
@@ -643,8 +674,9 @@ export function AdminOverviewClient() {
                           type="button"
                           role="switch"
                           aria-checked={flag.enabled}
+                          disabled={savingFlagKey !== null}
                           onClick={() => void toggleFlag(flag.key, !flag.enabled)}
-                          className="relative mt-0.5 h-5 w-9 shrink-0 rounded-full transition-colors duration-200 focus:outline-none focus:ring-2"
+                          className="relative mt-0.5 h-5 w-9 shrink-0 rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 disabled:opacity-50"
                           style={{
                             background: flag.enabled ? "rgb(var(--accent))" : "rgb(100 116 139)",
                             boxShadow: flag.enabled ? "0 0 0 2px transparent" : undefined,

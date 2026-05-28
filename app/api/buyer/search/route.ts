@@ -1,15 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { isBuyerModeEnabled } from "@/lib/featureFlags";
-import { searchBuyerCatalog, fetchCatalogItemsFromPaApi } from "@/lib/paApiClient";
 import { searchBuyerCatalogSpApi, fetchOffersForAsin, type ItemCondition } from "@/lib/sp-api";
 import { prisma } from "@/lib/db";
 
 export const runtime = "nodejs";
 
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
-const TARGET_PAGE_SIZE = 50;
+/** Items per scroll — smaller = faster per request (each item needs a pricing API call). */
+const TARGET_PAGE_SIZE = 20;
 const SP_API_MAX_PAGE = 20;
+/** One catalog page per HTTP request keeps latency predictable (~5–15s vs 30–90s). */
+const MAX_SP_CALLS_PER_REQUEST = 1;
 
 const CATEGORY_TO_SEARCH_INDEX: Record<string, string> = {
   Electronics: "Electronics",
@@ -22,15 +24,6 @@ const CATEGORY_TO_SEARCH_INDEX: Record<string, string> = {
   "Pet Supplies": "PetSupplies",
   Automotive: "Automotive",
   "Office Products": "OfficeProducts",
-};
-
-const SORT_MAP: Record<string, string> = {
-  relevance: "Relevance",
-  price_asc: "Price:LowToHigh",
-  price_desc: "Price:HighToLow",
-  rating: "AvgCustomerReviews",
-  bestsellers: "Relevance",
-  newest: "NewestArrivals",
 };
 
 // Continuation seeds — when SP-API exhausts its native pagination for a given query, we transparently
@@ -46,6 +39,26 @@ const GLOBAL_SEEDS = [
   "top picks",
   "highly rated",
   "must have",
+  "editor picks",
+  "customer favorites",
+  "gift ideas",
+  "staff picks",
+  "most wished for",
+  "hot new releases",
+  "bestselling products",
+  "top deals today",
+  "featured products",
+  "shop bestsellers",
+  "popular gifts",
+  "everyday essentials",
+  "home essentials",
+  "kitchen favorites",
+  "tech gadgets",
+  "fitness gear",
+  "beauty bestsellers",
+  "outdoor favorites",
+  "pet favorites",
+  "office essentials",
 ];
 
 const CATEGORY_SEEDS: Record<string, string[]> = {
@@ -76,10 +89,12 @@ type RawItem = {
 };
 
 type Cursor = {
-  /** Index into the seed list when no user keyword was provided. -1 = still on the user's primary keyword. */
+  /** Index into the seed list when no user keyword was provided. */
   s: number;
   /** SP-API pagination token within the current seed. */
   t: string | null;
+  /** How many times we've wrapped the seed list (browse-all mode only). */
+  c?: number;
 };
 
 /**
@@ -144,7 +159,11 @@ function decodeCursor(raw: string): Cursor | null {
   try {
     const decoded = JSON.parse(Buffer.from(raw, "base64url").toString("utf8")) as Cursor;
     if (typeof decoded.s === "number" && (decoded.t === null || typeof decoded.t === "string")) {
-      return decoded;
+      return {
+        s: decoded.s,
+        t: decoded.t,
+        c: typeof decoded.c === "number" && decoded.c >= 0 ? decoded.c : 0,
+      };
     }
     return null;
   } catch {
@@ -182,7 +201,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const incomingCursor = decodeCursor(sp.get("pageToken") ?? "");
 
   const searchIndex = CATEGORY_TO_SEARCH_INDEX[category] ?? "All";
-  const sortBy = SORT_MAP[sortKey];
 
   // Build the seed list used for continuation pagination.
   // - If the user typed a keyword (or picked a subcategory), expand it into on-topic
@@ -191,6 +209,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   // - When no keyword and no subcategory, we walk through category-specific or global
   //   seeds to provide Amazon-like infinite browsing.
   const userPrimary = [audience, keyword, subcategory].filter(Boolean).join(" ").trim();
+  const browseMode = !userPrimary;
   const seedList: string[] = (() => {
     if (userPrimary) {
       return expandKeyword(userPrimary);
@@ -200,18 +219,27 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   })();
 
   // Resume from incoming cursor, or start fresh at the first seed.
+  let seedCycle = incomingCursor?.c ?? 0;
   let seedIndex = incomingCursor?.s ?? 0;
+  if (seedIndex >= seedList.length) {
+    if (browseMode) {
+      seedIndex = 0;
+      seedCycle += 1;
+    } else {
+      seedIndex = Math.max(0, seedList.length - 1);
+    }
+  }
   let spApiToken: string | undefined = incomingCursor?.t ?? undefined;
 
   const cacheKey =
-    `buyer:search:v13:${searchIndex}:${seedList[seedIndex] ?? ""}:${seedIndex}:${spApiToken ?? ""}:${sortKey}:${brandFilter}:${condition}`;
+    `buyer:search:v14:${searchIndex}:${seedList[seedIndex] ?? ""}:${seedIndex}:${spApiToken ?? ""}:${seedCycle}:${sortKey}:${brandFilter}:${condition}`;
 
   // Cache hit fast path — with self-healing re-enrichment for null-price items.
   try {
     const cached = await prisma.apiResponseCache.findUnique({ where: { cacheKey } });
     if (cached && cached.expiresAt > new Date()) {
       const raw = JSON.parse(cached.payload) as { items: unknown[]; nextPageToken: string | null };
-      let cachedItems: unknown[] = raw.items;
+      const cachedItems: unknown[] = raw.items;
 
       // Find items that were cached without prices (throttling on original fetch).
       // Re-enrich up to 12 at a time so we don't blow the rate limit.
@@ -224,35 +252,37 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         .slice(0, 12);
 
       if (nullPriceAsins.length > 0) {
-        try {
-          const freshOffers = await offersBatch(nullPriceAsins, 3, condition);
-          const offerMap = new Map(nullPriceAsins.map((a, idx) => [a, freshOffers[idx]]));
-          let enriched = false;
-          cachedItems = cachedItems.map((item) => {
-            const r = item as RawItem;
-            if (!r.asin || !offerMap.has(r.asin)) return item;
-            const o = offerMap.get(r.asin);
-            if (!o) return item;
-            const buyBoxPrice = o.buyBoxPrice ?? null;
-            const lowestPrice = o.lowestPrice ?? null;
-            if (buyBoxPrice == null && lowestPrice == null) return item;
-            enriched = true;
-            return {
-              ...(item as Record<string, unknown>),
-              buyBoxPrice,
-              lowestPrice,
-              price: buyBoxPrice ?? lowestPrice,
-              isPrime: o.isPrime ?? false,
-              offerCount: o.offerCount ?? 0,
-              hasOffersInRequestedCondition: o.hasOffersInRequestedCondition ?? false,
-            };
-          });
-          // Patch the cache entry so future hits don't re-enrich.
-          if (enriched) {
-            const updatedPayload = JSON.stringify({ items: cachedItems, nextPageToken: raw.nextPageToken });
-            void prisma.apiResponseCache.update({ where: { cacheKey }, data: { payload: updatedPayload } });
-          }
-        } catch { /* enrichment failed — serve whatever we have */ }
+        // Return cached page immediately; heal null prices in the background.
+        void (async () => {
+          try {
+            const freshOffers = await offersBatch(nullPriceAsins, 2, condition);
+            const offerMap = new Map(nullPriceAsins.map((a, idx) => [a, freshOffers[idx]]));
+            let enriched = false;
+            const healed = cachedItems.map((item) => {
+              const r = item as RawItem;
+              if (!r.asin || !offerMap.has(r.asin)) return item;
+              const o = offerMap.get(r.asin);
+              if (!o) return item;
+              const buyBoxPrice = o.buyBoxPrice ?? null;
+              const lowestPrice = o.lowestPrice ?? null;
+              if (buyBoxPrice == null && lowestPrice == null) return item;
+              enriched = true;
+              return {
+                ...(item as Record<string, unknown>),
+                buyBoxPrice,
+                lowestPrice,
+                price: buyBoxPrice ?? lowestPrice,
+                isPrime: o.isPrime ?? false,
+                offerCount: o.offerCount ?? 0,
+                hasOffersInRequestedCondition: o.hasOffersInRequestedCondition ?? false,
+              };
+            });
+            if (enriched) {
+              const updatedPayload = JSON.stringify({ items: healed, nextPageToken: raw.nextPageToken });
+              await prisma.apiResponseCache.update({ where: { cacheKey }, data: { payload: updatedPayload } });
+            }
+          } catch { /* background heal failed */ }
+        })();
       }
 
       const filtered = postFilter(cachedItems, { minPrice, maxPrice, minRating, priceSource, bsrMax, primeOnly, condition });
@@ -261,36 +291,33 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
   } catch { /* ignore */ }
 
-  // Try PA-API only on the initial request (seed 0, no SP token) — purely opportunistic.
-  const initialRequest = seedIndex === 0 && !spApiToken;
-  let collected: unknown[] = [];
+  // PA-API skipped here — Creators API is often unavailable; SP-API is the reliable path.
+  const collected: unknown[] = [];
   let nextCursor: Cursor | null = null;
 
-  if (initialRequest) {
-    const paResult = await searchBuyerCatalog({
-      keyword: seedList[0] || "best sellers",
-      searchIndex,
-      sortBy,
-      maxResults: 10,
-      itemPage: 1,
-    });
-    if (paResult.ok && paResult.data.items.length > 0) {
-      collected.push(...(paResult.data.items as unknown[]));
+  // SP-API: one catalog page per request, then price enrichment inside searchBuyerCatalogSpApi.
+  // In browse mode, wrap the seed list instead of stopping at "end of results".
+  let spCalls = 0;
+  outer: while (collected.length < TARGET_PAGE_SIZE && spCalls < MAX_SP_CALLS_PER_REQUEST) {
+    if (seedIndex >= seedList.length) {
+      if (!browseMode) break outer;
+      seedIndex = 0;
+      seedCycle += 1;
+      spApiToken = undefined;
     }
-  }
 
-  // SP-API: chain pages until we hit TARGET_PAGE_SIZE, walking through seeds when one runs dry.
-  outer: while (collected.length < TARGET_PAGE_SIZE && seedIndex < seedList.length) {
     const currentSeed = seedList[seedIndex];
     const remaining = TARGET_PAGE_SIZE - collected.length;
     const pageSize = Math.min(SP_API_MAX_PAGE, remaining);
 
+    spCalls += 1;
     const spResult = await searchBuyerCatalogSpApi({
       keyword: currentSeed,
       maxResults: pageSize,
       pageToken: spApiToken,
       brandNames: brandFilter ? [brandFilter] : undefined,
       condition,
+      priceSource,
     });
 
     if (!spResult.ok) {
@@ -298,7 +325,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       if (collected.length > 0) {
         seedIndex += 1;
         spApiToken = undefined;
-        nextCursor = seedIndex < seedList.length ? { s: seedIndex, t: null } : null;
+        if (seedIndex >= seedList.length && browseMode) {
+          seedIndex = 0;
+          seedCycle += 1;
+        }
+        nextCursor = { s: seedIndex, t: null, c: seedCycle };
         break outer;
       }
       // No items + first call failed → bubble up the error.
@@ -309,18 +340,17 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     spApiToken = spResult.data.nextToken;
 
     if (!spApiToken) {
-      // Exhausted this seed → advance.
+      // Exhausted this seed → advance (wrap in browse mode).
       seedIndex += 1;
     }
   }
 
-  // Build the continuation cursor: either current seed + remaining spApiToken,
-  // or the next seed if we exhausted this one mid-iteration.
+  // Build the continuation cursor: current seed + SP token, or wrap browse seeds.
   if (!nextCursor) {
-    if (seedIndex < seedList.length) {
-      nextCursor = { s: seedIndex, t: spApiToken ?? null };
+    if (seedIndex >= seedList.length) {
+      nextCursor = browseMode ? { s: 0, t: null, c: seedCycle + 1 } : null;
     } else {
-      nextCursor = null;
+      nextCursor = { s: seedIndex, t: spApiToken ?? null, c: seedCycle };
     }
   }
 
@@ -335,56 +365,43 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     })
     .map((i) => ({ ...(i as Record<string, unknown>) }));
 
-  // Price enrichment (when PA-API SearchItems returned items without prices).
+  // Extra enrichment only when SP search left most items without prices.
   const missingPriceAsins = items
-    .filter((i) => (i as RawItem).buyBoxPrice == null && (i as RawItem).price == null)
+    .filter((i) => (i as RawItem).buyBoxPrice == null && (i as RawItem).lowestPrice == null && (i as RawItem).price == null)
     .map((i) => (i as RawItem).asin)
     .filter((a): a is string => !!a);
 
-  if (missingPriceAsins.length > 0) {
-    const enriched = await fetchCatalogItemsFromPaApi(missingPriceAsins);
-    if (enriched.ok) {
-      const priceMap = new Map(enriched.data.map((ei) => [ei.asin, ei.price]));
+  const needExtraEnrichment =
+    missingPriceAsins.length > 0 &&
+    missingPriceAsins.length > items.length * 0.25;
+
+  if (needExtraEnrichment) {
+    try {
+      const offersList = await offersBatch(missingPriceAsins.slice(0, 12), 2, condition);
+      const batchAsins = missingPriceAsins.slice(0, 12);
+      const offerMap = new Map(batchAsins.map((asin, idx) => [asin, offersList[idx]]));
       items = items.map((item) => {
         const i = item as RawItem;
-        if (i.buyBoxPrice == null && i.asin && priceMap.has(i.asin)) {
-          const p = priceMap.get(i.asin) ?? null;
-          return { ...item, buyBoxPrice: p, price: p };
+        if (i.asin && offerMap.has(i.asin)) {
+          const o = offerMap.get(i.asin);
+          if (!o) return item;
+          const buyBox = o.buyBoxPrice ?? null;
+          const low = o.lowestPrice ?? null;
+          if (buyBox == null && low == null) return item;
+          return {
+            ...item,
+            buyBoxPrice: buyBox ?? i.buyBoxPrice ?? null,
+            lowestPrice: low ?? i.lowestPrice ?? null,
+            price: buyBox ?? low ?? i.price ?? null,
+            isPrime: o.isPrime ?? (item.isPrime as boolean | undefined) ?? false,
+            offerCount: o.offerCount ?? (item.offerCount as number | undefined) ?? 0,
+            hasOffersInRequestedCondition:
+              o?.hasOffersInRequestedCondition ?? (item.hasOffersInRequestedCondition as boolean | undefined) ?? false,
+          };
         }
         return item;
       });
-    }
-
-    const stillMissing = items
-      .filter((i) => (i as RawItem).buyBoxPrice == null)
-      .map((i) => (i as RawItem).asin)
-      .filter((a): a is string => !!a);
-
-    if (stillMissing.length > 0) {
-      try {
-        const offersList = await offersBatch(stillMissing, 8, condition);
-        const offerMap = new Map(stillMissing.map((asin, idx) => [asin, offersList[idx]]));
-        items = items.map((item) => {
-          const i = item as RawItem;
-          if (i.buyBoxPrice == null && i.asin && offerMap.has(i.asin)) {
-            const o = offerMap.get(i.asin);
-            const buyBox = o?.buyBoxPrice ?? null;
-            const low = o?.lowestPrice ?? null;
-            return {
-              ...item,
-              buyBoxPrice: buyBox,
-              lowestPrice: low,
-              price: buyBox ?? low,
-              isPrime: o?.isPrime ?? (item.isPrime as boolean | undefined) ?? false,
-              offerCount: o?.offerCount ?? (item.offerCount as number | undefined) ?? 0,
-              hasOffersInRequestedCondition:
-                o?.hasOffersInRequestedCondition ?? (item.hasOffersInRequestedCondition as boolean | undefined) ?? false,
-            };
-          }
-          return item;
-        });
-      } catch { /* best-effort */ }
-    }
+    } catch { /* best-effort */ }
   }
 
   const nextPageToken = nextCursor ? encodeCursor(nextCursor) : null;

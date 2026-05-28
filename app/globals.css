@@ -997,3 +997,508 @@ html[data-mode="light"] #app-main-content header.hf-dash-brand-header button.und
 .admin-overview-feed::-webkit-scrollbar-thumb:hover {
   background: rgb(45 212 191 / 0.35);
 }
+
+/* ════════════════════════════════════════════════════
+   BUYER CATALOG — dedicated dark / light tokens
+   (no invert filter — explicit per-mode styling)
+   ════════════════════════════════════════════════════ */
+
+#buyer-shell {
+  /* Read theme accent from :root — do not redefine --accent (breaks rgb() alpha syntax) */
+  --buyer-accent-rgb: var(--accent);
+  --buyer-accent-hover-rgb: var(--accent-hover);
+  --accent-soft: rgb(var(--buyer-accent-rgb) / 0.12);
+  --accent-border: rgb(var(--buyer-accent-rgb) / 0.32);
+  --accent-text: rgb(var(--buyer-accent-rgb));
+  --accent-ring: rgb(var(--buyer-accent-rgb) / 0.18);
+  --accent-shadow: rgb(var(--buyer-accent-rgb) / 0.24);
+  --accent-glow: rgb(var(--buyer-accent-rgb) / 0.13);
+
+  --buyer-bg: rgb(15 23 42 / 0.92);
+  --buyer-header-bg: rgb(15 23 42 / 0.88);
+  --buyer-search-bg: rgb(15 23 42 / 0.4);
+  --buyer-sidebar-bg: rgb(15 23 42 / 0.4);
+  --buyer-main-bg: transparent;
+  --buyer-surface: rgb(30 41 59 / 0.8);
+  --buyer-surface-soft: rgb(30 41 59 / 0.6);
+  --buyer-card-bg: rgb(255 255 255 / 0.03);
+  --buyer-card-border: rgb(255 255 255 / 0.07);
+  --buyer-card-image-bg: rgb(30 41 59 / 0.4);
+  --buyer-text-primary: rgb(226 232 240);
+  --buyer-text-secondary: rgb(148 163 184);
+  --buyer-text-muted: rgb(100 116 139);
+  --buyer-border: rgb(51 65 85 / 0.6);
+  --buyer-border-subtle: rgb(51 65 85 / 0.4);
+  --buyer-shadow-card: 0 10px 24px rgb(0 0 0 / 0.18);
+  --buyer-shadow-card-hover: 0 16px 32px rgb(0 0 0 / 0.22), 0 0 0 1px rgb(var(--buyer-accent-rgb) / 0.18);
+  --buyer-disclosure-bg: rgb(15 23 42 / 0.96);
+  --buyer-disclosure-border: rgb(51 65 85 / 0.55);
+  --buyer-disclosure-text: rgb(148 163 184);
+  --buyer-input-bg: rgb(30 41 59 / 0.8);
+  --buyer-input-border: rgb(51 65 85 / 0.6);
+  --buyer-dropdown-bg: rgb(15 23 42);
+  --buyer-overlay: rgb(2 6 23 / 0.65);
+  --buyer-drawer-bg: #0f172a;
+  --buyer-title-glow: 0 0 7px var(--accent-glow);
+  --buyer-logo-filter: brightness(0) invert(1) drop-shadow(0 0 12px rgb(var(--buyer-accent-rgb) / 0.55));
+  --buyer-star-empty: rgb(148 163 184 / 0.25);
+  background: var(--buyer-bg);
+  color: var(--buyer-text-primary);
+}
+
+html[data-mode="light"] #buyer-shell {
+  --buyer-bg: #f1f5f9;
+  --buyer-header-bg: #ffffff;
+  --buyer-search-bg: #ffffff;
+  --buyer-sidebar-bg: #ffffff;
+  --buyer-main-bg: #f8fafc;
+  --buyer-surface: #ffffff;
+  --buyer-surface-soft: #f8fafc;
+  --buyer-card-bg: #ffffff;
+  --buyer-card-border: #e2e8f0;
+  --buyer-card-image-bg: #f8fafc;
+  --buyer-text-primary: #0f172a;
+  --buyer-text-secondary: #475569;
+  --buyer-text-muted: #64748b;
+  --buyer-border: #e2e8f0;
+  --buyer-border-subtle: #e8edf3;
+  --buyer-shadow-card: 0 1px 2px rgb(15 23 42 / 0.04), 0 4px 14px rgb(15 23 42 / 0.06);
+  --buyer-shadow-card-hover: 0 8px 24px rgb(15 23 42 / 0.08), 0 0 0 1px rgb(var(--buyer-accent-rgb) / 0.35);
+  --buyer-disclosure-bg: #ffffff;
+  --buyer-disclosure-border: #e2e8f0;
+  --buyer-disclosure-text: #64748b;
+  --buyer-input-bg: #ffffff;
+  --buyer-input-border: #cbd5e1;
+  --buyer-dropdown-bg: #ffffff;
+  --buyer-overlay: rgb(15 23 42 / 0.28);
+  --buyer-drawer-bg: #ffffff;
+  --buyer-title-glow: none;
+  --buyer-logo-filter: brightness(0) drop-shadow(0 2px 8px rgb(var(--buyer-accent-rgb) / 0.45));
+  --buyer-star-empty: #cbd5e1;
+}
+
+#buyer-shell .buyer-brand-backdrop {
+  display: none;
+}
+
+#buyer-shell .buyer-main-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+html[data-mode="light"] #buyer-shell .buyer-main-backdrop {
+  display: none;
+}
+
+#buyer-shell .buyer-header {
+  background-color: var(--buyer-header-bg);
+  background-image: linear-gradient(
+    105deg,
+    color-mix(in srgb, rgb(var(--buyer-accent-rgb)) 26%, var(--buyer-header-bg)) 0%,
+    color-mix(in srgb, rgb(var(--buyer-accent-rgb)) 11%, var(--buyer-header-bg)) 48%,
+    var(--buyer-header-bg) 100%
+  );
+  border-bottom: 3px solid color-mix(in srgb, rgb(var(--buyer-accent-rgb)) 62%, var(--buyer-header-bg));
+}
+html[data-mode="light"] #buyer-shell .buyer-header {
+  background-image: linear-gradient(
+    105deg,
+    color-mix(in srgb, rgb(var(--buyer-accent-rgb)) 20%, var(--buyer-header-bg)) 0%,
+    color-mix(in srgb, rgb(var(--buyer-accent-rgb)) 8%, var(--buyer-header-bg)) 52%,
+    var(--buyer-header-bg) 100%
+  );
+}
+
+#buyer-shell .buyer-header-user {
+  color: var(--buyer-text-secondary);
+}
+#buyer-shell .buyer-header-user-name {
+  color: var(--buyer-text-primary);
+  font-weight: 600;
+}
+#buyer-shell .buyer-header-signout {
+  color: rgb(var(--buyer-accent-rgb));
+  font-weight: 600;
+}
+#buyer-shell .buyer-header-signout:hover {
+  color: rgb(var(--buyer-accent-hover-rgb));
+}
+
+#buyer-shell .buyer-header-subtitle {
+  color: var(--buyer-text-muted);
+}
+#buyer-shell .buyer-header-subtitle svg {
+  color: var(--accent-text);
+}
+
+#buyer-shell .buyer-logo {
+  filter: var(--buyer-logo-filter);
+  opacity: 1;
+}
+
+#buyer-shell .buyer-title {
+  color: var(--accent-text);
+  text-shadow: var(--buyer-title-glow);
+}
+
+#buyer-shell .buyer-title-divider {
+  background: linear-gradient(to bottom, transparent, rgb(var(--buyer-accent-rgb) / 0.38), transparent);
+}
+
+#buyer-shell .buyer-search-bar {
+  background-color: var(--buyer-search-bg);
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in srgb, rgb(var(--buyer-accent-rgb)) 10%, var(--buyer-search-bg)) 0%,
+    var(--buyer-search-bg) 100%
+  );
+  border-color: color-mix(in srgb, rgb(var(--buyer-accent-rgb)) 55%, var(--buyer-search-bg));
+  border-bottom-width: 1px;
+  box-shadow: inset 0 -2px 0 color-mix(in srgb, rgb(var(--buyer-accent-rgb)) 50%, var(--buyer-search-bg));
+}
+html[data-mode="light"] #buyer-shell .buyer-search-bar {
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in srgb, rgb(var(--buyer-accent-rgb)) 8%, var(--buyer-search-bg)) 0%,
+    var(--buyer-search-bg) 100%
+  );
+  box-shadow: inset 0 -2px 0 color-mix(in srgb, rgb(var(--buyer-accent-rgb)) 45%, var(--buyer-search-bg));
+}
+
+#buyer-shell .buyer-sidebar {
+  position: relative;
+  z-index: 1;
+  background-color: var(--buyer-sidebar-bg);
+  background-image: linear-gradient(
+    90deg,
+    color-mix(in srgb, rgb(var(--buyer-accent-rgb)) 19%, var(--buyer-sidebar-bg)) 0%,
+    color-mix(in srgb, rgb(var(--buyer-accent-rgb)) 8%, var(--buyer-sidebar-bg)) 42%,
+    var(--buyer-sidebar-bg) 72%
+  );
+  border-right: 1px solid color-mix(in srgb, rgb(var(--buyer-accent-rgb)) 50%, var(--buyer-sidebar-bg));
+  box-shadow: inset 6px 0 0 0 color-mix(in srgb, rgb(var(--buyer-accent-rgb)) 58%, var(--buyer-sidebar-bg));
+}
+html[data-mode="light"] #buyer-shell .buyer-sidebar {
+  background-image: linear-gradient(
+    90deg,
+    color-mix(in srgb, rgb(var(--buyer-accent-rgb)) 15%, var(--buyer-sidebar-bg)) 0%,
+    color-mix(in srgb, rgb(var(--buyer-accent-rgb)) 6%, var(--buyer-sidebar-bg)) 45%,
+    var(--buyer-sidebar-bg) 78%
+  );
+  box-shadow: inset 6px 0 0 0 color-mix(in srgb, rgb(var(--buyer-accent-rgb)) 52%, var(--buyer-sidebar-bg));
+}
+
+#buyer-shell .buyer-filter-label {
+  color: var(--accent-text);
+  opacity: 1;
+  font-weight: 700;
+}
+
+#buyer-shell .buyer-main {
+  background: var(--buyer-main-bg);
+}
+
+#buyer-shell .buyer-input,
+#buyer-shell .buyer-select {
+  background: var(--buyer-input-bg);
+  border-color: var(--buyer-input-border);
+  color: var(--buyer-text-primary);
+}
+html[data-mode="light"] #buyer-shell .buyer-input,
+html[data-mode="light"] #buyer-shell .buyer-select {
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.03);
+}
+#buyer-shell .buyer-input::placeholder {
+  color: var(--buyer-text-muted);
+}
+#buyer-shell .buyer-input:focus,
+#buyer-shell .buyer-select:focus {
+  border-color: var(--accent-border);
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent-ring);
+}
+
+#buyer-shell .buyer-search-input:focus {
+  border-color: var(--accent-border);
+  box-shadow: 0 0 0 2px var(--accent-ring);
+}
+
+#buyer-shell .buyer-search-input {
+  background: var(--buyer-input-bg);
+  border-color: var(--buyer-input-border);
+  color: var(--buyer-text-primary);
+}
+html[data-mode="light"] #buyer-shell .buyer-search-input {
+  backdrop-filter: none;
+}
+#buyer-shell .buyer-search-input::placeholder {
+  color: var(--buyer-text-muted);
+}
+
+#buyer-shell .buyer-suggest-menu {
+  background: var(--buyer-dropdown-bg);
+  border-color: var(--buyer-border);
+}
+html[data-mode="light"] #buyer-shell .buyer-suggest-menu {
+  box-shadow: 0 12px 32px rgb(15 23 42 / 0.12);
+}
+
+#buyer-shell .buyer-product-card {
+  background: var(--buyer-card-bg);
+  border: 1px solid var(--buyer-card-border);
+  box-shadow: var(--buyer-shadow-card);
+  backdrop-filter: none;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+#buyer-shell .buyer-product-card__body {
+  min-height: 0;
+}
+#buyer-shell .buyer-product-card__footer .buyer-amazon-cta {
+  margin-top: 0;
+}
+#buyer-shell .buyer-card-price {
+  color: var(--buyer-text-primary);
+}
+#buyer-shell .buyer-product-card:hover {
+  border-color: rgb(var(--buyer-accent-rgb) / 0.35);
+  box-shadow: var(--buyer-shadow-card-hover);
+}
+
+#buyer-shell .buyer-card-image {
+  background: var(--buyer-card-image-bg);
+}
+
+#buyer-shell .buyer-skeleton {
+  background: var(--buyer-card-bg);
+  border: 1px solid var(--buyer-card-border);
+}
+
+#buyer-shell .buyer-disclosure {
+  background: var(--buyer-disclosure-bg);
+  border-color: var(--buyer-disclosure-border);
+  color: var(--buyer-disclosure-text);
+}
+html[data-mode="light"] #buyer-shell .buyer-disclosure {
+  box-shadow: 0 -1px 0 rgb(15 23 42 / 0.04);
+}
+
+#buyer-shell .buyer-drawer-panel {
+  background: var(--buyer-drawer-bg);
+  border-color: var(--buyer-border-subtle);
+}
+html[data-mode="light"] #buyer-shell .buyer-drawer-panel {
+  box-shadow: -8px 0 32px rgb(15 23 42 / 0.08);
+}
+
+#buyer-shell .buyer-overlay {
+  background: var(--buyer-overlay);
+}
+
+#buyer-shell .buyer-icon-btn {
+  background: var(--buyer-surface-soft);
+  border-color: var(--buyer-border);
+  color: var(--buyer-text-secondary);
+}
+html[data-mode="light"] #buyer-shell .buyer-icon-btn {
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
+}
+#buyer-shell .buyer-icon-btn:hover {
+  color: var(--buyer-text-primary);
+  border-color: rgb(var(--buyer-accent-rgb) / 0.35);
+}
+
+#buyer-shell .buyer-cta-banner {
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-border);
+}
+html[data-mode="light"] #buyer-shell .buyer-cta-banner .text-white {
+  color: var(--buyer-text-primary) !important;
+}
+
+/* Light mode text remapping inside buyer shell */
+html[data-mode="light"] #buyer-shell .text-slate-100,
+html[data-mode="light"] #buyer-shell .text-slate-200,
+html[data-mode="light"] #buyer-shell .text-white {
+  color: var(--buyer-text-primary) !important;
+}
+html[data-mode="light"] #buyer-shell .text-slate-300 {
+  color: #334155 !important;
+}
+html[data-mode="light"] #buyer-shell .text-slate-400 {
+  color: var(--buyer-text-secondary) !important;
+}
+html[data-mode="light"] #buyer-shell .text-slate-500,
+html[data-mode="light"] #buyer-shell .text-slate-600 {
+  color: var(--buyer-text-muted) !important;
+}
+
+html[data-mode="light"] #buyer-shell .bg-slate-800,
+html[data-mode="light"] #buyer-shell .bg-slate-800\/30,
+html[data-mode="light"] #buyer-shell .bg-slate-800\/40,
+html[data-mode="light"] #buyer-shell .bg-slate-800\/50,
+html[data-mode="light"] #buyer-shell .bg-slate-800\/60,
+html[data-mode="light"] #buyer-shell .bg-slate-800\/80,
+html[data-mode="light"] #buyer-shell .bg-slate-900,
+html[data-mode="light"] #buyer-shell .bg-slate-900\/40 {
+  background-color: var(--buyer-surface-soft) !important;
+}
+
+html[data-mode="light"] #buyer-shell .border-slate-700,
+html[data-mode="light"] #buyer-shell .border-slate-700\/40,
+html[data-mode="light"] #buyer-shell .border-slate-700\/60,
+html[data-mode="light"] #buyer-shell .border-slate-700\/70,
+html[data-mode="light"] #buyer-shell .border-slate-800\/80 {
+  border-color: var(--buyer-border) !important;
+}
+
+html[data-mode="light"] #buyer-shell .hover\:bg-slate-800:hover {
+  background-color: #f1f5f9 !important;
+}
+
+html[data-mode="light"] #buyer-shell .buyer-header,
+html[data-mode="light"] #buyer-shell .buyer-search-bar {
+  backdrop-filter: none;
+}
+
+html[data-mode="light"] #buyer-shell .buyer-skeleton .bg-slate-700,
+html[data-mode="light"] #buyer-shell .buyer-skeleton .bg-slate-700\/60,
+html[data-mode="light"] #buyer-shell .buyer-skeleton .bg-slate-700\/40 {
+  background-color: #e2e8f0 !important;
+}
+
+/* View on Amazon — always gold (Amazon Associates style), not theme accent */
+#buyer-shell .buyer-amazon-cta {
+  position: relative;
+  z-index: 2;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 2.625rem;
+  flex-shrink: 0;
+  margin-top: 0.375rem;
+  padding: 0.625rem 0.875rem;
+  border-radius: 0.75rem;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.25;
+  text-align: center;
+  text-decoration: none !important;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  background-color: #c9a84c !important;
+  background-image: none !important;
+  color: #0a0800 !important;
+  border: 1px solid #b8943f !important;
+  box-shadow: 0 4px 14px rgba(201, 168, 76, 0.45);
+  transition: background-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+#buyer-shell .buyer-amazon-cta:hover {
+  background-color: #d4b35a !important;
+  color: #0a0800 !important;
+  box-shadow: 0 6px 18px rgba(201, 168, 76, 0.55);
+  transform: translateY(-1px);
+}
+
+/* ── Buyer accent UI primitives ─────────────────────────────────────────── */
+
+#buyer-shell .buyer-filter-chip {
+  border: 1px solid var(--buyer-border);
+  background: transparent;
+  color: var(--buyer-text-secondary);
+  transition: border-color 0.18s ease, background 0.18s ease, color 0.18s ease;
+}
+#buyer-shell .buyer-filter-chip:hover:not(.is-active) {
+  border-color: rgb(var(--buyer-accent-rgb) / 0.22);
+  color: var(--buyer-text-primary);
+}
+#buyer-shell .buyer-filter-chip.is-active {
+  border-color: var(--accent-border);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+
+#buyer-shell .buyer-btn-primary {
+  background-color: rgb(var(--buyer-accent-rgb));
+  color: #fff !important;
+  text-decoration: none;
+  box-shadow: 0 4px 14px var(--accent-shadow);
+  transition: background-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+  flex-shrink: 0;
+}
+#buyer-shell .buyer-btn-primary:hover:not(:disabled) {
+  background-color: rgb(var(--buyer-accent-hover-rgb));
+  color: #fff !important;
+  box-shadow: 0 6px 20px var(--accent-shadow);
+}
+
+#buyer-shell .buyer-sellers-link {
+  display: block;
+  width: 100%;
+}
+#buyer-shell .buyer-sellers-link:hover {
+  color: var(--accent-text) !important;
+}
+
+#buyer-shell .buyer-btn-primary:disabled {
+  opacity: 0.5;
+}
+
+#buyer-shell .buyer-accent-badge {
+  background: var(--accent);
+  color: #fff;
+}
+
+#buyer-shell .buyer-accent-highlight {
+  color: var(--accent-text);
+}
+
+#buyer-shell .buyer-mode-toggle {
+  border-color: var(--accent-border);
+}
+#buyer-shell .buyer-mode-toggle__divider {
+  background: var(--accent-border);
+}
+#buyer-shell .buyer-mode-toggle__active {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  box-shadow: inset 0 0 0 1px rgb(var(--buyer-accent-rgb) / 0.15);
+}
+
+#buyer-shell .buyer-nav-link--active {
+  color: var(--accent-text);
+}
+
+#buyer-shell .buyer-suggest-item:hover {
+  background: var(--accent-soft);
+}
+
+/* Buyer scrollbars — theme accent */
+#buyer-shell .buyer-main,
+#buyer-shell .buyer-sidebar,
+#buyer-shell .buyer-suggest-menu {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--buyer-accent-rgb) / 0.45) transparent;
+}
+#buyer-shell .buyer-main::-webkit-scrollbar,
+#buyer-shell .buyer-sidebar::-webkit-scrollbar,
+#buyer-shell .buyer-suggest-menu::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+#buyer-shell .buyer-main::-webkit-scrollbar-thumb,
+#buyer-shell .buyer-sidebar::-webkit-scrollbar-thumb,
+#buyer-shell .buyer-suggest-menu::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgb(var(--buyer-accent-rgb) / 0.55), rgb(var(--buyer-accent-hover-rgb) / 0.55));
+  border-radius: 9999px;
+}
+#buyer-shell .buyer-main::-webkit-scrollbar-thumb:hover,
+#buyer-shell .buyer-sidebar::-webkit-scrollbar-thumb:hover,
+#buyer-shell .buyer-suggest-menu::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgb(var(--buyer-accent-rgb) / 0.75), rgb(var(--buyer-accent-hover-rgb) / 0.75));
+}

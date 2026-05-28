@@ -1,7 +1,7 @@
 /**
  * App theming system — two axes that stay in sync:
  *
- *   THEME   one of 8 colour palettes (7 dark + 1 light)
+ *   THEME   one of 9 colour palettes (8 dark + 1 light)
  *     Selecting a theme automatically applies its bundled mode.
  *
  *   MODE    "dark" | "light"  (can be manually overridden after theme selection)
@@ -118,6 +118,23 @@ export const THEMES = [
     // Sidebar: visible warm amber-brown; body: neutral charcoal
     sidebarTop: "30 18 8",
     sidebarMid: "38 22 10",
+    bodyBase: "12 12 15",
+    bodyElevated: "16 16 20",
+  },
+  {
+    id: "gold",
+    label: "Gold",
+    color: "#C9A84C",
+    mode: "dark",
+    accent: "201 168 76",
+    accentHover: "226 200 120",
+    accent2: "154 123 50",
+    gradient: "linear-gradient(135deg, rgb(201 168 76) 0%, rgb(154 123 50) 100%)",
+    glow: "rgb(201 168 76 / 0.3)",
+    rowSelected: "201 168 76",
+    // Sidebar: warm dark gold; body: neutral charcoal
+    sidebarTop: "28 24 12",
+    sidebarMid: "36 30 16",
     bodyBase: "12 12 15",
     bodyElevated: "16 16 20",
   },
