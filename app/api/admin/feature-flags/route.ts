@@ -64,11 +64,19 @@ export async function PUT(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Invalid flag key" }, { status: 400 });
   }
 
-  await prisma.systemConfig.upsert({
-    where: { key },
-    update: { value: enabled ? "true" : "false" },
-    create: { key, value: enabled ? "true" : "false" },
-  });
+  try {
+    await prisma.systemConfig.upsert({
+      where: { key },
+      update: { value: enabled ? "true" : "false" },
+      create: { key, value: enabled ? "true" : "false" },
+    });
+  } catch (err) {
+    console.error("[feature-flags] upsert failed:", err);
+    return NextResponse.json(
+      { error: "Failed to save flag — check DATABASE_URL and volume mount." },
+      { status: 500 },
+    );
+  }
 
   return NextResponse.json({ ok: true, key, enabled });
 }

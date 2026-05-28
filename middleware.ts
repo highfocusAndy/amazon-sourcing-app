@@ -42,16 +42,17 @@ export default auth((req) => {
     return loginRedirect;
   }
 
-  // When an authenticated user navigates away from /admin, delete the admin
-  // password cookie so it is required again on the next admin visit.
-  // Prefetch requests (RSC + Next-Router-Prefetch) are skipped to avoid
-  // clearing the cookie while the user is still actively on an admin page.
+  // When an authenticated user navigates away from /admin (page load only), delete the
+  // admin password cookie so it is required again on the next admin visit.
+  // Do not clear on /api/* — background calls (e.g. NextAuth session refresh) were
+  // wiping admin_auth_v2 while the user was still on /admin, breaking feature-flag saves.
   const isAdminPath = path.startsWith("/admin") || path.startsWith("/api/admin");
+  const isPageNavigation = !path.startsWith("/api/");
   const isRscPrefetch =
     req.headers.get("RSC") === "1" && req.headers.get("Next-Router-Prefetch") === "1";
   const hasAdminCookie = Boolean(req.cookies.get("admin_auth_v2")?.value);
 
-  if (isLoggedIn && hasAdminCookie && !isAdminPath && !isRscPrefetch) {
+  if (isLoggedIn && hasAdminCookie && isPageNavigation && !isAdminPath && !isRscPrefetch) {
     const res = NextResponse.next();
     res.cookies.delete("admin_auth_v2");
     return res;

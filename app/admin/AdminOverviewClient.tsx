@@ -237,6 +237,7 @@ export function AdminOverviewClient() {
   const [topUsers, setTopUsers] = useState<TopUsersResponse | null>(null);
   const [flags, setFlags] = useState<FlagResponse | null>(null);
   const [savingFlagKey, setSavingFlagKey] = useState<string | null>(null);
+  const [flagError, setFlagError] = useState<string | null>(null);
   const [feed, setFeed] = useState<FeedItem[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -272,6 +273,7 @@ export function AdminOverviewClient() {
     if (savingFlagKey) return;
     const snapshot = flags;
     setSavingFlagKey(key);
+    setFlagError(null);
     setFlags((prev) =>
       prev
         ? { ...prev, flags: prev.flags.map((f) => (f.key === key ? { ...f, enabled } : f)) }
@@ -281,12 +283,18 @@ export function AdminOverviewClient() {
       const res = await fetch("/api/admin/feature-flags", {
         method: "PUT",
         cache: "no-store",
+        credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ key, enabled }),
       });
       const data = (await res.json()) as { ok?: boolean; enabled?: boolean; error?: string };
       if (!res.ok || !data.ok) {
         setFlags(snapshot);
+        const msg =
+          res.status === 403
+            ? "Admin session expired — re-enter your admin password (refresh the page)."
+            : (data.error ?? "Failed to save flag.");
+        setFlagError(msg);
         return;
       }
       const saved = data.enabled === true;
@@ -297,6 +305,7 @@ export function AdminOverviewClient() {
       );
     } catch {
       setFlags(snapshot);
+      setFlagError("Network error — could not save flag.");
     } finally {
       setSavingFlagKey(null);
     }
@@ -650,6 +659,11 @@ export function AdminOverviewClient() {
               <SectionLabel>Feature flags</SectionLabel>
               <span className="text-[10px] text-slate-600">Stored in SystemConfig · changes apply on next request</span>
             </div>
+            {flagError ? (
+              <p className="rounded-lg border border-rose-500/30 bg-rose-500/[0.08] px-3 py-2 text-[12px] text-rose-300">
+                {flagError}
+              </p>
+            ) : null}
             <PanelChrome>
               <div className="p-5 sm:p-6">
                 {flags ? (

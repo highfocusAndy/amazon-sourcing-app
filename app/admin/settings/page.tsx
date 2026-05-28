@@ -301,6 +301,7 @@ function FeatureFlagsSection() {
       const res = await fetch("/api/admin/feature-flags", {
         method: "PUT",
         cache: "no-store",
+        credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ key, enabled }),
       });
@@ -311,8 +312,12 @@ function FeatureFlagsSection() {
         setToast({ key, msg: `${saved ? "Enabled" : "Disabled"} successfully.` });
         setTimeout(() => setToast(null), 3000);
       } else {
-        setToast({ key, msg: data.error ?? "Failed to update flag." });
-        setTimeout(() => setToast(null), 4000);
+        const msg =
+          res.status === 403
+            ? "Admin session expired — refresh and re-enter your admin password."
+            : (data.error ?? "Failed to update flag.");
+        setToast({ key, msg });
+        setTimeout(() => setToast(null), 5000);
       }
     } catch {
       setToast({ key, msg: "Network error — please try again." });
