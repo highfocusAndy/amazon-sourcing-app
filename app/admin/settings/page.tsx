@@ -317,11 +317,11 @@ function FeatureFlagsSection() {
         setToast({ key, msg: `${saved ? "Enabled" : "Disabled"} successfully.` });
         setTimeout(() => setToast(null), 3000);
       } else {
-        const msg =
-          res.status === 403
-            ? "Admin password required — enter your admin password above, then try again."
-            : (data.error ?? "Failed to update flag.");
-        setToast({ key, msg });
+        if (res.status === 403) {
+          window.location.reload();
+          return;
+        }
+        setToast({ key, msg: data.error ?? "Failed to update flag." });
         setTimeout(() => setToast(null), 5000);
       }
     } catch {

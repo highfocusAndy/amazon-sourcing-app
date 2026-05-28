@@ -87,7 +87,6 @@ export async function isAdminAuthenticated(
     const cookieStore = await cookies();
     const token = cookieStore.get(ADMIN_AUTH_COOKIE)?.value ?? "";
     if (validateAdminSessionToken(token, userId)) {
-      // Heal: migrate a valid legacy cookie into DB so the next API call still passes.
       void markAdminVerified(userId).catch(() => {});
       return true;
     }

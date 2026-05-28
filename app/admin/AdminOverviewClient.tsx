@@ -297,11 +297,11 @@ export function AdminOverviewClient() {
       const data = (await res.json()) as { ok?: boolean; enabled?: boolean; error?: string };
       if (!res.ok || !data.ok) {
         setFlags(snapshot);
-        const msg =
-          res.status === 403
-            ? "Admin password required — open Admin Settings, enter your admin password, then try again."
-            : (data.error ?? "Failed to save flag.");
-        setFlagError(msg);
+        if (res.status === 403) {
+          window.location.reload();
+          return;
+        }
+        setFlagError(data.error ?? "Failed to save flag.");
         return;
       }
       const saved = data.enabled === true;

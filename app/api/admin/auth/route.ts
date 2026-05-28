@@ -26,7 +26,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Incorrect password" }, { status: 401 });
   }
 
-  await markAdminVerified(gate.userId);
+  try {
+    await markAdminVerified(gate.userId);
+  } catch {
+    // Non-fatal — cookie + JWT still work as fallbacks
+  }
 
   const token = generateAdminSessionToken(gate.userId);
   const res = NextResponse.json({ ok: true, requiresSessionUpdate: true });

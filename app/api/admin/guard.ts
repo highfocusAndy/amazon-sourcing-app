@@ -20,13 +20,18 @@ export async function requireAdminEmailOnly(): Promise<GuardOk | GuardFail> {
 
 /**
  * Full guard for all /api/admin/* routes.
- * Checks owner email and admin password (JWT flag or legacy cookie).
+ * Calls auth() once and reuses the session for both the email check and admin-password check.
  */
 export async function requireAdminAccess(): Promise<GuardOk | GuardFail> {
-  const emailCheck = await requireAdminEmailOnly();
-  if (!emailCheck.ok) return emailCheck;
-
   const session = await auth();
+
+  if (!session?.user?.id) {
+    return { ok: false, response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
+  }
+  if (!isAppOwnerEmail(session.user.email)) {
+    return { ok: false, response: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
+  }
+
   if (!(await isAdminAuthenticated(session))) {
     return {
       ok: false,
@@ -34,5 +39,5 @@ export async function requireAdminAccess(): Promise<GuardOk | GuardFail> {
     };
   }
 
-  return emailCheck;
+  return { ok: true, userId: session.user.id, email: session.user.email ?? "" };
 }
