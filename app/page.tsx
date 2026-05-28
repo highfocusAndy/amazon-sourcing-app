@@ -469,11 +469,16 @@ function LandingFooter() {
           ))}
         </div>
       </div>
-      <p className="mx-auto mt-6 max-w-6xl text-center text-[11px] leading-relaxed text-slate-700">
-        HIGH FOCUS Sourcing is a participant in the Amazon Services LLC Associates Program, an affiliate
-        advertising program designed to provide a means for sites to earn advertising fees by advertising
-        and linking to Amazon.com.
-      </p>
+      <div className="mx-auto mt-6 max-w-6xl space-y-2 text-center">
+        <p className="text-[12px] font-medium leading-relaxed text-slate-500">
+          As an Amazon Associate, we earn from qualifying purchases.
+        </p>
+        <p className="text-[11px] leading-relaxed text-slate-700">
+          HIGH FOCUS Sourcing is a participant in the Amazon Services LLC Associates Program, an affiliate
+          advertising program designed to provide a means for sites to earn advertising fees by advertising
+          and linking to Amazon.com.
+        </p>
+      </div>
     </footer>
   );
 }

@@ -84,20 +84,41 @@ export function BuyerShell({
         className="flex h-14 shrink-0 items-center gap-3 border-b border-slate-700/60 px-4"
         style={{ background: "rgba(15,23,42,0.98)" }}
       >
-        <Link href="/" className="flex items-center gap-2 shrink-0">
+        <Link
+          href="/"
+          className="group flex items-center gap-3 shrink-0 transition hover:opacity-95"
+          aria-label="HIGH FOCUS — Buyer Catalog"
+        >
           <img
             src="/HF_LOGO.png"
-            alt="HIGH FOCUS"
-            className="h-8 w-auto object-contain"
+            alt=""
+            aria-hidden="true"
+            className="h-8 w-auto object-contain transition group-hover:scale-[1.04]"
             style={{ filter: "invert(1) sepia(1) saturate(1.6) hue-rotate(5deg) brightness(0.92)" }}
           />
+          {/* Thin vertical divider between logo and title for cleaner hierarchy. */}
+          <span
+            aria-hidden="true"
+            className="hidden h-7 w-px sm:block"
+            style={{ background: "linear-gradient(to bottom, transparent, rgba(201,168,76,0.35), transparent)" }}
+          />
+          <span className="flex flex-col leading-[1.1]">
+            <span
+              className="text-[14px] font-semibold tracking-tight sm:text-[15px]"
+              style={{
+                color: G,
+                fontFamily: "Georgia, serif",
+                fontStyle: "italic",
+                textShadow: "0 0 14px rgba(201,168,76,0.22)",
+              }}
+            >
+              Buyer Catalog
+            </span>
+            <span className="mt-0.5 hidden text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-500 sm:inline">
+              Powered by Amazon Associates
+            </span>
+          </span>
         </Link>
-        <span
-          className="hidden text-sm font-semibold tracking-tight text-slate-200 sm:block"
-          style={{ fontFamily: "Georgia, serif", fontStyle: "italic" }}
-        >
-          Buyer Catalog
-        </span>
 
         <div className="flex-1" />
 

@@ -708,6 +708,11 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
               </Link>
             </div>
           )}
+
+          {/* Amazon Associates disclosure — required for the affiliate program. */}
+          <p className="mt-8 border-t border-slate-800/80 pt-4 text-center text-[11px] leading-relaxed text-slate-600">
+            As an Amazon Associate, we earn from qualifying purchases.
+          </p>
         </main>
       </div>
 
