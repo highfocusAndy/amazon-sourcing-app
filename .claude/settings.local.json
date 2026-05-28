@@ -19,7 +19,29 @@
       "Bash(New-Item -ItemType Directory -Force \"C:\\\\dev\\\\amazon-sourcing-app\\\\app\\\\api\\\\seller\\\\[sellerId]\")",
       "Bash(Out-Null)",
       "Bash(New-Item -ItemType Directory -Force \"C:\\\\dev\\\\amazon-sourcing-app\\\\app\\\\seller\\\\[sellerId]\")",
-      "Bash(Write-Host \"Directories created\")"
+      "Bash(Write-Host \"Directories created\")",
+      "Bash(Remove-Item -Recurse -Force \"C:\\\\dev\\\\amazon-sourcing-app\\\\app\\\\api\\\\seller\" -ErrorAction SilentlyContinue)",
+      "Bash(Remove-Item -Recurse -Force \"C:\\\\dev\\\\amazon-sourcing-app\\\\app\\\\seller\" -ErrorAction SilentlyContinue)",
+      "Bash(Write-Output \"done\")",
+      "PowerShell(Remove-Item *)",
+      "PowerShell(npm run *)",
+      "PowerShell(Start-Process -FilePath \"npm\" -ArgumentList \"run\",\"dev\" -NoNewWindow -PassThru | Select-Object Id)",
+      "PowerShell(Get-Command *)",
+      "PowerShell(Receive-Job *)",
+      "PowerShell(npx playwright --version 2>&1 | Select-Object -First 3)",
+      "PowerShell(git add *)",
+      "PowerShell(git push *)",
+      "PowerShell(railway *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000)",
+      "Bash(curl *)",
+      "Bash(grep -r \"export const { handlers, auth\" \"C:\\\\dev\\\\amazon-sourcing-app\\\\auth.ts\" -A 10)",
+      "Bash(npx tsc *)",
+      "PowerShell(git *)",
+      "Bash(npx prisma *)",
+      "WebFetch(domain:localhost)",
+      "Bash(node *)",
+      "Bash(npx playwright *)",
+      "Bash(npm install *)"
     ]
   }
 }

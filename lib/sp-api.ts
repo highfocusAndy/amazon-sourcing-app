@@ -296,24 +296,44 @@ function extractOffersBasics(payload: unknown): OffersBasics {
   const summary = asObject(payloadObj?.Summary);
   const offers = asArray(payloadObj?.Offers);
 
+  // SP-API condition strings can be lowercase ("new") or capitalised ("New").
+  const isNewCondition = (raw: unknown): boolean => {
+    const c = readString(raw);
+    return c != null && c.toLowerCase() === "new";
+  };
+
+  // Buy box: prefer the New-condition entry (avoid picking a Used buy-box price).
   let buyBoxPrice: number | null = null;
   const buyBoxPrices = asArray(summary?.BuyBoxPrices);
-  const buyBox = asObject(buyBoxPrices[0]);
-  const landedPrice = asObject(buyBox?.LandedPrice);
-  buyBoxPrice = readNumber(landedPrice?.Amount);
+  for (const bbRaw of buyBoxPrices) {
+    const bb = asObject(bbRaw);
+    if (!isNewCondition(bb?.condition)) continue;
+    const landed = asObject(bb?.LandedPrice);
+    const amount = readNumber(landed?.Amount);
+    if (amount !== null) { buyBoxPrice = amount; break; }
+  }
+  // Fallback: first BuyBoxPrices entry regardless of condition.
+  if (buyBoxPrice === null && buyBoxPrices.length > 0) {
+    const bb = asObject(buyBoxPrices[0]);
+    const landed = asObject(bb?.LandedPrice);
+    buyBoxPrice = readNumber(landed?.Amount);
+  }
 
-  // Lowest landed price across all offer condition groups (separate from buy box).
+  // Lowest landed: ONLY across New-condition offers. Summary.LowestPrices contains
+  // breakdowns per condition; we previously scanned all of them which let Used
+  // prices leak into "Lowest" and confuse buyers.
   let lowestPrice: number | null = null;
   const lowestPrices = asArray(summary?.LowestPrices);
   for (const lpRaw of lowestPrices) {
     const lp = asObject(lpRaw);
+    if (!isNewCondition(lp?.condition)) continue;
     const lpLanded = asObject(lp?.LandedPrice);
     const amount = readNumber(lpLanded?.Amount);
     if (amount !== null && (lowestPrice === null || amount < lowestPrice)) {
       lowestPrice = amount;
     }
   }
-  // Also scan individual offers (in case Summary.LowestPrices is empty).
+  // Fallback: scan the (New-only) offers array if Summary.LowestPrices was empty.
   for (const offerRaw of offers) {
     const offer = asObject(offerRaw);
     const listingPrice = asObject(offer?.ListingPrice);
@@ -334,23 +354,26 @@ function extractOffersBasics(payload: unknown): OffersBasics {
     const offer = asObject(offerRaw);
     const sellerId = readString(offer?.SellerId);
     if (sellerId === AMAZON_SELLER_ID) amazonIsSeller = true;
-    // Prime detection: FBA offer OR PrimeInformation.IsPrime === true OR IsFulfilledByAmazon === true.
     const isFba = offer?.IsFulfilledByAmazon === true;
     const primeInfo = asObject(offer?.PrimeInformation);
     const primeFlag = primeInfo?.IsPrime === true;
     if (isFba || primeFlag) isPrime = true;
   }
-  // Buy-box-only Prime hint when offers array is empty/sparse (some categories).
-  if (!isPrime) {
-    for (const bb of buyBoxPrices) {
-      const bbObj = asObject(bb);
-      const condition = readString(bbObj?.condition);
-      const offerType = readString(bbObj?.offerType);
-      if (offerType === "B2C" || condition === "New") {
-        // Heuristic only — leave isPrime false unless explicit.
-        break;
-      }
-    }
+
+  // Total offer count across ALL conditions (matches Amazon's "Other sellers" page).
+  // Summary.NumberOfOffers is an array of { condition, fulfillmentChannel, OfferCount }.
+  let offerCount = 0;
+  const numberOfOffers = asArray(summary?.NumberOfOffers);
+  for (const noRaw of numberOfOffers) {
+    const no = asObject(noRaw);
+    const c = readNumber(no?.OfferCount);
+    if (c !== null) offerCount += c;
+  }
+  // Fallbacks if Summary.NumberOfOffers absent.
+  if (offerCount === 0) {
+    const total = readNumber(summary?.TotalOfferCount);
+    if (total !== null && total > 0) offerCount = total;
+    else offerCount = offers.length;
   }
 
   return {
@@ -358,7 +381,7 @@ function extractOffersBasics(payload: unknown): OffersBasics {
     lowestPrice: roundCurrency(lowestPrice),
     amazonIsSeller,
     isPrime,
-    offerCount: offers.length,
+    offerCount,
   };
 }
 
