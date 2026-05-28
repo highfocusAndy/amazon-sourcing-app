@@ -208,7 +208,7 @@ export function LandingPricingSection({
                     <p className="lp-b mt-2 text-[13px] text-slate-500">{desc}</p>
                   </div>
 
-                  <ul className="mb-8 flex-1 space-y-3">
+                  <ul className="mb-8 space-y-3">
                     {features.map((f) => (
                       <li key={f} className="lp-b flex items-start gap-2.5 text-[13px]">
                         <span className="mt-0.5 shrink-0" style={{ color: G }}>✓</span>
@@ -217,27 +217,25 @@ export function LandingPricingSection({
                     ))}
                   </ul>
 
-                  <button
-                    type="button"
-                    disabled={navigating}
-                    onClick={() => handlePlanClick(action)}
-                    className={`lp-b block w-full rounded-xl py-3.5 text-center text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-50 ${
-                      pro ? "lp-btn-g text-black" : isBuyerCard ? "lp-btn-g text-black" : "lp-btn-o text-slate-300"
-                    }`}
-                  >
-                    {cta}
-                  </button>
-
-                  {(action === "starter" || action === "pro") && !subscriptionsPaused && (
-                    <p className="lp-b mt-2 text-center text-[11px] text-slate-600">
-                      14-day free trial · No charge until trial ends
+                  <div className="mt-auto">
+                    <button
+                      type="button"
+                      disabled={navigating}
+                      onClick={() => handlePlanClick(action)}
+                      className={`lp-b block w-full rounded-xl py-3.5 text-center text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                        pro ? "lp-btn-g text-black" : isBuyerCard ? "lp-btn-g text-black" : "lp-btn-o text-slate-300"
+                      }`}
+                    >
+                      {cta}
+                    </button>
+                    <p className="lp-b mt-2 min-h-[1rem] text-center text-[11px] text-slate-600">
+                      {(action === "starter" || action === "pro") && !subscriptionsPaused
+                        ? "14-day free trial · No charge until trial ends"
+                        : isBuyerCard
+                        ? "No credit card required"
+                        : ""}
                     </p>
-                  )}
-                  {isBuyerCard && (
-                    <p className="lp-b mt-2 text-center text-[11px] text-slate-600">
-                      No credit card required
-                    </p>
-                  )}
+                  </div>
                 </div>
               </ScrollReveal>
             ))}

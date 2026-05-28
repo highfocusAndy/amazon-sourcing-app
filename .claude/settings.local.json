@@ -44,7 +44,8 @@
       "Bash(npm install *)",
       "Bash(npx next *)",
       "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(d['version']\\)\")",
-      "Bash(npm list *)"
+      "Bash(npm list *)",
+      "Bash(xargs grep -l \"isBuyerModeEnabled\")"
     ]
   }
 }
