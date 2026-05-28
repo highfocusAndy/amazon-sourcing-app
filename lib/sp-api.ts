@@ -509,14 +509,29 @@ export async function resolveCatalogItem(identifier: string): Promise<CatalogBas
 export async function fetchOffersForAsin(asin: string, condition: ItemCondition = "new"): Promise<OffersBasics> {
   // SP-API expects capitalised ItemCondition values ("New", "Used", ...).
   const itemCondition = condition.charAt(0).toUpperCase() + condition.slice(1);
-  const offers = await spApiRequest<unknown>("GET", `/products/pricing/v0/items/${asin}/offers`, {
-    query: {
-      MarketplaceId: getServerEnv().marketplaceId,
-      ItemCondition: itemCondition,
-    },
-  });
 
-  return extractOffersBasics(offers, condition);
+  // Retry up to 2 times on 429 throttle responses (SP-API offers rate: 0.5 req/s).
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const offers = await spApiRequest<unknown>("GET", `/products/pricing/v0/items/${asin}/offers`, {
+        query: {
+          MarketplaceId: getServerEnv().marketplaceId,
+          ItemCondition: itemCondition,
+        },
+      });
+      return extractOffersBasics(offers, condition);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "";
+      const isThrottle = msg.includes("429") || msg.includes("QuotaExceeded");
+      if (isThrottle && attempt < 2) {
+        // Exponential back-off: 1.5 s → 3 s.
+        await new Promise<void>((r) => setTimeout(r, 1500 * (attempt + 1)));
+        continue;
+      }
+      throw err;
+    }
+  }
+  return extractOffersBasics(null, condition); // exhausted retries
 }
 
 export async function fetchBatchBuyBoxPrices(asins: string[]): Promise<Map<string, number>> {
@@ -670,8 +685,10 @@ export async function searchBuyerCatalogSpApi(options: {
       } as SpApiBuyerItem;
     }).filter((i) => i.asin !== "");
 
-    // Fetch offers with bounded concurrency (avoid hammering SP-API and triggering 429s).
-    const concurrency = 8;
+    // Fetch offers with bounded concurrency. SP-API getItemOffers allows ~0.5 req/s;
+    // keeping this at 4 workers (with built-in 429 retry in fetchOffersForAsin) is
+    // a good balance between speed and avoiding sustained throttling.
+    const concurrency = 4;
     const offers: Array<OffersBasics | null> = new Array(mapped.length).fill(null);
     let nextIdx = 0;
     async function offerWorker(): Promise<void> {

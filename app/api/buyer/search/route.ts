@@ -204,14 +204,58 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   let spApiToken: string | undefined = incomingCursor?.t ?? undefined;
 
   const cacheKey =
-    `buyer:search:v12:${searchIndex}:${seedList[seedIndex] ?? ""}:${seedIndex}:${spApiToken ?? ""}:${sortKey}:${brandFilter}:${condition}`;
+    `buyer:search:v13:${searchIndex}:${seedList[seedIndex] ?? ""}:${seedIndex}:${spApiToken ?? ""}:${sortKey}:${brandFilter}:${condition}`;
 
-  // Cache hit fast path.
+  // Cache hit fast path — with self-healing re-enrichment for null-price items.
   try {
     const cached = await prisma.apiResponseCache.findUnique({ where: { cacheKey } });
     if (cached && cached.expiresAt > new Date()) {
       const raw = JSON.parse(cached.payload) as { items: unknown[]; nextPageToken: string | null };
-      const filtered = postFilter(raw.items, { minPrice, maxPrice, minRating, priceSource, bsrMax, primeOnly, condition });
+      let cachedItems: unknown[] = raw.items;
+
+      // Find items that were cached without prices (throttling on original fetch).
+      // Re-enrich up to 12 at a time so we don't blow the rate limit.
+      const nullPriceAsins = cachedItems
+        .filter((i) => {
+          const r = i as RawItem;
+          return r.asin && r.buyBoxPrice == null && r.lowestPrice == null;
+        })
+        .map((i) => (i as RawItem).asin!)
+        .slice(0, 12);
+
+      if (nullPriceAsins.length > 0) {
+        try {
+          const freshOffers = await offersBatch(nullPriceAsins, 3, condition);
+          const offerMap = new Map(nullPriceAsins.map((a, idx) => [a, freshOffers[idx]]));
+          let enriched = false;
+          cachedItems = cachedItems.map((item) => {
+            const r = item as RawItem;
+            if (!r.asin || !offerMap.has(r.asin)) return item;
+            const o = offerMap.get(r.asin);
+            if (!o) return item;
+            const buyBoxPrice = o.buyBoxPrice ?? null;
+            const lowestPrice = o.lowestPrice ?? null;
+            if (buyBoxPrice == null && lowestPrice == null) return item;
+            enriched = true;
+            return {
+              ...(item as Record<string, unknown>),
+              buyBoxPrice,
+              lowestPrice,
+              price: buyBoxPrice ?? lowestPrice,
+              isPrime: o.isPrime ?? false,
+              offerCount: o.offerCount ?? 0,
+              hasOffersInRequestedCondition: o.hasOffersInRequestedCondition ?? false,
+            };
+          });
+          // Patch the cache entry so future hits don't re-enrich.
+          if (enriched) {
+            const updatedPayload = JSON.stringify({ items: cachedItems, nextPageToken: raw.nextPageToken });
+            void prisma.apiResponseCache.update({ where: { cacheKey }, data: { payload: updatedPayload } });
+          }
+        } catch { /* enrichment failed — serve whatever we have */ }
+      }
+
+      const filtered = postFilter(cachedItems, { minPrice, maxPrice, minRating, priceSource, bsrMax, primeOnly, condition });
       const sorted = sortItems(filtered, sortKey, priceSource);
       return NextResponse.json({ ok: true, items: sorted, nextPageToken: raw.nextPageToken, fromCache: true });
     }
