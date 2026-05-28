@@ -251,7 +251,8 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
     return () => document.removeEventListener("mousedown", onDocMouseDown);
   }, []);
 
-  // Infinite scroll — auto-load next page as the sentinel becomes visible.
+  // Infinite scroll — re-run whenever nextPageToken changes so the observer
+  // connects to the sentinel AFTER it first renders (it's null on mount).
   useEffect(() => {
     const node = loadMoreRef.current;
     if (!node) return;
@@ -262,11 +263,14 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
           void fetchProducts(stateRef.current, tokenRef.current, true);
         }
       },
-      { rootMargin: "600px" },
+      { rootMargin: "800px" },
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, [fetchProducts]);
+  // nextPageToken in deps: when it changes from null → value the sentinel
+  // just rendered, this effect re-fires and actually connects the observer.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetchProducts, nextPageToken]);
 
   function handleSearch(e: React.FormEvent) {
     e.preventDefault();
@@ -674,14 +678,11 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
             {loading && Array.from({ length: 12 }).map((_, i) => <SkeletonCard key={i} />)}
           </div>
 
-          {/* Infinite scroll sentinel — auto-loads as the user nears the bottom. */}
-          {items.length > 0 && nextPageToken && (
-            <>
-              <div ref={loadMoreRef} aria-hidden className="h-1 w-full" />
-              {loading && (
-                <p className="mt-4 text-center text-[12px] text-slate-500">Loading more…</p>
-              )}
-            </>
+          {/* Sentinel is always present so loadMoreRef.current is set before
+              the observer effect runs. The callback checks tokenRef itself. */}
+          <div ref={loadMoreRef} aria-hidden className="h-1 w-full" />
+          {items.length > 0 && loading && (
+            <p className="mt-4 text-center text-[12px] text-slate-500">Loading more…</p>
           )}
           {items.length > 0 && !nextPageToken && !loading && (
             <p className="mt-6 text-center text-[12px] text-slate-600">— End of results —</p>
