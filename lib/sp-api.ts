@@ -304,8 +304,9 @@ function extractOffersBasics(payload: unknown, condition: ItemCondition = "new")
     return c != null && c.toLowerCase() === condition;
   };
 
-  // Buy box for the requested condition only. Mixing conditions causes
-  // impossible combos like "Buy Box $5.85 Used / Lowest $29 New".
+  // Buy box: prefer the requested condition. If none in that condition,
+  // fall back to ANY condition's buy box so the card still shows a price
+  // (commonly a New buy box even when the user is browsing Used).
   let buyBoxPrice: number | null = null;
   const buyBoxPrices = asArray(summary?.BuyBoxPrices);
   for (const bbRaw of buyBoxPrices) {
@@ -315,20 +316,29 @@ function extractOffersBasics(payload: unknown, condition: ItemCondition = "new")
     const amount = readNumber(landed?.Amount);
     if (amount !== null) { buyBoxPrice = amount; break; }
   }
+  if (buyBoxPrice === null) {
+    for (const bbRaw of buyBoxPrices) {
+      const bb = asObject(bbRaw);
+      const landed = asObject(bb?.LandedPrice);
+      const amount = readNumber(landed?.Amount);
+      if (amount !== null) { buyBoxPrice = amount; break; }
+    }
+  }
 
-  // Lowest landed within the same condition.
+  // Lowest: absolute minimum across ALL conditions (matches Amazon's "from $X"
+  // surface on the offers page). This is what makes the toggle visible — for
+  // products with Used offers cheaper than the New buy box, Lowest < Buy Box.
   let lowestPrice: number | null = null;
   const lowestPrices = asArray(summary?.LowestPrices);
   for (const lpRaw of lowestPrices) {
     const lp = asObject(lpRaw);
-    if (!matchesCondition(lp?.condition)) continue;
     const lpLanded = asObject(lp?.LandedPrice);
     const amount = readNumber(lpLanded?.Amount);
     if (amount !== null && (lowestPrice === null || amount < lowestPrice)) {
       lowestPrice = amount;
     }
   }
-  // Scan offers array (already filtered to requested condition by the API).
+  // Also scan individual offers (Summary.LowestPrices can be sparse).
   for (const offerRaw of offers) {
     const offer = asObject(offerRaw);
     const listingPrice = asObject(offer?.ListingPrice);
@@ -340,9 +350,14 @@ function extractOffersBasics(payload: unknown, condition: ItemCondition = "new")
       if (lowestPrice === null || landed < lowestPrice) lowestPrice = landed;
     }
   }
-  // If buy box missing but we have a lowest, surface lowest as buy box too
-  // (same condition, so the invariant lowest <= buyBox still holds).
+
+  // Invariant: lowest <= buyBox. Clamp if any inconsistency leaked through.
+  if (buyBoxPrice !== null && lowestPrice !== null && lowestPrice > buyBoxPrice) {
+    lowestPrice = buyBoxPrice;
+  }
+  // Null fallbacks: if only one is set, use it for the other.
   if (buyBoxPrice === null) buyBoxPrice = lowestPrice;
+  if (lowestPrice === null) lowestPrice = buyBoxPrice;
 
   let amazonIsSeller = false;
   let isPrime = false;
