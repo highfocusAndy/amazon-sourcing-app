@@ -39,7 +39,16 @@ export function BuyerProductCard({
 
   const secondary =
     priceSource === "lowest" ? ext.buyBoxPrice ?? null : ext.lowestPrice ?? null;
+
+  // Sanity: Lowest must be <= Buy Box. If the data is inconsistent
+  // (different condition classes leaked in), suppress the secondary
+  // line rather than display impossible combos like "Buy Box $5 / Lowest $29".
+  const sane =
+    primary == null ||
+    secondary == null ||
+    (priceSource === "lowest" ? primary <= secondary : secondary <= primary);
   const showSecondary =
+    sane &&
     primary != null &&
     secondary != null &&
     Math.abs(primary - secondary) > 0.01 &&

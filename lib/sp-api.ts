@@ -302,7 +302,9 @@ function extractOffersBasics(payload: unknown): OffersBasics {
     return c != null && c.toLowerCase() === "new";
   };
 
-  // Buy box: prefer the New-condition entry (avoid picking a Used buy-box price).
+  // Buy box: New-condition only. We deliberately do NOT fall back to a Used
+  // buy-box because that would mix conditions with the New-only Lowest below
+  // (producing absurd combos like Buy Box $5.85 Used vs Lowest $29 New).
   let buyBoxPrice: number | null = null;
   const buyBoxPrices = asArray(summary?.BuyBoxPrices);
   for (const bbRaw of buyBoxPrices) {
@@ -311,12 +313,6 @@ function extractOffersBasics(payload: unknown): OffersBasics {
     const landed = asObject(bb?.LandedPrice);
     const amount = readNumber(landed?.Amount);
     if (amount !== null) { buyBoxPrice = amount; break; }
-  }
-  // Fallback: first BuyBoxPrices entry regardless of condition.
-  if (buyBoxPrice === null && buyBoxPrices.length > 0) {
-    const bb = asObject(buyBoxPrices[0]);
-    const landed = asObject(bb?.LandedPrice);
-    buyBoxPrice = readNumber(landed?.Amount);
   }
 
   // Lowest landed: ONLY across New-condition offers. Summary.LowestPrices contains
