@@ -70,6 +70,7 @@ type TopUsersResponse = {
 type FlagResponse = {
   ok: boolean;
   flags: { key: string; label: string; description: string; enabled: boolean }[];
+  adminAuthenticated?: boolean;
 };
 
 type FeedItem = {
@@ -238,6 +239,7 @@ export function AdminOverviewClient() {
   const [flags, setFlags] = useState<FlagResponse | null>(null);
   const [savingFlagKey, setSavingFlagKey] = useState<string | null>(null);
   const [flagError, setFlagError] = useState<string | null>(null);
+  const [adminAuthenticated, setAdminAuthenticated] = useState(true);
   const [feed, setFeed] = useState<FeedItem[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -256,7 +258,12 @@ export function AdminOverviewClient() {
         setFeed(Array.isArray((a as { items?: FeedItem[] })?.items) ? (a as { items: FeedItem[] }).items : []);
         setCharts(c?.ok ? c : null);
         setTopUsers(tu?.ok ? tu : null);
-        setFlags(f?.ok ? f : null);
+        if (f?.ok) {
+          setFlags(f);
+          setAdminAuthenticated(f.adminAuthenticated !== false);
+        } else {
+          setFlags(null);
+        }
       })
       .catch(() => {
         if (!cancelled) setOverview(null);
@@ -270,7 +277,7 @@ export function AdminOverviewClient() {
   }, []);
 
   const toggleFlag = useCallback(async (key: string, enabled: boolean) => {
-    if (savingFlagKey) return;
+    if (savingFlagKey || !adminAuthenticated) return;
     const snapshot = flags;
     setSavingFlagKey(key);
     setFlagError(null);
@@ -292,7 +299,7 @@ export function AdminOverviewClient() {
         setFlags(snapshot);
         const msg =
           res.status === 403
-            ? "Admin session expired — re-enter your admin password (refresh the page)."
+            ? "Admin password required — open Admin Settings, enter your admin password, then try again."
             : (data.error ?? "Failed to save flag.");
         setFlagError(msg);
         return;
@@ -309,7 +316,7 @@ export function AdminOverviewClient() {
     } finally {
       setSavingFlagKey(null);
     }
-  }, [flags, savingFlagKey]);
+  }, [flags, savingFlagKey, adminAuthenticated]);
 
   const m = overview?.metrics;
   const h = overview?.health;
@@ -659,6 +666,15 @@ export function AdminOverviewClient() {
               <SectionLabel>Feature flags</SectionLabel>
               <span className="text-[10px] text-slate-600">Stored in SystemConfig · changes apply on next request</span>
             </div>
+            {!adminAuthenticated ? (
+              <p className="rounded-lg border border-amber-500/30 bg-amber-500/[0.08] px-3 py-2 text-[12px] text-amber-200">
+                Enter your <strong>admin password</strong> first (you may be prompted on load, or go to{" "}
+                <a href="/admin/settings" className="underline">
+                  Admin Settings
+                </a>
+                ). Toggles are disabled until then.
+              </p>
+            ) : null}
             {flagError ? (
               <p className="rounded-lg border border-rose-500/30 bg-rose-500/[0.08] px-3 py-2 text-[12px] text-rose-300">
                 {flagError}
@@ -688,7 +704,7 @@ export function AdminOverviewClient() {
                           type="button"
                           role="switch"
                           aria-checked={flag.enabled}
-                          disabled={savingFlagKey !== null}
+                          disabled={savingFlagKey !== null || !adminAuthenticated}
                           onClick={() => void toggleFlag(flag.key, !flag.enabled)}
                           className="relative mt-0.5 h-5 w-9 shrink-0 rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 disabled:opacity-50"
                           style={{

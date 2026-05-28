@@ -129,7 +129,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }
       }
       if (trigger === "update" && session && typeof session === "object") {
-        const s = session as { user?: { image?: string | null }; image?: string | null };
+        const s = session as {
+          adminVerified?: boolean;
+          user?: { image?: string | null };
+          image?: string | null;
+        };
+        if (s.adminVerified === true) {
+          token.adminVerifiedAt = Date.now();
+        }
         if (s.user && "image" in s.user) {
           const im = s.user.image;
           token.picture = im && typeof im === "string" && im.length > 0 ? im : undefined;
@@ -157,6 +164,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.email = token.email as string;
         session.user.name = token.name as string | null;
         session.user.image = typeof token.picture === "string" && token.picture.length > 0 ? token.picture : null;
+        session.user.adminVerifiedAt =
+          typeof token.adminVerifiedAt === "number" ? token.adminVerifiedAt : undefined;
       }
       return session;
     },

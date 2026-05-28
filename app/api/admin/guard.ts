@@ -1,7 +1,6 @@
 import { auth } from "@/auth";
 import { isAppOwnerEmail } from "@/lib/billing/appOwner";
-import { ADMIN_AUTH_COOKIE, isAdminPasswordRequired, validateAdminSessionToken } from "@/lib/adminAuth";
-import { cookies } from "next/headers";
+import { isAdminAuthenticated } from "@/lib/adminAuth";
 import { NextResponse } from "next/server";
 
 type GuardOk = { ok: true; userId: string; email: string };
@@ -21,21 +20,18 @@ export async function requireAdminEmailOnly(): Promise<GuardOk | GuardFail> {
 
 /**
  * Full guard for all /api/admin/* routes.
- * Checks email AND the admin-password cookie (when ADMIN_PASSWORD is configured).
+ * Checks owner email and admin password (JWT flag or legacy cookie).
  */
 export async function requireAdminAccess(): Promise<GuardOk | GuardFail> {
   const emailCheck = await requireAdminEmailOnly();
   if (!emailCheck.ok) return emailCheck;
 
-  if (await isAdminPasswordRequired()) {
-    const cookieStore = await cookies();
-    const token = cookieStore.get(ADMIN_AUTH_COOKIE)?.value ?? "";
-    if (!validateAdminSessionToken(token, emailCheck.userId)) {
-      return {
-        ok: false,
-        response: NextResponse.json({ error: "Admin password required" }, { status: 403 }),
-      };
-    }
+  const session = await auth();
+  if (!(await isAdminAuthenticated(session))) {
+    return {
+      ok: false,
+      response: NextResponse.json({ error: "Admin password required" }, { status: 403 }),
+    };
   }
 
   return emailCheck;

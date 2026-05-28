@@ -271,9 +271,11 @@ function AdminThemeSection() {
 }
 
 type FlagEntry = { key: string; label: string; description: string; enabled: boolean };
+type FlagsResponse = { ok: boolean; flags: FlagEntry[]; adminAuthenticated?: boolean };
 
 function FeatureFlagsSection() {
   const [flags, setFlags]     = useState<FlagEntry[]>([]);
+  const [adminAuthenticated, setAdminAuthenticated] = useState(true);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving]   = useState<string | null>(null);
   const [toast, setToast]     = useState<{ key: string; msg: string } | null>(null);
@@ -281,9 +283,12 @@ function FeatureFlagsSection() {
   useEffect(() => {
     let cancelled = false;
     fetch("/api/admin/feature-flags", { cache: "no-store" })
-      .then((r) => r.json() as Promise<{ ok: boolean; flags: FlagEntry[] }>)
+      .then((r) => r.json() as Promise<FlagsResponse>)
       .then((d) => {
-        if (!cancelled && d.ok) setFlags(d.flags);
+        if (!cancelled && d.ok) {
+          setFlags(d.flags);
+          setAdminAuthenticated(d.adminAuthenticated !== false);
+        }
       })
       .catch(() => {})
       .finally(() => {
@@ -295,7 +300,7 @@ function FeatureFlagsSection() {
   }, []);
 
   async function toggle(key: string, enabled: boolean) {
-    if (saving) return;
+    if (saving || !adminAuthenticated) return;
     setSaving(key);
     try {
       const res = await fetch("/api/admin/feature-flags", {
@@ -314,7 +319,7 @@ function FeatureFlagsSection() {
       } else {
         const msg =
           res.status === 403
-            ? "Admin session expired — refresh and re-enter your admin password."
+            ? "Admin password required — enter your admin password above, then try again."
             : (data.error ?? "Failed to update flag.");
         setToast({ key, msg });
         setTimeout(() => setToast(null), 5000);
@@ -333,6 +338,13 @@ function FeatureFlagsSection() {
       <p className="mb-6 text-sm text-slate-500">
         Toggle features on or off. Changes take effect immediately for all users.
       </p>
+
+      {!loading && !adminAuthenticated ? (
+        <p className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/[0.08] px-3 py-2 text-[12px] text-amber-200">
+          Enter your <strong>admin password</strong> when prompted (reload this page if you skipped it). Toggles are
+          disabled until verified.
+        </p>
+      ) : null}
 
       {loading ? (
         <div className="space-y-3">
@@ -361,7 +373,7 @@ function FeatureFlagsSection() {
                   type="button"
                   role="switch"
                   aria-checked={flag.enabled}
-                  disabled={isSaving}
+                  disabled={isSaving || !adminAuthenticated}
                   onClick={() => void toggle(flag.key, !flag.enabled)}
                   className={`relative shrink-0 h-6 w-11 rounded-full transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 disabled:opacity-50 ${
                     flag.enabled ? "bg-teal-500" : "bg-white/[0.12]"

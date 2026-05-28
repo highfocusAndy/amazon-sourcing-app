@@ -3,6 +3,9 @@ import { compare, hash } from "bcryptjs";
 
 export const ADMIN_AUTH_COOKIE = "admin_auth_v2";
 
+/** How long an admin-password verification stays valid in the JWT (and legacy cookie). */
+export const ADMIN_SESSION_MS = 12 * 60 * 60 * 1000;
+
 function authSecret(): string {
   return process.env.AUTH_SECRET ?? "no-secret-configured";
 }
@@ -29,11 +32,66 @@ export function validateAdminSessionToken(token: string, userId: string): boolea
   try {
     const colon = token.indexOf(":");
     if (colon < 0) return false;
-    const tokenUserId = token.slice(0, colon);
     const sig = token.slice(colon + 1);
-    if (tokenUserId !== userId) return false;
     const expected = crypto.createHmac("sha256", authSecret()).update(userId).digest("hex");
     return safeHexEqual(sig, expected);
+  } catch {
+    return false;
+  }
+}
+
+export function isAdminSessionValid(adminVerifiedAt: number | undefined | null): boolean {
+  if (typeof adminVerifiedAt !== "number" || !Number.isFinite(adminVerifiedAt)) return false;
+  return Date.now() - adminVerifiedAt < ADMIN_SESSION_MS;
+}
+
+function adminVerifiedDbKey(userId: string): string {
+  return `admin:verified:${userId}`;
+}
+
+/** Persists admin-password verification in SystemConfig (survives JWT refresh / lost cookies). */
+export async function markAdminVerified(userId: string): Promise<void> {
+  const { prisma } = await import("@/lib/db");
+  const key = adminVerifiedDbKey(userId);
+  const value = String(Date.now());
+  await prisma.systemConfig.upsert({
+    where: { key },
+    update: { value },
+    create: { key, value },
+  });
+}
+
+export async function isAdminVerifiedInDb(userId: string): Promise<boolean> {
+  try {
+    const { prisma } = await import("@/lib/db");
+    const row = await prisma.systemConfig.findUnique({ where: { key: adminVerifiedDbKey(userId) } });
+    if (!row?.value) return false;
+    const at = Number(row.value);
+    return Number.isFinite(at) && Date.now() - at < ADMIN_SESSION_MS;
+  } catch {
+    return false;
+  }
+}
+
+/** JWT flag, DB record (production), or legacy admin_auth_v2 cookie. */
+export async function isAdminAuthenticated(
+  session: { user?: { id?: string; adminVerifiedAt?: number } } | null,
+): Promise<boolean> {
+  if (!await isAdminPasswordRequired()) return true;
+  const userId = session?.user?.id;
+  if (!userId) return false;
+  if (isAdminSessionValid(session?.user?.adminVerifiedAt)) return true;
+  if (await isAdminVerifiedInDb(userId)) return true;
+  try {
+    const { cookies } = await import("next/headers");
+    const cookieStore = await cookies();
+    const token = cookieStore.get(ADMIN_AUTH_COOKIE)?.value ?? "";
+    if (validateAdminSessionToken(token, userId)) {
+      // Heal: migrate a valid legacy cookie into DB so the next API call still passes.
+      void markAdminVerified(userId).catch(() => {});
+      return true;
+    }
+    return false;
   } catch {
     return false;
   }
@@ -47,7 +105,8 @@ export async function isAdminPasswordRequired(): Promise<boolean> {
     const row = await prisma.systemConfig.findUnique({ where: { key: "admin:password_hash" } });
     return Boolean(row?.value);
   } catch {
-    return false;
+    // Fail closed: intermittent DB errors must not expose admin actions without verification.
+    return true;
   }
 }
 

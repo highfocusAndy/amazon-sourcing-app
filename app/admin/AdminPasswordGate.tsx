@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import { useSession } from "next-auth/react";
 
 export function AdminPasswordGate() {
+  const { update } = useSession();
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -14,10 +16,12 @@ export function AdminPasswordGate() {
     try {
       const res = await fetch("/api/admin/auth", {
         method: "POST",
+        credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ password }),
       });
       if (res.ok) {
+        await update({ adminVerified: true });
         window.location.reload();
       } else {
         const d = (await res.json()) as { error?: string };

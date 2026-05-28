@@ -5,7 +5,9 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { requireAdminAccess } from "@/app/api/admin/guard";
+import { auth } from "@/auth";
+import { requireAdminAccess, requireAdminEmailOnly } from "@/app/api/admin/guard";
+import { isAdminAuthenticated } from "@/lib/adminAuth";
 import { prisma } from "@/lib/db";
 
 export const runtime = "nodejs";
@@ -36,7 +38,7 @@ const FLAG_DEFAULTS: Record<string, boolean> = {
 };
 
 export async function GET(): Promise<NextResponse> {
-  const gate = await requireAdminAccess();
+  const gate = await requireAdminEmailOnly();
   if (!gate.ok) return gate.response;
 
   const stored = await prisma.systemConfig.findMany({
@@ -49,7 +51,10 @@ export async function GET(): Promise<NextResponse> {
     enabled: storedMap[f.key] !== undefined ? storedMap[f.key] === "true" : (FLAG_DEFAULTS[f.key] ?? true),
   }));
 
-  return NextResponse.json({ ok: true, flags });
+  const session = await auth();
+  const adminAuthenticated = await isAdminAuthenticated(session);
+
+  return NextResponse.json({ ok: true, flags, adminAuthenticated });
 }
 
 export async function PUT(req: NextRequest): Promise<NextResponse> {

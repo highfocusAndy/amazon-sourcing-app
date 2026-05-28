@@ -2,9 +2,11 @@ import { type NextRequest, NextResponse } from "next/server";
 import { requireAdminEmailOnly } from "@/app/api/admin/guard";
 import {
   ADMIN_AUTH_COOKIE,
+  ADMIN_SESSION_MS,
   checkAdminPassword,
   generateAdminSessionToken,
   isAdminPasswordRequired,
+  markAdminVerified,
 } from "@/lib/adminAuth";
 
 export const runtime = "nodejs";
@@ -24,15 +26,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Incorrect password" }, { status: 401 });
   }
 
+  await markAdminVerified(gate.userId);
+
   const token = generateAdminSessionToken(gate.userId);
-  const res = NextResponse.json({ ok: true });
+  const res = NextResponse.json({ ok: true, requiresSessionUpdate: true });
+  const maxAgeSec = Math.floor(ADMIN_SESSION_MS / 1000);
   res.cookies.set(ADMIN_AUTH_COOKIE, token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
+    sameSite: "lax",
     path: "/",
-    // No maxAge → session cookie, cleared when browser closes.
-    // The middleware also deletes this cookie when the user signs out.
+    maxAge: maxAgeSec,
   });
   return res;
 }
