@@ -1,6 +1,7 @@
 "use client";
 
 import type { BuyerCatalogItem } from "@/lib/paApiClient";
+import { StarRating } from "./StarRating";
 
 // Catalog item may carry extra fields from the SP-API enrichment path.
 type ExtendedItem = BuyerCatalogItem & {
@@ -29,8 +30,7 @@ export function BuyerProductCard({
   priceSource?: "buybox" | "lowest";
 }) {
   const ext = item as ExtendedItem;
-  const stars = item.starRating != null ? Math.round(item.starRating * 2) / 2 : null;
-  const starsStr = stars != null ? "★".repeat(Math.floor(stars)) + (stars % 1 ? "½" : "") : null;
+  const starValue = item.starRating != null ? Math.max(0, Math.min(5, item.starRating)) : null;
 
   const primary =
     priceSource === "lowest"
@@ -58,20 +58,21 @@ export function BuyerProductCard({
 
   return (
     <div
-      className="group flex flex-col rounded-2xl overflow-hidden transition"
+      className="group flex flex-col rounded-2xl overflow-hidden transition-all duration-300 ease-out will-change-transform hover:-translate-y-0.5 hover:border-[rgba(201,168,76,0.35)] hover:shadow-xl hover:shadow-amber-500/[0.07]"
       style={{
         background: "rgba(255,255,255,0.03)",
         border: "1px solid rgba(255,255,255,0.07)",
+        backdropFilter: "blur(2px)",
       }}
     >
       {/* Image */}
-      <div className="aspect-square w-full overflow-hidden bg-slate-800/60">
+      <div className="aspect-square w-full overflow-hidden bg-slate-800/40">
         {item.imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={item.imageUrl}
             alt={item.title}
-            className="h-full w-full object-contain p-3 transition group-hover:scale-105"
+            className="h-full w-full object-contain p-3 transition-transform duration-500 ease-out group-hover:scale-[1.06]"
           />
         ) : (
           <div className="flex h-full items-center justify-center text-4xl text-slate-600">
@@ -92,10 +93,11 @@ export function BuyerProductCard({
           </p>
         )}
 
-        {/* Rating */}
-        {starsStr && (
+        {/* Rating — SVG stars with fractional fill */}
+        {starValue != null && (
           <div className="flex items-center gap-1.5">
-            <span className="text-[12px] text-amber-400">{starsStr}</span>
+            <StarRating value={starValue} size={12} />
+            <span className="text-[11px] font-medium text-slate-300">{starValue.toFixed(1)}</span>
             {item.reviewCount != null && (
               <span className="text-[11px] text-slate-500">({item.reviewCount.toLocaleString()})</span>
             )}
@@ -137,7 +139,7 @@ export function BuyerProductCard({
           href={affiliateUrl(item.asin, item.affiliateUrl)}
           target="_blank"
           rel="noopener noreferrer"
-          className="mt-auto block w-full rounded-xl py-2.5 text-center text-[12px] font-bold transition hover:opacity-90"
+          className="mt-auto block w-full rounded-xl py-2.5 text-center text-[12px] font-bold shadow-md shadow-amber-500/10 transition-all duration-300 ease-out hover:-translate-y-px hover:shadow-lg hover:shadow-amber-500/25"
           style={{ background: "#C9A84C", color: "#0a0800" }}
         >
           View on Amazon →

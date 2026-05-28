@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { signOut } from "next-auth/react";
 import { useState } from "react";
+import { BrandBackdrop } from "@/app/components/BrandBackdrop";
+import { AmazonSmile } from "./AmazonSmile";
 
 const G = "#C9A84C";
 
@@ -78,43 +80,53 @@ export function BuyerShell({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
-    <div className="relative flex h-[100dvh] max-h-[100dvh] w-full flex-col overflow-hidden bg-slate-900">
+    <div className="relative flex h-[100dvh] max-h-[100dvh] w-full flex-col overflow-hidden bg-slate-900/50">
+      {/* Repeating HF logo watermark behind UI (matches seller dashboard). */}
+      <BrandBackdrop variant="onDark" />
+
       {/* Header */}
       <header
-        className="flex h-14 shrink-0 items-center gap-3 border-b border-slate-700/60 px-4"
-        style={{ background: "rgba(15,23,42,0.98)" }}
+        className="relative z-[2] flex h-16 shrink-0 items-center gap-3 border-b border-slate-700/60 px-4 backdrop-blur-md"
+        style={{ background: "rgba(15,23,42,0.78)" }}
       >
         <Link
           href="/"
           className="group flex items-center gap-3 shrink-0 transition hover:opacity-95"
           aria-label="HIGH FOCUS — Buyer Catalog"
         >
-          <img
-            src="/HF_LOGO.png"
-            alt=""
-            aria-hidden="true"
-            className="h-8 w-auto object-contain transition group-hover:scale-[1.04]"
-            style={{ filter: "invert(1) sepia(1) saturate(1.6) hue-rotate(5deg) brightness(0.92)" }}
-          />
+          {/* Logo: larger + soft gold halo so it actually reads on dark. */}
+          <span
+            className="relative flex items-center justify-center"
+            style={{ filter: "drop-shadow(0 0 12px rgba(201,168,76,0.25))" }}
+          >
+            <img
+              src="/HF_LOGO.png"
+              alt=""
+              aria-hidden="true"
+              className="h-10 w-auto object-contain transition duration-300 group-hover:scale-[1.05]"
+              style={{ filter: "brightness(0) invert(1)" }}
+            />
+          </span>
           {/* Thin vertical divider between logo and title for cleaner hierarchy. */}
           <span
             aria-hidden="true"
-            className="hidden h-7 w-px sm:block"
-            style={{ background: "linear-gradient(to bottom, transparent, rgba(201,168,76,0.35), transparent)" }}
+            className="hidden h-8 w-px sm:block"
+            style={{ background: "linear-gradient(to bottom, transparent, rgba(201,168,76,0.4), transparent)" }}
           />
           <span className="flex flex-col leading-[1.1]">
             <span
-              className="text-[14px] font-semibold tracking-tight sm:text-[15px]"
+              className="text-[15px] font-semibold tracking-tight sm:text-[16px]"
               style={{
                 color: G,
                 fontFamily: "Georgia, serif",
                 fontStyle: "italic",
-                textShadow: "0 0 14px rgba(201,168,76,0.22)",
+                textShadow: "0 0 8px rgba(201,168,76,0.14)",
               }}
             >
               Buyer Catalog
             </span>
-            <span className="mt-0.5 hidden text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-500 sm:inline">
+            <span className="mt-0.5 hidden items-center gap-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-500 sm:inline-flex">
+              <AmazonSmile className="h-2.5 w-2.5" />
               Powered by Amazon Associates
             </span>
           </span>
@@ -148,11 +160,11 @@ export function BuyerShell({
         )}
       </header>
 
-      <div className="flex min-h-0 flex-1">
+      <div className="relative z-[1] flex min-h-0 flex-1">
         {/* Desktop sidebar */}
         <aside
-          className="hidden w-52 shrink-0 flex-col border-r border-slate-700/60 md:flex"
-          style={{ background: "rgba(15,23,42,0.6)" }}
+          className="hidden w-52 shrink-0 flex-col border-r border-slate-700/60 backdrop-blur-md md:flex"
+          style={{ background: "rgba(15,23,42,0.55)" }}
         >
           <ModeToggle userMode={userMode} />
           <div className="border-t border-slate-700/60 px-3 py-2">

@@ -508,8 +508,8 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* Search bar */}
-      <div className="border-b border-slate-700/60 bg-slate-900/80 px-4 py-3">
+      {/* Search bar — glassmorphism: translucent slate with backdrop blur. */}
+      <div className="border-b border-slate-700/40 bg-slate-900/40 px-4 py-3 backdrop-blur-md">
         <div ref={searchBoxRef} className="relative">
           <form onSubmit={handleSearch} className="flex gap-2">
             <input
@@ -523,13 +523,13 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
                 if (suggestions.length > 0) setShowSuggestions(true);
               }}
               placeholder="Search Amazon products…"
-              className="flex-1 rounded-xl border border-slate-700/60 bg-slate-800/60 px-4 py-2.5 text-sm text-slate-100 placeholder-slate-500 outline-none focus:border-[#C9A84C]/60 focus:ring-1 focus:ring-[#C9A84C]/30"
+              className="flex-1 rounded-xl border border-slate-700/40 bg-slate-800/30 px-4 py-2.5 text-sm text-slate-100 placeholder-slate-500 outline-none backdrop-blur-md transition focus:border-[#C9A84C]/60 focus:bg-slate-800/50 focus:ring-2 focus:ring-[#C9A84C]/20"
               autoComplete="off"
             />
             <button
               type="submit"
               disabled={loading}
-              className="rounded-xl px-5 py-2.5 text-sm font-semibold transition disabled:opacity-50"
+              className="rounded-xl px-5 py-2.5 text-sm font-semibold shadow-lg shadow-amber-500/10 transition hover:shadow-amber-500/20 disabled:opacity-50"
               style={{ background: G, color: "#0a0800" }}
             >
               Search
