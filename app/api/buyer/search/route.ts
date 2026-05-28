@@ -204,7 +204,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   let spApiToken: string | undefined = incomingCursor?.t ?? undefined;
 
   const cacheKey =
-    `buyer:search:v11:${searchIndex}:${seedList[seedIndex] ?? ""}:${seedIndex}:${spApiToken ?? ""}:${sortKey}:${brandFilter}:${condition}`;
+    `buyer:search:v12:${searchIndex}:${seedList[seedIndex] ?? ""}:${seedIndex}:${spApiToken ?? ""}:${sortKey}:${brandFilter}:${condition}`;
 
   // Cache hit fast path.
   try {

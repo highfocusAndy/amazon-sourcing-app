@@ -5,69 +5,15 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { signOut } from "next-auth/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { BrandBackdrop } from "@/app/components/BrandBackdrop";
 import { AmazonSmile } from "./AmazonSmile";
+import { AppearanceSection } from "@/app/settings/AppearanceSection";
+import { persistAppearanceCookies } from "@/lib/theme";
 
 const G = "#C9A84C";
-
-function ModeToggle({ userMode }: { userMode: string | null }) {
-  const router = useRouter();
-  const isBuyer = userMode === "buyer";
-  const [showTooltip, setShowTooltip] = useState(false);
-
-  return (
-    <div className="px-3 py-3">
-      <p className="mb-2 text-[9px] font-bold uppercase tracking-widest text-slate-500">Mode</p>
-      <div
-        className="flex h-8 overflow-hidden rounded-xl border"
-        style={{ borderColor: "rgba(201,168,76,0.3)" }}
-      >
-        {/* Seller side */}
-        {isBuyer ? (
-          <div className="relative flex-1">
-            <button
-              type="button"
-              className="w-full h-full text-[11px] font-semibold text-slate-600 cursor-not-allowed"
-              onMouseEnter={() => setShowTooltip(true)}
-              onMouseLeave={() => setShowTooltip(false)}
-              aria-label="Seller mode — upgrade to unlock"
-            >
-              🔒 Seller
-            </button>
-            {showTooltip && (
-              <div
-                className="absolute bottom-full left-1/2 mb-2 w-44 -translate-x-1/2 rounded-lg px-3 py-2 text-center text-[11px] text-white shadow-xl z-50"
-                style={{ background: "#1e293b", border: "1px solid rgba(201,168,76,0.3)" }}
-              >
-                Upgrade to Seller plan to unlock
-              </div>
-            )}
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => router.push("/dashboard")}
-            className="flex-1 text-[11px] font-semibold text-slate-400 transition hover:text-slate-200"
-          >
-            Seller
-          </button>
-        )}
-
-        {/* Divider */}
-        <div className="w-px" style={{ background: "rgba(201,168,76,0.3)" }} />
-
-        {/* Buyer side (always active here) */}
-        <div
-          className="flex flex-1 items-center justify-center text-[11px] font-semibold"
-          style={{ background: "rgba(201,168,76,0.15)", color: G }}
-        >
-          🛍️ Buyer
-        </div>
-      </div>
-    </div>
-  );
-}
+const G_DIM = "rgba(201,168,76,0.10)";
+const G_BORD = "rgba(201,168,76,0.28)";
 
 export function BuyerShell({
   children,
@@ -77,55 +23,66 @@ export function BuyerShell({
   userMode: string | null;
 }) {
   const { data: session } = useSession();
+  const router = useRouter();
+  const isBuyer = userMode === "buyer";
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // Restore saved theme / mode on mount — same as seller dashboard.
+  useEffect(() => {
+    persistAppearanceCookies();
+  }, []);
+
+  // Lock body scroll while any overlay is open.
+  useEffect(() => {
+    if (settingsOpen || mobileMenuOpen) {
+      const prev = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      return () => { document.body.style.overflow = prev; };
+    }
+  }, [settingsOpen, mobileMenuOpen]);
 
   return (
     <div className="relative flex h-[100dvh] max-h-[100dvh] w-full flex-col overflow-hidden bg-slate-900/50">
-      {/* Repeating HF logo watermark behind UI (matches seller dashboard). */}
+      {/* Repeating HF watermark — same as seller dashboard. */}
       <BrandBackdrop variant="onDark" />
 
-      {/* Header */}
+      {/* ── Header ─────────────────────────────────────────────────────────── */}
       <header
-        className="relative z-[2] flex h-16 shrink-0 items-center gap-3 border-b border-slate-700/60 px-4 backdrop-blur-md"
-        style={{ background: "rgba(15,23,42,0.78)" }}
+        className="relative z-[2] flex h-14 shrink-0 items-center gap-2 border-b border-slate-700/60 px-4 backdrop-blur-md sm:gap-3"
+        style={{ background: "rgba(15,23,42,0.88)" }}
       >
+        {/* Logo + title */}
         <Link
           href="/"
-          className="group flex items-center gap-3 shrink-0 transition hover:opacity-95"
-          aria-label="HIGH FOCUS — Buyer Catalog"
+          className="group flex shrink-0 items-center gap-2.5 transition hover:opacity-90"
+          aria-label="HIGH FOCUS – Buyer Catalog"
         >
-          {/* Logo: larger + soft gold halo so it actually reads on dark. */}
-          <span
-            className="relative flex items-center justify-center"
-            style={{ filter: "drop-shadow(0 0 12px rgba(201,168,76,0.25))" }}
-          >
-            <img
-              src="/HF_LOGO.png"
-              alt=""
-              aria-hidden="true"
-              className="h-10 w-auto object-contain transition duration-300 group-hover:scale-[1.05]"
-              style={{ filter: "brightness(0) invert(1)" }}
-            />
-          </span>
-          {/* Thin vertical divider between logo and title for cleaner hierarchy. */}
-          <span
-            aria-hidden="true"
-            className="hidden h-8 w-px sm:block"
-            style={{ background: "linear-gradient(to bottom, transparent, rgba(201,168,76,0.4), transparent)" }}
+          <img
+            src="/HF_LOGO.png"
+            alt=""
+            aria-hidden
+            className="h-9 w-auto object-contain transition duration-300 group-hover:scale-[1.04]"
+            style={{ filter: "brightness(0) invert(1) drop-shadow(0 0 7px rgba(201,168,76,0.28))" }}
           />
-          <span className="flex flex-col leading-[1.1]">
+          <span
+            aria-hidden
+            className="hidden h-7 w-px sm:block"
+            style={{ background: "linear-gradient(to bottom, transparent, rgba(201,168,76,0.38), transparent)" }}
+          />
+          <span className="flex flex-col leading-tight">
             <span
-              className="text-[15px] font-semibold tracking-tight sm:text-[16px]"
+              className="text-[14px] font-semibold tracking-tight sm:text-[15px]"
               style={{
                 color: G,
                 fontFamily: "Georgia, serif",
                 fontStyle: "italic",
-                textShadow: "0 0 8px rgba(201,168,76,0.14)",
+                textShadow: "0 0 7px rgba(201,168,76,0.13)",
               }}
             >
               Buyer Catalog
             </span>
-            <span className="mt-0.5 hidden items-center gap-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-500 sm:inline-flex">
+            <span className="mt-0.5 hidden items-center gap-1 text-[9px] font-semibold uppercase tracking-[0.10em] text-slate-500 sm:inline-flex">
               <AmazonSmile className="h-2.5 w-2.5" />
               Powered by Amazon Associates
             </span>
@@ -134,110 +91,161 @@ export function BuyerShell({
 
         <div className="flex-1" />
 
-        {/* Mobile menu toggle */}
+        {/* Mode toggle — inline, hidden on very small screens */}
+        <div className="hidden items-center sm:flex">
+          <div
+            className="flex h-8 overflow-hidden rounded-xl border"
+            style={{ borderColor: G_BORD }}
+          >
+            {isBuyer ? (
+              <button
+                type="button"
+                disabled
+                className="cursor-not-allowed px-3 text-[11px] font-semibold text-slate-600"
+                aria-label="Upgrade to unlock Seller mode"
+              >
+                🔒 Seller
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => router.push("/dashboard")}
+                className="px-3 text-[11px] font-semibold text-slate-400 transition hover:text-slate-200"
+              >
+                Seller
+              </button>
+            )}
+            <div className="w-px shrink-0" style={{ background: G_BORD }} />
+            <span
+              className="flex items-center px-3 text-[11px] font-semibold"
+              style={{ background: G_DIM, color: G }}
+            >
+              🛍️ Buyer
+            </span>
+          </div>
+        </div>
+
+        {/* Settings gear */}
         <button
           type="button"
-          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-700 bg-slate-800 text-slate-300 md:hidden"
-          aria-label="Menu"
+          onClick={() => setSettingsOpen(true)}
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-700/70 bg-slate-800/50 text-slate-400 transition hover:border-slate-600 hover:text-slate-200"
+          aria-label="App settings"
+          title="Appearance settings"
         >
-          ☰
+          ⚙
         </button>
 
+        {/* User / sign-out — desktop only */}
         {session?.user && (
-          <div className="hidden items-center gap-3 md:flex">
-            <span className="text-[13px] text-slate-400 truncate max-w-[10rem]">
+          <div className="hidden items-center gap-2 md:flex">
+            <span className="max-w-[9rem] truncate text-[13px] text-slate-400">
               {session.user.name || session.user.email}
             </span>
             <button
               type="button"
               onClick={() => void signOut({ callbackUrl: "/login" })}
-              className="text-[12px] text-slate-500 underline underline-offset-2 hover:text-slate-300"
+              className="text-[12px] text-slate-500 underline underline-offset-2 transition hover:text-slate-300"
             >
               Sign out
             </button>
           </div>
         )}
+
+        {/* Mobile hamburger */}
+        <button
+          type="button"
+          onClick={() => setMobileMenuOpen(true)}
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-700 bg-slate-800/50 text-slate-300 sm:hidden"
+          aria-label="Menu"
+        >
+          ☰
+        </button>
       </header>
 
-      <div className="relative z-[1] flex min-h-0 flex-1">
-        {/* Desktop sidebar */}
-        <aside
-          className="hidden w-52 shrink-0 flex-col border-r border-slate-700/60 backdrop-blur-md md:flex"
-          style={{ background: "rgba(15,23,42,0.55)" }}
-        >
-          <ModeToggle userMode={userMode} />
-          <div className="border-t border-slate-700/60 px-3 py-2">
-            <Link
-              href="/buyer"
-              className="flex items-center gap-2 rounded-lg px-3 py-2 text-[13px] font-medium transition"
-              style={{ background: "rgba(201,168,76,0.1)", color: G }}
-            >
-              <span>🛍️</span> Browse Catalog
-            </Link>
-          </div>
+      {/* ── Main (just children — one filter sidebar inside BuyerCatalog) ─── */}
+      <div className="relative z-[1] flex min-h-0 flex-1 overflow-hidden">
+        {children}
+      </div>
 
-          {userMode !== "buyer" && (
-            <div className="px-3 py-2">
-              <Link
-                href="/dashboard"
-                className="flex items-center gap-2 rounded-lg px-3 py-2 text-[13px] text-slate-400 transition hover:text-slate-200"
-              >
-                <span>◆</span> Seller Dashboard
-              </Link>
-            </div>
-          )}
-
-          <div className="mt-auto border-t border-slate-700/60 px-3 py-3">
-            {session?.user && (
+      {/* ── Mobile nav drawer ──────────────────────────────────────────────── */}
+      {mobileMenuOpen && (
+        <div className="fixed inset-0 z-50 sm:hidden" role="dialog" aria-modal="true" aria-label="Menu">
+          <button
+            type="button"
+            aria-label="Close menu"
+            onClick={() => setMobileMenuOpen(false)}
+            className="absolute inset-0 bg-slate-950/65 backdrop-blur-[2px]"
+          />
+          <div
+            className="absolute left-0 top-0 flex h-full w-64 flex-col border-r border-slate-700/60"
+            style={{ background: "#0f172a" }}
+          >
+            <div className="flex items-center justify-between border-b border-slate-700/60 px-4 py-3">
+              <span className="text-sm font-semibold text-slate-200">Menu</span>
               <button
                 type="button"
-                onClick={() => void signOut({ callbackUrl: "/login" })}
-                className="w-full text-left text-[11px] text-slate-500 underline underline-offset-2 hover:text-slate-300"
+                onClick={() => setMobileMenuOpen(false)}
+                className="text-2xl leading-none text-slate-400 hover:text-slate-100"
               >
-                Sign out
+                ×
               </button>
-            )}
-          </div>
-        </aside>
+            </div>
 
-        {/* Mobile menu overlay */}
-        {mobileMenuOpen && (
-          <div className="fixed inset-0 z-50 md:hidden">
-            <button
-              type="button"
-              className="absolute inset-0 bg-slate-950/60 backdrop-blur-[2px]"
-              onClick={() => setMobileMenuOpen(false)}
-              aria-label="Close menu"
-            />
-            <div
-              className="absolute left-0 top-0 flex h-full w-64 flex-col border-r border-slate-700/60"
-              style={{ background: "#0f172a" }}
-            >
-              <div className="flex items-center justify-between border-b border-slate-700/60 px-4 py-3">
-                <span className="text-sm font-semibold text-slate-200">Menu</span>
-                <button
-                  type="button"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="text-xl text-slate-400 hover:text-slate-200"
+            {/* Mode toggle */}
+            <div className="border-b border-slate-700/60 px-4 py-3">
+              <p className="mb-2 text-[9px] font-bold uppercase tracking-widest text-slate-500">Mode</p>
+              <div
+                className="flex h-8 overflow-hidden rounded-xl border"
+                style={{ borderColor: G_BORD }}
+              >
+                {isBuyer ? (
+                  <button type="button" disabled className="flex-1 cursor-not-allowed text-[11px] font-semibold text-slate-600">
+                    🔒 Seller
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => { setMobileMenuOpen(false); router.push("/dashboard"); }}
+                    className="flex-1 text-[11px] font-semibold text-slate-400 transition hover:text-slate-200"
+                  >
+                    Seller
+                  </button>
+                )}
+                <div className="w-px" style={{ background: G_BORD }} />
+                <span
+                  className="flex flex-1 items-center justify-center text-[11px] font-semibold"
+                  style={{ background: G_DIM, color: G }}
                 >
-                  ×
-                </button>
+                  🛍️ Buyer
+                </span>
               </div>
-              <ModeToggle userMode={userMode} />
-              <div className="border-t border-slate-700/60 px-3 py-2">
+            </div>
+
+            <div className="px-4 py-3">
+              <Link
+                href="/buyer"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center gap-2 rounded-lg px-3 py-2 text-[13px] font-medium transition"
+                style={{ color: G }}
+              >
+                🛍️ Browse Catalog
+              </Link>
+              {userMode !== "buyer" && (
                 <Link
-                  href="/buyer"
+                  href="/dashboard"
                   onClick={() => setMobileMenuOpen(false)}
-                  className="flex items-center gap-2 rounded-lg px-3 py-2 text-[13px] font-medium"
-                  style={{ color: G }}
+                  className="flex items-center gap-2 rounded-lg px-3 py-2 text-[13px] text-slate-400 transition hover:text-slate-200"
                 >
-                  🛍️ Browse Catalog
+                  ◆ Seller Dashboard
                 </Link>
-              </div>
+              )}
+            </div>
+
+            <div className="mt-auto border-t border-slate-700/60 px-4 py-4">
               {session?.user && (
-                <div className="mt-auto border-t border-slate-700/60 px-4 py-3">
-                  <p className="text-[12px] text-slate-400 truncate">{session.user.name || session.user.email}</p>
+                <>
+                  <p className="truncate text-[12px] text-slate-400">{session.user.name || session.user.email}</p>
                   <button
                     type="button"
                     onClick={() => void signOut({ callbackUrl: "/login" })}
@@ -245,17 +253,48 @@ export function BuyerShell({
                   >
                     Sign out
                   </button>
-                </div>
+                </>
               )}
             </div>
           </div>
-        )}
-
-        {/* Main content */}
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-          {children}
         </div>
-      </div>
+      )}
+
+      {/* ── Appearance settings drawer (slides in from right) ──────────────── */}
+      {settingsOpen && (
+        <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true" aria-label="Appearance settings">
+          <button
+            type="button"
+            aria-label="Close settings"
+            onClick={() => setSettingsOpen(false)}
+            className="absolute inset-0 bg-slate-950/60 backdrop-blur-[2px]"
+          />
+          <div className="relative flex w-full max-w-sm flex-col overflow-hidden border-l border-slate-700/60 shadow-2xl">
+            {/* Drawer header */}
+            <div
+              className="flex shrink-0 items-center justify-between border-b border-slate-200/80 px-5 py-4"
+              style={{ background: "#f8fafc" }}
+            >
+              <div>
+                <p className="text-[15px] font-semibold text-slate-800">Appearance</p>
+                <p className="text-[11px] text-slate-500">Theme &amp; display settings</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSettingsOpen(false)}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-xl leading-none text-slate-400 transition hover:bg-slate-200 hover:text-slate-700"
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            {/* Drawer body */}
+            <div className="flex-1 overflow-y-auto bg-white px-5 py-5">
+              <AppearanceSection />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
