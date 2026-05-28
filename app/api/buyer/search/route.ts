@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { isBuyerModeEnabled } from "@/lib/featureFlags";
 import { searchBuyerCatalog, fetchCatalogItemsFromPaApi } from "@/lib/paApiClient";
-import { searchBuyerCatalogSpApi, fetchOffersForAsin } from "@/lib/sp-api";
+import { searchBuyerCatalogSpApi, fetchOffersForAsin, type ItemCondition } from "@/lib/sp-api";
 import { prisma } from "@/lib/db";
 
 export const runtime = "nodejs";
@@ -173,6 +173,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const bsrMax = parseInt(sp.get("bsrMax") ?? "0", 10) || 0;
   const primeOnly = sp.get("primeOnly") === "true";
   const audience = (sp.get("audience") ?? "").trim().toLowerCase();
+  const conditionRaw = (sp.get("condition") ?? "new").toLowerCase();
+  const condition: ItemCondition =
+    conditionRaw === "used" || conditionRaw === "refurbished" || conditionRaw === "collectible"
+      ? (conditionRaw as ItemCondition)
+      : "new";
   const incomingCursor = decodeCursor(sp.get("pageToken") ?? "");
 
   const searchIndex = CATEGORY_TO_SEARCH_INDEX[category] ?? "All";
@@ -198,7 +203,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   let spApiToken: string | undefined = incomingCursor?.t ?? undefined;
 
   const cacheKey =
-    `buyer:search:v8:${searchIndex}:${seedList[seedIndex] ?? ""}:${seedIndex}:${spApiToken ?? ""}:${sortKey}:${brandFilter}`;
+    `buyer:search:v9:${searchIndex}:${seedList[seedIndex] ?? ""}:${seedIndex}:${spApiToken ?? ""}:${sortKey}:${brandFilter}:${condition}`;
 
   // Cache hit fast path.
   try {
@@ -240,6 +245,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       maxResults: pageSize,
       pageToken: spApiToken,
       brandNames: brandFilter ? [brandFilter] : undefined,
+      condition,
     });
 
     if (!spResult.ok) {
@@ -311,7 +317,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     if (stillMissing.length > 0) {
       try {
-        const offersList = await offersBatch(stillMissing, 8);
+        const offersList = await offersBatch(stillMissing, 8, condition);
         const offerMap = new Map(stillMissing.map((asin, idx) => [asin, offersList[idx]]));
         items = items.map((item) => {
           const i = item as RawItem;
@@ -364,6 +370,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 async function offersBatch(
   asins: string[],
   concurrency: number,
+  condition: ItemCondition,
 ): Promise<Array<{ buyBoxPrice: number | null; lowestPrice: number | null; isPrime: boolean; offerCount: number } | null>> {
   const results: Array<{ buyBoxPrice: number | null; lowestPrice: number | null; isPrime: boolean; offerCount: number } | null> =
     new Array(asins.length).fill(null);
@@ -373,7 +380,7 @@ async function offersBatch(
       const i = next;
       next += 1;
       try {
-        const r = await fetchOffersForAsin(asins[i]);
+        const r = await fetchOffersForAsin(asins[i], condition);
         results[i] = {
           buyBoxPrice: r.buyBoxPrice,
           lowestPrice: r.lowestPrice,

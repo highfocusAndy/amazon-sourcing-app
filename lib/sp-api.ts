@@ -290,46 +290,45 @@ function extractCatalogBasics(item: unknown): CatalogBasics {
   };
 }
 
-function extractOffersBasics(payload: unknown): OffersBasics {
+export type ItemCondition = "new" | "used" | "refurbished" | "collectible";
+
+function extractOffersBasics(payload: unknown, condition: ItemCondition = "new"): OffersBasics {
   const root = asObject(payload);
   const payloadObj = asObject(root?.payload);
   const summary = asObject(payloadObj?.Summary);
   const offers = asArray(payloadObj?.Offers);
 
-  // SP-API condition strings can be lowercase ("new") or capitalised ("New").
-  const isNewCondition = (raw: unknown): boolean => {
+  // SP-API may emit condition strings as "new" or "New" depending on field.
+  const matchesCondition = (raw: unknown): boolean => {
     const c = readString(raw);
-    return c != null && c.toLowerCase() === "new";
+    return c != null && c.toLowerCase() === condition;
   };
 
-  // Buy box: New-condition only. We deliberately do NOT fall back to a Used
-  // buy-box because that would mix conditions with the New-only Lowest below
-  // (producing absurd combos like Buy Box $5.85 Used vs Lowest $29 New).
+  // Buy box for the requested condition only. Mixing conditions causes
+  // impossible combos like "Buy Box $5.85 Used / Lowest $29 New".
   let buyBoxPrice: number | null = null;
   const buyBoxPrices = asArray(summary?.BuyBoxPrices);
   for (const bbRaw of buyBoxPrices) {
     const bb = asObject(bbRaw);
-    if (!isNewCondition(bb?.condition)) continue;
+    if (!matchesCondition(bb?.condition)) continue;
     const landed = asObject(bb?.LandedPrice);
     const amount = readNumber(landed?.Amount);
     if (amount !== null) { buyBoxPrice = amount; break; }
   }
 
-  // Lowest landed: ONLY across New-condition offers. Summary.LowestPrices contains
-  // breakdowns per condition; we previously scanned all of them which let Used
-  // prices leak into "Lowest" and confuse buyers.
+  // Lowest landed within the same condition.
   let lowestPrice: number | null = null;
   const lowestPrices = asArray(summary?.LowestPrices);
   for (const lpRaw of lowestPrices) {
     const lp = asObject(lpRaw);
-    if (!isNewCondition(lp?.condition)) continue;
+    if (!matchesCondition(lp?.condition)) continue;
     const lpLanded = asObject(lp?.LandedPrice);
     const amount = readNumber(lpLanded?.Amount);
     if (amount !== null && (lowestPrice === null || amount < lowestPrice)) {
       lowestPrice = amount;
     }
   }
-  // Fallback: scan the (New-only) offers array if Summary.LowestPrices was empty.
+  // Scan offers array (already filtered to requested condition by the API).
   for (const offerRaw of offers) {
     const offer = asObject(offerRaw);
     const listingPrice = asObject(offer?.ListingPrice);
@@ -341,7 +340,8 @@ function extractOffersBasics(payload: unknown): OffersBasics {
       if (lowestPrice === null || landed < lowestPrice) lowestPrice = landed;
     }
   }
-  // Fallback: if buy box missing but lowest known, surface lowest as buy box too.
+  // If buy box missing but we have a lowest, surface lowest as buy box too
+  // (same condition, so the invariant lowest <= buyBox still holds).
   if (buyBoxPrice === null) buyBoxPrice = lowestPrice;
 
   let amazonIsSeller = false;
@@ -479,15 +479,17 @@ export async function resolveCatalogItem(identifier: string): Promise<CatalogBas
   return upcResult ?? eanResult;
 }
 
-export async function fetchOffersForAsin(asin: string): Promise<OffersBasics> {
+export async function fetchOffersForAsin(asin: string, condition: ItemCondition = "new"): Promise<OffersBasics> {
+  // SP-API expects capitalised ItemCondition values ("New", "Used", ...).
+  const itemCondition = condition.charAt(0).toUpperCase() + condition.slice(1);
   const offers = await spApiRequest<unknown>("GET", `/products/pricing/v0/items/${asin}/offers`, {
     query: {
       MarketplaceId: getServerEnv().marketplaceId,
-      ItemCondition: "New",
+      ItemCondition: itemCondition,
     },
   });
 
-  return extractOffersBasics(offers);
+  return extractOffersBasics(offers, condition);
 }
 
 export async function fetchBatchBuyBoxPrices(asins: string[]): Promise<Map<string, number>> {
@@ -555,7 +557,9 @@ export async function searchBuyerCatalogSpApi(options: {
   maxResults?: number;
   pageToken?: string;
   brandNames?: string[];
+  condition?: ItemCondition;
 }): Promise<{ ok: true; data: { items: SpApiBuyerItem[]; nextToken?: string } } | { ok: false; error: string }> {
+  const condition = options.condition ?? "new";
   const env = getServerEnv();
   const query: Record<string, string> = {
     marketplaceIds: env.marketplaceId,
@@ -646,7 +650,7 @@ export async function searchBuyerCatalogSpApi(options: {
         const i = nextIdx;
         nextIdx += 1;
         try {
-          offers[i] = await fetchOffersForAsin(mapped[i].asin);
+          offers[i] = await fetchOffersForAsin(mapped[i].asin, condition);
         } catch {
           offers[i] = null;
         }

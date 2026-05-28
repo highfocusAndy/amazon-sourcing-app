@@ -69,6 +69,7 @@ function SkeletonCard() {
 }
 
 type Audience = "" | "men" | "women" | "kids" | "boys" | "girls";
+type Condition = "new" | "used" | "refurbished" | "collectible";
 
 type SearchParamsState = {
   keyword: string;
@@ -83,7 +84,15 @@ type SearchParamsState = {
   priceSource: "buybox" | "lowest";
   bsrMax: number;
   audience: Audience;
+  condition: Condition;
 };
+
+const CONDITION_OPTIONS: { label: string; value: Condition }[] = [
+  { label: "New", value: "new" },
+  { label: "Used", value: "used" },
+  { label: "Refurbished", value: "refurbished" },
+  { label: "Collectible", value: "collectible" },
+];
 
 // Keywords that benefit from an audience facet (gender / age group).
 const AUDIENCE_TRIGGER_PATTERN =
@@ -111,6 +120,7 @@ const INITIAL_STATE: SearchParamsState = {
   priceSource: "lowest",
   bsrMax: 0,
   audience: "",
+  condition: "new",
 };
 
 export function BuyerCatalog({ userMode }: { userMode: string | null }) {
@@ -172,6 +182,7 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
       if (params.bsrMax > 0) q.set("bsrMax", String(params.bsrMax));
       if (params.primeOnly) q.set("primeOnly", "true");
       if (params.audience) q.set("audience", params.audience);
+      if (params.condition) q.set("condition", params.condition);
       if (pageToken) q.set("pageToken", pageToken);
 
       const res = await fetch(`/api/buyer/search?${q.toString()}`);
@@ -308,6 +319,7 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
     state.priceSource !== "lowest",
     state.bsrMax > 0,
     state.audience !== "",
+    state.condition !== "new",
   ].filter(Boolean).length;
 
   const renderFilters = () => (
@@ -334,6 +346,27 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
         >
           {SORT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
+      </div>
+
+      <div>
+        <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-500">Condition</p>
+        <div className="grid grid-cols-2 gap-1.5">
+          {CONDITION_OPTIONS.map((o) => (
+            <button
+              key={o.value}
+              type="button"
+              onClick={() => updateState({ condition: o.value })}
+              className="rounded-lg border py-1.5 text-[11px] font-semibold transition"
+              style={{
+                borderColor: state.condition === o.value ? G_BORD : "rgba(71,85,105,0.5)",
+                background: state.condition === o.value ? G_DIM : "transparent",
+                color: state.condition === o.value ? G : "rgb(148 163 184)",
+              }}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div>
