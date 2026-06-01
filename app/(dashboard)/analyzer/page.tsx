@@ -2205,7 +2205,16 @@ function AnalyzerPageContent() {
                         ) : null}
                       </div>
                     </td>
-                    <td className="px-3 py-1.5 text-[13px] text-slate-300">{formatNumber(item.salesRank)}</td>
+                    <td className="px-3 py-1.5">
+                      {item.salesRank != null ? (
+                        <>
+                          <p className="text-[13px] tabular-nums text-slate-300">#{formatNumber(item.salesRank)}</p>
+                          {item.salesRankCategory && (
+                            <p className="text-[10px] leading-snug text-slate-500">in {item.salesRankCategory}</p>
+                          )}
+                        </>
+                      ) : <span className="text-[13px] text-slate-400">—</span>}
+                    </td>
                     <td className="px-3 py-1.5 text-[13px] text-slate-300">{item.brand || "—"}</td>
                     <td className="px-3 py-1.5 text-[13px] whitespace-nowrap">
                       {(() => {
@@ -2214,10 +2223,16 @@ function AnalyzerPageContent() {
                         if (ids.includes("ATVPDKIKX0DER") || details.some((d) => d.sellerId === "ATVPDKIKX0DER")) {
                           return <span className="font-semibold text-rose-400">⚠️ YES</span>;
                         }
-                        if (ids.length > 0 || details.length > 0 || item.offerCount === 0) {
-                          return <span className="font-semibold text-emerald-400">✅ NO</span>;
-                        }
-                        return <span className="text-slate-600">—</span>;
+                        // SP-API GetItemOffers does not return Amazon's own retail offer —
+                        // absence of ATVPDKIKX0DER in the list does NOT mean Amazon is not selling.
+                        return (
+                          <span
+                            className="cursor-help text-slate-500"
+                            title="SP-API does not expose Amazon's own retail offer. Cannot confirm whether Amazon is on this listing."
+                          >
+                            ?
+                          </span>
+                        );
                       })()}
                     </td>
                   </tr>

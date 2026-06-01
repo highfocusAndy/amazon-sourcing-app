@@ -46,7 +46,11 @@
       "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(d['version']\\)\")",
       "Bash(npm list *)",
       "Bash(xargs grep -l \"isBuyerModeEnabled\")",
-      "PowerShell($content = Get-Content \"C:\\\\dev\\\\amazon-sourcing-app\\\\app\\\\\\(dashboard\\)\\\\analyzer\\\\page.tsx\" -Raw; $pattern = 'formatNumber\\\\\\(item\\\\.salesRank\\\\\\)'; $matches = [regex]::Matches\\($content, $pattern\\); foreach \\($match in $matches\\) { $lines = $content.Substring\\(0, $match.Index\\).Split\\(\"`n\"\\).Count; Write-Host \"Match at line ~$lines\" })"
+      "PowerShell($content = Get-Content \"C:\\\\dev\\\\amazon-sourcing-app\\\\app\\\\\\(dashboard\\)\\\\analyzer\\\\page.tsx\" -Raw; $pattern = 'formatNumber\\\\\\(item\\\\.salesRank\\\\\\)'; $matches = [regex]::Matches\\($content, $pattern\\); foreach \\($match in $matches\\) { $lines = $content.Substring\\(0, $match.Index\\).Split\\(\"`n\"\\).Count; Write-Host \"Match at line ~$lines\" })",
+      "PowerShell($content = Get-Content \"C:\\\\dev\\\\amazon-sourcing-app\\\\app\\\\components\\\\ProductIntelPanelContent.tsx\"; for \\($i = 0; $i -lt $content.Length; $i++\\) { if \\($content[$i] -match \"BSR\"\\) { Write-Host \"Line $\\($i+1\\): $\\($content[$i]\\)\" } })",
+      "PowerShell(grep *)",
+      "PowerShell($content = Get-Content \"C:\\\\dev\\\\amazon-sourcing-app\\\\app\\\\\\(dashboard\\)\\\\dashboard\\\\page.tsx\"; for \\($i = 0; $i -lt $content.Length; $i++\\) { if \\($content[$i] -match 'BSR|bsr' -and $i -gt 100\\) { Write-Host \"Line $\\($i+1\\): $\\($content[$i]\\)\" } })",
+      "PowerShell($content = Get-Content \"C:\\\\dev\\\\amazon-sourcing-app\\\\app\\\\\\(dashboard\\)\\\\dashboard\\\\page.tsx\" -Raw; $pattern = 'p\\\\.rank'; $matches = [regex]::Matches\\($content, $pattern\\); \\($matches | Select-Object -First 10\\) | ForEach-Object { $lines = $content.Substring\\(0, $_.Index\\).Split\\(\"`n\"\\).Count; Write-Host \"Match at line ~$lines\" })"
     ]
   }
 }

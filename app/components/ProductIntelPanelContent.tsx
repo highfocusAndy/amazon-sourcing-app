@@ -190,7 +190,9 @@ export function ProductIntelPanelContent({
     return null;
   }, [selectedProduct.estimatedMonthlySales, selectedProduct.salesRank, selectedProduct.salesRankCategory]);
 
-  const amazonOnListing = useMemo((): { entity: string } | "no" | "unknown" => {
+  // SP-API GetItemOffers does not return Amazon's own retail offer in the Offers array.
+  // We can confirm YES when ATVPDKIKX0DER appears, but can never confirm NO.
+  const amazonOnListing = useMemo((): { entity: string } | "unknown" => {
     const ids = selectedProduct.sellerIds ?? [];
     const details = selectedProduct.sellerDetails ?? [];
     const match = (id: string) => ids.includes(id) || details.some((d) => d.sellerId === id);
@@ -199,10 +201,8 @@ export function ProductIntelPanelContent({
     if (match("A3ODHND3J0WMC8")) return { entity: "Amazon Renewed" };
     if (match("A1AT7TNMFUTZL3")) return { entity: "Amazon Fresh" };
     if (match("AUSPT0H4XKVI7")) return { entity: "Amazon Pantry" };
-    if (ids.length > 0 || details.length > 0) return "no";
-    if (selectedProduct.offerCount === 0) return "no";
     return "unknown";
-  }, [selectedProduct.sellerIds, selectedProduct.sellerDetails, selectedProduct.offerCount]);
+  }, [selectedProduct.sellerIds, selectedProduct.sellerDetails]);
 
   const amazonListingUrl =
     selectedProduct.asin ? amazonOfferListingUrl(marketplaceDomain, selectedProduct.asin) : null;
@@ -398,13 +398,15 @@ export function ProductIntelPanelContent({
           {/* Public pricing — always visible */}
           <div className="grid grid-cols-2 gap-1.5">
             <div className={HF_INNER_CARD}>
-              <p className={HF_KPI_LABEL}>
-                BSR
-                {selectedProduct.salesRankCategory ? ` · ${selectedProduct.salesRankCategory}` : ""}
-              </p>
+              <p className={HF_KPI_LABEL}>Best Sellers Rank</p>
               <p className="mt-0.5 text-xl font-extrabold tabular-nums tracking-tight text-slate-50">
                 {selectedProduct.salesRank != null ? formatNumber(selectedProduct.salesRank) : "—"}
               </p>
+              {selectedProduct.salesRank != null && selectedProduct.salesRankCategory && (
+                <p className="mt-0.5 text-[10px] leading-snug text-slate-500">
+                  in {selectedProduct.salesRankCategory}
+                </p>
+              )}
             </div>
             <div className={HF_INNER_CARD}>
               <p className={HF_KPI_LABEL}>Buy box</p>
@@ -577,10 +579,10 @@ export function ProductIntelPanelContent({
           <p className={HF_KPI_LABEL}>Amazon on listing</p>
           {typeof amazonOnListing === "object" ? (
             <p className="mt-0.5 text-sm font-bold text-rose-400">⚠️ YES — {amazonOnListing.entity}</p>
-          ) : amazonOnListing === "no" ? (
-            <p className="mt-0.5 text-sm font-bold text-emerald-400">✅ NO</p>
           ) : (
-            <p className="mt-0.5 text-sm text-slate-500">— Unable to confirm</p>
+            <p className="mt-0.5 text-[11px] text-slate-500" title="SP-API does not expose Amazon's own retail offer. Check the listing manually to confirm.">
+              ? Cannot confirm via API
+            </p>
           )}
         </div>
         {selectedProduct.amazonSalesVolumeLabel ? (
