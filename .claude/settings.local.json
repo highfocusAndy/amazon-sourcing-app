@@ -45,7 +45,8 @@
       "Bash(npx next *)",
       "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(d['version']\\)\")",
       "Bash(npm list *)",
-      "Bash(xargs grep -l \"isBuyerModeEnabled\")"
+      "Bash(xargs grep -l \"isBuyerModeEnabled\")",
+      "PowerShell($content = Get-Content \"C:\\\\dev\\\\amazon-sourcing-app\\\\app\\\\\\(dashboard\\)\\\\analyzer\\\\page.tsx\" -Raw; $pattern = 'formatNumber\\\\\\(item\\\\.salesRank\\\\\\)'; $matches = [regex]::Matches\\($content, $pattern\\); foreach \\($match in $matches\\) { $lines = $content.Substring\\(0, $match.Index\\).Split\\(\"`n\"\\).Count; Write-Host \"Match at line ~$lines\" })"
     ]
   }
 }

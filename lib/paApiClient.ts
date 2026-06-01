@@ -1,3 +1,5 @@
+import type { CatalogItem } from "@/lib/spApiClient";
+
 /**
  * Optional PA-API 5.0 (Product Advertising API) client.
  * Used exclusively to fetch WebsiteSalesRank — the "main-category BSR" that matches
@@ -566,4 +568,34 @@ export async function searchCatalogByKeywordPaApi(
   });
   if (!json.ok) return json;
   return { ok: true, data: { items: parseCatalogItems(json.data) } };
+}
+
+/**
+ * Overwrite SP-API catalog ranks with PA-API WebsiteSalesRank (main product-page BSR)
+ * so Explorer list and detail panel show the same number.
+ */
+export async function enrichCatalogItemsWithMainBsr(items: CatalogItem[]): Promise<CatalogItem[]> {
+  if (!isPaApiConfigured() || items.length === 0) return items;
+
+  const rankByAsin = new Map<string, number>();
+  const asins = items.map((i) => i.asin).filter((a) => a.length === 10);
+
+  for (let i = 0; i < asins.length; i += 10) {
+    const batch = asins.slice(i, i + 10);
+    const result = await fetchCatalogItemsFromPaApi(batch);
+    if (!result.ok) continue;
+    for (const row of result.data) {
+      if (row.salesRank != null && row.salesRank >= 1) {
+        rankByAsin.set(row.asin, row.salesRank);
+      }
+    }
+  }
+
+  if (rankByAsin.size === 0) return items;
+
+  return items.map((item) => {
+    const mainRank = rankByAsin.get(item.asin);
+    if (mainRank == null) return item;
+    return { ...item, rank: mainRank };
+  });
 }

@@ -17,6 +17,7 @@ import {
   fetchCatalogItemsFromPaApi,
   resolvePaApiSearchParams,
   searchCatalogByKeywordPaApi,
+  enrichCatalogItemsWithMainBsr,
   type PaApiCatalogItem,
 } from "@/lib/paApiClient";
 import type { CatalogItem } from "@/lib/spApiClient";
@@ -169,7 +170,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    return NextResponse.json({ items: result.items, nextPageToken: result.nextPageToken ?? null });
+    const items = await enrichCatalogItemsWithMainBsr(result.items);
+    return NextResponse.json({ items, nextPageToken: result.nextPageToken ?? null });
   } catch (e) {
     console.error("Catalog search error:", e);
     return NextResponse.json(

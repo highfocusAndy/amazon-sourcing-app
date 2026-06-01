@@ -1,6 +1,7 @@
 import { AssumeRoleCommand, STSClient } from "@aws-sdk/client-sts";
 import aws4 from "aws4";
 
+import { parseSalesRankFromSpApiCatalogItem } from "@/lib/catalogSalesRank";
 import { getServerEnv, type ServerEnv } from "@/lib/env";
 import type { FeePreview, SellerType } from "@/lib/types";
 
@@ -707,25 +708,7 @@ export async function searchBuyerCatalogSpApi(options: {
         if (imageUrl) break;
       }
 
-      const salesRanks = asArray(item?.salesRanks);
-      let salesRank: number | null = null;
-      let salesRankCategory: string | null = null;
-      for (const sgRaw of salesRanks) {
-        const sg = asObject(sgRaw);
-        const classRanks = asArray(sg?.classificationRanks);
-        const dispRanks = asArray(sg?.displayGroupRanks);
-        const merged = classRanks.length > 0 ? classRanks : dispRanks;
-        for (const rankRaw of merged) {
-          const rankObj = asObject(rankRaw);
-          const rank = readNumber(rankObj?.rank);
-          if (rank !== null) {
-            salesRank = rank;
-            salesRankCategory = readString(rankObj?.title) ?? readString(rankObj?.displayName) ?? null;
-            break;
-          }
-        }
-        if (salesRank !== null) break;
-      }
+      const { salesRank, salesRankCategory } = parseSalesRankFromSpApiCatalogItem(item);
 
       const partnerTag = process.env.PA_API_PARTNER_TAG ?? "";
       const affiliateUrl = `https://www.amazon.com/dp/${asin}${partnerTag ? `?tag=${partnerTag}` : ""}`;

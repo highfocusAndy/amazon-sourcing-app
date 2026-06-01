@@ -539,6 +539,11 @@ const handleProductClick = useCallback(
         }
         const result = json.result as ProductAnalysis;
         addProduct(result);
+        setCatalogResults((prev) =>
+          prev.map((p) =>
+            p.asin === result.asin && result.salesRank != null ? { ...p, rank: result.salesRank } : p,
+          ),
+        );
         setSelectedProduct(result);
         setDetailPanelCost("");
         setPendingProductAsin(null);

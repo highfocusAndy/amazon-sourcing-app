@@ -72,7 +72,6 @@ function SkeletonCard() {
 }
 
 type Audience = "" | "men" | "women" | "kids" | "boys" | "girls";
-type Condition = "new" | "used" | "refurbished" | "collectible";
 
 type SearchParamsState = {
   keyword: string;
@@ -84,18 +83,9 @@ type SearchParamsState = {
   minRating: number;
   primeOnly: boolean;
   brand: string;
-  priceSource: "buybox" | "lowest";
   bsrMax: number;
   audience: Audience;
-  condition: Condition;
 };
-
-const CONDITION_OPTIONS: { label: string; value: Condition }[] = [
-  { label: "New", value: "new" },
-  { label: "Used", value: "used" },
-  { label: "Refurbished", value: "refurbished" },
-  { label: "Collectible", value: "collectible" },
-];
 
 // Keywords that benefit from an audience facet (gender / age group).
 const AUDIENCE_TRIGGER_PATTERN =
@@ -120,10 +110,8 @@ const INITIAL_STATE: SearchParamsState = {
   minRating: 0,
   primeOnly: false,
   brand: "",
-  priceSource: "buybox",
   bsrMax: 0,
   audience: "",
-  condition: "new",
 };
 
 export function BuyerCatalog({ userMode }: { userMode: string | null }) {
@@ -213,7 +201,6 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
         category: params.category === "All" ? "" : params.category,
         subcategory: params.subcategory,
         sort: params.sort,
-        priceSource: params.priceSource,
       });
       if (params.minPrice) q.set("minPrice", params.minPrice);
       if (params.maxPrice) q.set("maxPrice", params.maxPrice);
@@ -222,7 +209,6 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
       if (params.bsrMax > 0) q.set("bsrMax", String(params.bsrMax));
       if (params.primeOnly) q.set("primeOnly", "true");
       if (params.audience) q.set("audience", params.audience);
-      if (params.condition) q.set("condition", params.condition);
       if (pageToken) q.set("pageToken", pageToken);
 
       const res = await fetch(`/api/buyer/search?${q.toString()}`);
@@ -391,10 +377,8 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
     state.minRating > 0,
     state.primeOnly,
     state.brand !== "",
-    state.priceSource !== "buybox",
     state.bsrMax > 0,
     state.audience !== "",
-    state.condition !== "new",
   ].filter(Boolean).length;
 
   const renderFilters = () => (
@@ -419,42 +403,6 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
         >
           {SORT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
-      </div>
-
-      <div>
-        <p className="buyer-filter-label mb-1.5 text-[10px] font-bold uppercase tracking-widest">Condition</p>
-        <div className="grid grid-cols-2 gap-1.5">
-          {CONDITION_OPTIONS.map((o) => (
-            <button
-              key={o.value}
-              type="button"
-              onClick={() => updateState({ condition: o.value })}
-              className={filterChipClass(state.condition === o.value, "rounded-lg py-1.5 text-[11px] font-semibold")}
-            >
-              {o.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div>
-        <p className="buyer-filter-label mb-1.5 text-[10px] font-bold uppercase tracking-widest">Price Source</p>
-        <div className="flex gap-1.5">
-          <button
-            type="button"
-            onClick={() => updateState({ priceSource: "buybox" })}
-            className={filterChipClass(state.priceSource === "buybox", "flex-1 rounded-lg py-1.5 text-[11px] font-semibold")}
-          >
-            Buy Box
-          </button>
-          <button
-            type="button"
-            onClick={() => updateState({ priceSource: "lowest" })}
-            className={filterChipClass(state.priceSource === "lowest", "flex-1 rounded-lg py-1.5 text-[11px] font-semibold")}
-          >
-            Lowest
-          </button>
-        </div>
       </div>
 
       <div>
@@ -675,31 +623,26 @@ export function BuyerCatalog({ userMode }: { userMode: string | null }) {
           {items.length > 0 && (
             <div className="mb-3 flex items-center justify-between text-[11px] text-slate-500">
               <span>{items.length} products</span>
-              <div className="flex items-center gap-3">
-                {/* Mobile Filters button (hidden on desktop where the sidebar is visible). */}
-                <button
-                  type="button"
-                  onClick={() => setMobileFiltersOpen(true)}
-                  className={filterChipClass(activeFilterCount > 0, "flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-semibold md:hidden")}
-                  aria-label="Open filters"
-                >
-                  <span>☰</span> Filters
-                  {activeFilterCount > 0 && (
-                    <span className="buyer-accent-badge ml-1 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[10px] font-bold">
-                      {activeFilterCount}
-                    </span>
-                  )}
-                </button>
-                <span>
-                  Showing <span className="buyer-accent-highlight">{state.priceSource === "lowest" ? "Lowest" : "Buy Box"}</span> price
-                </span>
-              </div>
+              {/* Mobile Filters button (hidden on desktop where the sidebar is visible). */}
+              <button
+                type="button"
+                onClick={() => setMobileFiltersOpen(true)}
+                className={filterChipClass(activeFilterCount > 0, "flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-semibold md:hidden")}
+                aria-label="Open filters"
+              >
+                <span>☰</span> Filters
+                {activeFilterCount > 0 && (
+                  <span className="buyer-accent-badge ml-1 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[10px] font-bold">
+                    {activeFilterCount}
+                  </span>
+                )}
+              </button>
             </div>
           )}
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
             {items.map((item) => (
-              <BuyerProductCard key={item.asin} item={item} priceSource={state.priceSource} />
+              <BuyerProductCard key={item.asin} item={item} />
             ))}
             {loading && items.length === 0 &&
               Array.from({ length: 12 }).map((_, i) => <SkeletonCard key={`init-${i}`} />)}

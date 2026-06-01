@@ -12,6 +12,7 @@
 import { AssumeRoleCommand, STSClient } from "@aws-sdk/client-sts";
 import aws4 from "aws4";
 
+import { parseSalesRankFromSpApiCatalogItem } from "@/lib/catalogSalesRank";
 import { getCatalogItemCache, setCatalogItemCache } from "@/lib/spApiResponseCache";
 import type { SellerType } from "@/lib/types";
 
@@ -742,26 +743,7 @@ export class SpApiClient {
       }
     }
 
-    const salesRanks = asArray(itemObj.salesRanks);
-    const allRanks: number[] = [];
-    for (const rankGroupRaw of salesRanks) {
-      const rankGroup = asObject(rankGroupRaw);
-      if (!rankGroup) {
-        continue;
-      }
-
-      const groupedRanks = asArray(rankGroup.classificationRanks).concat(asArray(rankGroup.displayGroupRanks));
-      for (const rankRaw of groupedRanks) {
-        const rankObj = asObject(rankRaw);
-        const parsedRank = readNumber(rankObj?.rank);
-        if (parsedRank !== null && parsedRank >= 1) {
-          allRanks.push(parsedRank);
-        }
-      }
-    }
-    // Use the highest (worst) rank to match Seller Central's main Sales Rank. SP-API returns multiple
-    // ranks (e.g. #241 in a small subcategory, #22,860 in main category); Seller Central shows the main one.
-    const rank: number | null = allRanks.length > 0 ? Math.max(...allRanks) : null;
+    const { salesRank: rank } = parseSalesRankFromSpApiCatalogItem(itemObj);
 
     let imageUrl: string | null = null;
     const imagesByMkt = asArray(itemObj.images);

@@ -46,9 +46,10 @@ export function computeEffectiveEconomics(
   const fees = product.totalFees;
   const costNum = usesOverride ? parseFloat(trimmed) : product.wholesalePrice;
 
-  if (buyBox != null && fees != null && Number.isFinite(costNum) && costNum > 0) {
+  if (buyBox != null && fees != null && Number.isFinite(costNum)) {
     const net = Math.round((buyBox - costNum - fees) * 100) / 100;
-    const roi = Math.round(((buyBox - costNum - fees) / costNum) * 10000) / 100;
+    const roi =
+      costNum > 0 ? Math.round(((buyBox - costNum - fees) / costNum) * 10000) / 100 : null;
     const marginPct = buyBox > 0 ? Math.round((net / buyBox) * 10000) / 100 : null;
     return { net, roi, marginPct };
   }

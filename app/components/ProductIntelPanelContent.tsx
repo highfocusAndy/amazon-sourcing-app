@@ -65,6 +65,14 @@ function parsePositiveInput(raw: string): number | null {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
+function effectiveUnitCost(detailPanelCost: string, wholesalePrice: number): number {
+  const trimmed = detailPanelCost.trim();
+  if (trimmed !== "" && Number.isFinite(parseFloat(trimmed))) {
+    return Math.max(0, parseFloat(trimmed));
+  }
+  return Math.max(0, wholesalePrice);
+}
+
 function decisionDisplayLabel(decision: ProductAnalysis["decision"]): string {
   const labels: Record<ProductAnalysis["decision"], string> = {
     BUY: "Buy",
@@ -544,10 +552,7 @@ export function ProductIntelPanelContent({
                   <p className="mt-0.5 text-sm font-bold tabular-nums text-slate-100">
                     {(() => {
                       const qty = parsePositiveInput(projectedMonthlyUnits);
-                      const cost =
-                        detailPanelCost.trim() !== "" && Number.isFinite(parseFloat(detailPanelCost))
-                          ? parseFloat(detailPanelCost)
-                          : selectedProduct.wholesalePrice;
+                      const cost = effectiveUnitCost(detailPanelCost, selectedProduct.wholesalePrice);
                       return qty !== null ? formatCurrency(roundToTwo(cost * qty)) : "—";
                     })()}
                   </p>
@@ -557,15 +562,8 @@ export function ProductIntelPanelContent({
                   <p className="mt-0.5 text-sm font-bold tabular-nums text-slate-100">
                     {(() => {
                       const qty = parsePositiveInput(projectedMonthlyUnits);
-                      const cost =
-                        detailPanelCost.trim() !== "" && Number.isFinite(parseFloat(detailPanelCost))
-                          ? parseFloat(detailPanelCost)
-                          : selectedProduct.wholesalePrice;
-                      const netP =
-                        selectedProduct.buyBoxPrice != null && selectedProduct.totalFees != null
-                          ? roundToTwo(selectedProduct.buyBoxPrice - cost - selectedProduct.totalFees)
-                          : selectedProduct.netProfit;
-                      return netP != null && qty !== null ? formatCurrency(roundToTwo(netP * qty)) : "—";
+                      const netP = detailEconomics.net ?? selectedProduct.netProfit;
+                      return netP != null && qty != null ? formatCurrency(roundToTwo(netP * qty)) : "—";
                     })()}
                   </p>
                 </div>
