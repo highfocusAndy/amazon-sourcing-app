@@ -534,8 +534,37 @@ export async function fetchOffersForAsin(asin: string, condition: ItemCondition 
   return extractOffersBasics(null, condition); // exhausted retries
 }
 
-export async function fetchBatchBuyBoxPrices(asins: string[]): Promise<Map<string, number>> {
-  const priceMap = new Map<string, number>();
+type BatchCompetitivePrice = { buyBoxPrice: number | null; lowestPrice: number | null };
+
+function parseBatchCompetitiveProduct(product: unknown): BatchCompetitivePrice {
+  let buyBoxPrice: number | null = null;
+  let lowestPrice: number | null = null;
+  const competitive = asObject(asObject(product)?.CompetitivePricing);
+  const prices = asArray(competitive?.CompetitivePrices);
+  for (const priceRaw of prices) {
+    const p = asObject(priceRaw);
+    const priceObj = asObject(p?.Price);
+    const landed = asObject(priceObj?.LandedPrice);
+    const listing = asObject(priceObj?.ListingPrice);
+    const amount = readNumber(landed?.Amount) ?? readNumber(listing?.Amount);
+    if (amount === null) continue;
+    if (readString(p?.CompetitivePriceId) === "1") buyBoxPrice = amount;
+    if (lowestPrice === null || amount < lowestPrice) lowestPrice = amount;
+  }
+  if (buyBoxPrice === null) buyBoxPrice = lowestPrice;
+  if (lowestPrice === null) lowestPrice = buyBoxPrice;
+  if (buyBoxPrice !== null && lowestPrice !== null && lowestPrice > buyBoxPrice) {
+    lowestPrice = buyBoxPrice;
+  }
+  return {
+    buyBoxPrice: buyBoxPrice === null ? null : roundCurrency(buyBoxPrice),
+    lowestPrice: lowestPrice === null ? null : roundCurrency(lowestPrice),
+  };
+}
+
+/** One SP-API call for up to 20 ASINs — buy box + minimum competitive price. */
+export async function fetchBatchCompetitivePrices(asins: string[]): Promise<Map<string, BatchCompetitivePrice>> {
+  const priceMap = new Map<string, BatchCompetitivePrice>();
   if (asins.length === 0) return priceMap;
   try {
     const env = getServerEnv();
@@ -547,30 +576,60 @@ export async function fetchBatchBuyBoxPrices(asins: string[]): Promise<Map<strin
       },
     });
     const root = asObject(response);
-    console.log("[fetchBatchBuyBoxPrices] root keys:", root ? Object.keys(root) : null);
     const payload = asArray(root?.payload);
-    console.log("[fetchBatchBuyBoxPrices] payload length:", payload.length);
     for (const entryRaw of payload) {
       const entry = asObject(entryRaw);
       const asin = readString(entry?.ASIN);
       if (!asin) continue;
-      const product = asObject(asObject(entry?.Product));
-      const competitive = asObject(asObject(product?.CompetitivePricing));
-      const prices = asArray(competitive?.CompetitivePrices);
-      for (const priceRaw of prices) {
-        const p = asObject(priceRaw);
-        if (readString(p?.CompetitivePriceId) !== "1") continue;
-        const priceObj = asObject(p?.Price);
-        const landed = asObject(priceObj?.LandedPrice);
-        const listing = asObject(priceObj?.ListingPrice);
-        const amount = readNumber(landed?.Amount) ?? readNumber(listing?.Amount);
-        if (amount !== null) { priceMap.set(asin, amount); break; }
-      }
+      priceMap.set(asin, parseBatchCompetitiveProduct(entry?.Product));
     }
   } catch (err) {
-    console.error("[fetchBatchBuyBoxPrices] error:", err instanceof Error ? err.message : err);
+    console.error("[fetchBatchCompetitivePrices] error:", err instanceof Error ? err.message : err);
   }
   return priceMap;
+}
+
+/** @deprecated Use fetchBatchCompetitivePrices — kept for callers that only need buy box. */
+export async function fetchBatchBuyBoxPrices(asins: string[]): Promise<Map<string, number>> {
+  const batch = await fetchBatchCompetitivePrices(asins);
+  const priceMap = new Map<string, number>();
+  batch.forEach((prices, asin) => {
+    if (prices.buyBoxPrice !== null) priceMap.set(asin, prices.buyBoxPrice);
+  });
+  return priceMap;
+}
+
+const DEFAULT_BUYER_OFFERS_CONCURRENCY = 4;
+
+function buyerOffersConcurrency(): number {
+  const configured = Number(process.env.BUYER_OFFERS_CONCURRENCY ?? DEFAULT_BUYER_OFFERS_CONCURRENCY);
+  if (!Number.isFinite(configured)) return DEFAULT_BUYER_OFFERS_CONCURRENCY;
+  return Math.max(1, Math.min(6, configured));
+}
+
+async function enrichOffersForAsins(
+  asins: string[],
+  condition: ItemCondition,
+): Promise<Map<string, OffersBasics>> {
+  const offerMap = new Map<string, OffersBasics>();
+  if (asins.length === 0) return offerMap;
+
+  const concurrency = buyerOffersConcurrency();
+  let nextIdx = 0;
+  async function worker(): Promise<void> {
+    while (nextIdx < asins.length) {
+      const i = nextIdx;
+      nextIdx += 1;
+      const asin = asins[i];
+      try {
+        offerMap.set(asin, await fetchOffersForAsin(asin, condition));
+      } catch {
+        /* skip — batch prices still shown */
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, asins.length) }, () => worker()));
+  return offerMap;
 }
 
 export interface SpApiBuyerItem {
@@ -687,58 +746,41 @@ export async function searchBuyerCatalogSpApi(options: {
       } as SpApiBuyerItem;
     }).filter((i) => i.asin !== "");
 
-    // Batch buy-box lookup (1 API call for up to 20 ASINs) — much faster than per-ASIN offers.
-    const batchBuyBox = new Map<string, number>();
+    // Batch competitive pricing (1 call per 20 ASINs) — avoids per-ASIN getItemOffers on the hot path.
+    const batchPrices = new Map<string, BatchCompetitivePrice>();
     const asinList = mapped.map((m) => m.asin);
     for (let i = 0; i < asinList.length; i += 20) {
       const chunk = asinList.slice(i, i + 20);
-      const chunkPrices = await fetchBatchBuyBoxPrices(chunk);
-      chunkPrices.forEach((price, asin) => batchBuyBox.set(asin, price));
+      const chunkPrices = await fetchBatchCompetitivePrices(chunk);
+      chunkPrices.forEach((prices, asin) => batchPrices.set(asin, prices));
     }
 
-    if (priceSource === "buybox") {
-      const withPrices: SpApiBuyerItem[] = mapped.map((item) => {
-        const buyBoxPrice = batchBuyBox.get(item.asin) ?? null;
-        return {
-          ...item,
-          buyBoxPrice,
-          lowestPrice: buyBoxPrice,
-          price: buyBoxPrice,
-        };
-      });
-      return { ok: true, data: { items: withPrices, nextToken } };
-    }
+    const needsOfferEnrichment = condition !== "new";
+    const offerByAsin = needsOfferEnrichment
+      ? await enrichOffersForAsins(asinList, condition)
+      : new Map<string, OffersBasics>();
 
-    // Lowest price needs getItemOffers per ASIN (~0.5 req/s). Use low concurrency to avoid 429 storms.
-    const concurrency = 2;
-    const offers: Array<OffersBasics | null> = new Array(mapped.length).fill(null);
-    let nextIdx = 0;
-    async function offerWorker(): Promise<void> {
-      while (nextIdx < mapped.length) {
-        const i = nextIdx;
-        nextIdx += 1;
-        try {
-          offers[i] = await fetchOffersForAsin(mapped[i].asin, condition);
-        } catch {
-          offers[i] = null;
-        }
-      }
-    }
-    await Promise.all(
-      Array.from({ length: Math.min(concurrency, mapped.length) }, () => offerWorker()),
-    );
-    const withPrices: SpApiBuyerItem[] = mapped.map((item, idx) => {
-      const o = offers[idx];
-      const buyBoxPrice = o?.buyBoxPrice ?? batchBuyBox.get(item.asin) ?? null;
-      const lowestPrice = o?.lowestPrice ?? buyBoxPrice;
+    const withPrices: SpApiBuyerItem[] = mapped.map((item) => {
+      const batch = batchPrices.get(item.asin);
+      const o = offerByAsin.get(item.asin);
+      const buyBoxPrice = o?.buyBoxPrice ?? batch?.buyBoxPrice ?? null;
+      const batchLowest = batch?.lowestPrice ?? buyBoxPrice;
+      const lowestPrice =
+        priceSource === "lowest"
+          ? (o?.lowestPrice ?? batchLowest)
+          : (batchLowest ?? o?.lowestPrice ?? buyBoxPrice);
+      const displayPrice =
+        priceSource === "lowest"
+          ? (lowestPrice ?? buyBoxPrice)
+          : (buyBoxPrice ?? lowestPrice);
       return {
         ...item,
         buyBoxPrice,
         lowestPrice,
-        price: buyBoxPrice ?? lowestPrice,
+        price: displayPrice,
         isPrime: o?.isPrime ?? false,
         offerCount: o?.offerCount ?? 0,
-        hasOffersInRequestedCondition: o?.hasOffersInRequestedCondition ?? false,
+        hasOffersInRequestedCondition: o?.hasOffersInRequestedCondition ?? (condition === "new"),
       };
     });
 

@@ -62,8 +62,8 @@ export function LandingPricingSection({
   };
 
   const freeTrialPlan: Plan = {
-    name: "Free Trial", price: "$0", period: trialLabel,
-    desc: "Try before you commit.",
+    name: "Free Trial", price: "$0", period: `${trialLabel}, then billed`,
+    desc: "Try the full tool, cancel before day 14 to pay nothing.",
     features: [
       "10 product analyses",
       "10 catalog searches",
@@ -229,8 +229,8 @@ export function LandingPricingSection({
                       {cta}
                     </button>
                     <p className="lp-b mt-2 min-h-[1rem] text-center text-[11px] text-slate-600">
-                      {(action === "starter" || action === "pro") && !subscriptionsPaused
-                        ? "14-day free trial · No charge until trial ends"
+                      {(action === "trial" || action === "starter" || action === "pro") && !subscriptionsPaused
+                        ? "Credit card required · Cancel before day 14 · No refunds after"
                         : isBuyerCard
                         ? "No credit card required"
                         : ""}

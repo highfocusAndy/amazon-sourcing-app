@@ -7,8 +7,12 @@ import { prisma } from "@/lib/db";
 export const runtime = "nodejs";
 
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
-/** Items per scroll — smaller = faster per request (each item needs a pricing API call). */
+/** Items per scroll — batch pricing covers up to 20 ASINs per SP-API call. */
 const TARGET_PAGE_SIZE = 20;
+const OFFERS_BATCH_CONCURRENCY = Math.max(
+  1,
+  Math.min(6, Number(process.env.BUYER_OFFERS_CONCURRENCY ?? 4) || 4),
+);
 const SP_API_MAX_PAGE = 20;
 /** One catalog page per HTTP request keeps latency predictable (~5–15s vs 30–90s). */
 const MAX_SP_CALLS_PER_REQUEST = 1;
@@ -232,7 +236,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   let spApiToken: string | undefined = incomingCursor?.t ?? undefined;
 
   const cacheKey =
-    `buyer:search:v14:${searchIndex}:${seedList[seedIndex] ?? ""}:${seedIndex}:${spApiToken ?? ""}:${seedCycle}:${sortKey}:${brandFilter}:${condition}`;
+    `buyer:search:v15:${searchIndex}:${seedList[seedIndex] ?? ""}:${seedIndex}:${spApiToken ?? ""}:${seedCycle}:${sortKey}:${brandFilter}:${condition}:${priceSource}`;
 
   // Cache hit fast path — with self-healing re-enrichment for null-price items.
   try {
@@ -255,7 +259,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         // Return cached page immediately; heal null prices in the background.
         void (async () => {
           try {
-            const freshOffers = await offersBatch(nullPriceAsins, 2, condition);
+            const freshOffers = await offersBatch(nullPriceAsins, OFFERS_BATCH_CONCURRENCY, condition);
             const offerMap = new Map(nullPriceAsins.map((a, idx) => [a, freshOffers[idx]]));
             let enriched = false;
             const healed = cachedItems.map((item) => {
@@ -377,7 +381,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   if (needExtraEnrichment) {
     try {
-      const offersList = await offersBatch(missingPriceAsins.slice(0, 12), 2, condition);
+      const offersList = await offersBatch(missingPriceAsins.slice(0, 12), OFFERS_BATCH_CONCURRENCY, condition);
       const batchAsins = missingPriceAsins.slice(0, 12);
       const offerMap = new Map(batchAsins.map((asin, idx) => [asin, offersList[idx]]));
       items = items.map((item) => {

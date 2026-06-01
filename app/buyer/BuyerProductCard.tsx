@@ -24,7 +24,7 @@ function offerListingUrl(asin: string): string {
 
 export function BuyerProductCard({
   item,
-  priceSource = "lowest",
+  priceSource = "buybox",
 }: {
   item: BuyerCatalogItem;
   priceSource?: "buybox" | "lowest";
