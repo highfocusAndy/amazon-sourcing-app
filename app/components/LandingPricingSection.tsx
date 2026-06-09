@@ -161,9 +161,21 @@ export function LandingPricingSection({
             >
               Simple, honest pricing
             </h2>
-            <p className="lp-b mx-auto mb-8 max-w-sm text-center text-slate-500">
+            <p className="lp-b mx-auto mb-4 max-w-sm text-center text-slate-500">
               Start free. Upgrade when you&apos;re ready to scale.
             </p>
+            <div className="mb-8 flex justify-center">
+              <div
+                className="lp-b inline-flex items-center gap-2 rounded-full px-5 py-2 text-[11px] font-bold uppercase tracking-[0.18em]"
+                style={{ background: "rgba(201,168,76,0.12)", border: "1px solid rgba(201,168,76,0.4)", color: "#E8CC7A" }}
+              >
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-60" style={{ background: "#C9A84C" }} />
+                  <span className="relative inline-flex h-2 w-2 rounded-full" style={{ background: "#C9A84C" }} />
+                </span>
+                Founder pricing — first 50 users only
+              </div>
+            </div>
           </ScrollReveal>
 
           {subscriptionsPaused && (
