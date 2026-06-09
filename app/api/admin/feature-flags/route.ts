@@ -28,13 +28,19 @@ const DEFAULT_FLAGS: { key: string; label: string; description: string }[] = [
   {
     key: "ff:buyer_mode",
     label: "Buyer Mode",
-    description: "Show buyer card on pricing, mode toggle in sidebar, and /buyer catalog page. Uses PA-API if configured, otherwise falls back to SP-API. Default: OFF.",
+    description: "Show buyer card on pricing, mode toggle in sidebar, and /buyer catalog page. Uses PA-API. Default: OFF.",
+  },
+  {
+    key: "ff:keepa",
+    label: "Keepa Integration",
+    description: "Enable Keepa API price history chart on product detail page. Enable once Keepa API key is configured. Default: OFF.",
   },
 ];
 
 const FLAG_DEFAULTS: Record<string, boolean> = {
   "ff:pa_api_catalog": false,
   "ff:buyer_mode": false,
+  "ff:keepa": false,
 };
 
 export async function GET(): Promise<NextResponse> {

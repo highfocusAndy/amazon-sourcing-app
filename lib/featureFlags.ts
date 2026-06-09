@@ -25,3 +25,8 @@ export async function isPaApiCatalogEnabled(): Promise<boolean> {
 export async function isBuyerModeEnabled(): Promise<boolean> {
   return getSystemConfigFlag("ff:buyer_mode", false);
 }
+
+/** When true, Keepa API integration is active (price history chart on product detail). Default: false. */
+export async function isKeepaEnabled(): Promise<boolean> {
+  return getSystemConfigFlag("ff:keepa", false);
+}

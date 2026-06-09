@@ -190,19 +190,6 @@ export function ProductIntelPanelContent({
     return null;
   }, [selectedProduct.estimatedMonthlySales, selectedProduct.salesRank, selectedProduct.salesRankCategory]);
 
-  // SP-API GetItemOffers does not return Amazon's own retail offer in the Offers array.
-  // We can confirm YES when ATVPDKIKX0DER appears, but can never confirm NO.
-  const amazonOnListing = useMemo((): { entity: string } | "unknown" => {
-    const ids = selectedProduct.sellerIds ?? [];
-    const details = selectedProduct.sellerDetails ?? [];
-    const match = (id: string) => ids.includes(id) || details.some((d) => d.sellerId === id);
-    if (match("ATVPDKIKX0DER")) return { entity: "Amazon.com" };
-    if (match("A2R2RITDJNWIQ5")) return { entity: "Amazon Warehouse" };
-    if (match("A3ODHND3J0WMC8")) return { entity: "Amazon Renewed" };
-    if (match("A1AT7TNMFUTZL3")) return { entity: "Amazon Fresh" };
-    if (match("AUSPT0H4XKVI7")) return { entity: "Amazon Pantry" };
-    return "unknown";
-  }, [selectedProduct.sellerIds, selectedProduct.sellerDetails]);
 
   const amazonListingUrl =
     selectedProduct.asin ? amazonOfferListingUrl(marketplaceDomain, selectedProduct.asin) : null;
@@ -575,16 +562,6 @@ export function ProductIntelPanelContent({
       </div>
 
       <IntelSection eyebrow="Competition">
-        <div className={HF_INNER_CARD_STATIC}>
-          <p className={HF_KPI_LABEL}>Amazon on listing</p>
-          {typeof amazonOnListing === "object" ? (
-            <p className="mt-0.5 text-sm font-bold text-rose-400">⚠️ YES — {amazonOnListing.entity}</p>
-          ) : (
-            <p className="mt-0.5 text-[11px] text-slate-500" title="SP-API does not expose Amazon's own retail offer. Check the listing manually to confirm.">
-              ? Cannot confirm via API
-            </p>
-          )}
-        </div>
         {selectedProduct.amazonSalesVolumeLabel ? (
           <div className="rounded-lg border border-slate-600 bg-emerald-900/30 px-3 py-2">
             <p className="text-xs text-slate-500">Product sells (from Amazon)</p>
@@ -597,6 +574,29 @@ export function ProductIntelPanelContent({
         ) : (
           <p className="text-[11px] text-slate-500">Structured offer breakdown will appear once Amazon pricing data loads.</p>
         )}
+      </IntelSection>
+
+      <IntelSection eyebrow="Price history">
+        <div className="relative overflow-hidden rounded-xl border border-slate-700/60 bg-slate-800/40 px-4 py-3">
+          {/* fake sparkline bars */}
+          <div className="mb-2 flex items-end gap-1 h-14">
+            {[40, 65, 52, 78, 60, 85, 70, 55, 90, 72, 68, 80].map((h, i) => (
+              <div
+                key={i}
+                className="flex-1 rounded-sm bg-teal-600/30"
+                style={{ height: `${h}%` }}
+              />
+            ))}
+          </div>
+          <p className="text-[10px] text-slate-600">Keepa price history chart</p>
+          {/* coming soon overlay */}
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 rounded-xl bg-slate-900/75 backdrop-blur-[2px]">
+            <span className="rounded-full border border-teal-500/40 bg-teal-500/10 px-3 py-0.5 text-[10px] font-bold uppercase tracking-widest text-teal-300">
+              Coming Soon
+            </span>
+            <p className="text-[11px] text-slate-500">Keepa integration</p>
+          </div>
+        </div>
       </IntelSection>
 
       <IntelSection eyebrow="Restrictions & compliance">

@@ -1,7 +1,7 @@
 /**
- * POST /api/analyze/keyword-search
+ * GET /api/analyze/keyword-search
  * Searches Amazon's catalog by keyword and returns enriched product listings.
- * PA-API when available; SP-API only after Connect Amazon.
+ * Uses SP-API only — PA-API is reserved for buyer mode.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -14,15 +14,13 @@ import {
   hasConnectedAmazonAccount,
   SP_API_UNAVAILABLE_USER_MESSAGE,
 } from "@/lib/amazonAccount";
-import { buildCatalogOnlyResult, buildProductAnalysisFromPaApi } from "@/lib/analysis";
+import { buildCatalogOnlyResult } from "@/lib/analysis";
 import {
   getKeywordSearchCache,
   setKeywordSearchCache,
 } from "@/lib/spApiResponseCache";
 import type { ProductAnalysis } from "@/lib/types";
 import { consumeMonthlyUsage } from "@/lib/usageQuota";
-import { isPaApiCatalogEnabled } from "@/lib/featureFlags";
-import { isPaApiConfigured, resolvePaApiSearchParams, searchCatalogByKeywordPaApi } from "@/lib/paApiClient";
 
 export const runtime = "nodejs";
 
@@ -46,12 +44,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // Check data-source availability before burning quota — if neither PA-API
-    // nor a connected Amazon account is available, return early for free.
     const hasAmazon = await hasConnectedAmazonAccount(gate.userId);
-    const usePaApi = await isPaApiCatalogEnabled();
-    const hasPaApi = usePaApi && isPaApiConfigured();
-    if (!hasPaApi && !hasAmazon) {
+    if (!hasAmazon) {
       return NextResponse.json(
         { ok: false, error: CONNECT_AMAZON_FOR_SP_API_MESSAGE, results: [] },
         { status: 503 },
@@ -74,41 +68,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           results: [],
         },
         { status: 429 },
-      );
-    }
-
-    if (usePaApi && isPaApiConfigured()) {
-      try {
-        const { keywords, searchIndex } = resolvePaApiSearchParams({ fallbackQuery: q });
-        const paResult = await searchCatalogByKeywordPaApi(keywords, pageSize, searchIndex);
-        if (!paResult.ok) {
-          if (!hasAmazon) {
-            return NextResponse.json(
-              { ok: false, error: paResult.error, results: [] },
-              { status: 503 },
-            );
-          }
-        } else {
-          const results: ProductAnalysis[] = paResult.data.items.map((item) =>
-            buildProductAnalysisFromPaApi(item, { identifier: item.asin, wholesalePrice: 0 }),
-          );
-          return NextResponse.json({ ok: true, results });
-        }
-      } catch (e) {
-        console.error("PA-API keyword search error:", e);
-        if (!hasAmazon) {
-          return NextResponse.json(
-            { ok: false, error: CONNECT_AMAZON_FOR_SP_API_MESSAGE, results: [] },
-            { status: 503 },
-          );
-        }
-      }
-    }
-
-    if (!hasAmazon) {
-      return NextResponse.json(
-        { ok: false, error: CONNECT_AMAZON_FOR_SP_API_MESSAGE, results: [] },
-        { status: 503 },
       );
     }
 
