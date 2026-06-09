@@ -53,11 +53,11 @@ function metricLimit(metric: UsageMetric, tier: Exclude<PlanTier, "owner_unlimit
   const key = `${tier.toUpperCase()}_${metric.toUpperCase()}_MONTHLY`;
   const envName = `USAGE_LIMIT_${key}`;
   const defaults: Record<string, number> = {
-    // Free signup trial — enough to feel the product, not enough to work for free.
-    USAGE_LIMIT_TRIAL_ANALYZE_MONTHLY: 10,
+    // Free signup trial — 14 days, enough to evaluate the product.
+    USAGE_LIMIT_TRIAL_ANALYZE_MONTHLY: 25,
     USAGE_LIMIT_TRIAL_ANALYZE_OFFERS_MONTHLY: 0,
-    USAGE_LIMIT_TRIAL_CATALOG_SEARCH_MONTHLY: 10,
-    USAGE_LIMIT_TRIAL_KEYWORD_SEARCH_MONTHLY: 5,
+    USAGE_LIMIT_TRIAL_CATALOG_SEARCH_MONTHLY: 25,
+    USAGE_LIMIT_TRIAL_KEYWORD_SEARCH_MONTHLY: 10,
     USAGE_LIMIT_TRIAL_RESTRICTIONS_MONTHLY: 30,
     USAGE_LIMIT_TRIAL_OPENAI_INSIGHT_MONTHLY: 0,
     USAGE_LIMIT_TRIAL_OPENAI_CHAT_MONTHLY: 0,

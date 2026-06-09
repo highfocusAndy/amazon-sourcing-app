@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { BuyerRegisterForm } from "./BuyerRegisterForm";
+import { FreeRegisterForm } from "./FreeRegisterForm";
 
 export default async function RegisterPage({
   searchParams,
@@ -18,9 +19,7 @@ export default async function RegisterPage({
     redirect(mode === "buyer" ? "/buyer" : "/dashboard");
   }
 
-  if (mode !== "buyer") {
-    redirect("/#pricing");
-  }
+  const isBuyer = mode === "buyer";
 
   return (
     <div
@@ -56,14 +55,16 @@ export default async function RegisterPage({
             className="text-center text-[1.5rem] font-semibold tracking-tight text-white"
             style={{ fontFamily: "Georgia, serif", fontStyle: "italic" }}
           >
-            Start Browsing Free
+            {isBuyer ? "Start Browsing Free" : "Start Your Free Trial"}
           </h1>
           <p className="text-center text-[13px] text-slate-400">
-            🛍️ Unlimited Amazon browsing — no credit card required
+            {isBuyer
+              ? "🛍️ Unlimited Amazon browsing — no credit card required"
+              : "25 analyses · 14 days · No credit card required"}
           </p>
         </div>
 
-        <BuyerRegisterForm />
+        {isBuyer ? <BuyerRegisterForm /> : <FreeRegisterForm />}
       </div>
 
       <Link
