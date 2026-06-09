@@ -556,16 +556,19 @@ export async function searchCatalogByKeywordPaApi(
   keyword: string,
   maxResults = 10,
   searchIndex = "All",
+  sortBy?: string,
 ): Promise<PaApiCallResult<PaApiSearchResult>> {
   if (!isPaApiConfigured()) {
     return { ok: false, error: "PA-API is not configured." };
   }
-  const json = await paApiPost(CREATORS_API_PATH_SEARCH_ITEMS, {
-    keywords: keyword.trim().slice(0, 250),
+  const body: Record<string, unknown> = {
+    keywords: keyword.trim().slice(0, 250) || "best sellers",
     searchIndex,
     itemCount: Math.min(10, Math.max(1, maxResults)),
     resources: CATALOG_ITEM_RESOURCES,
-  });
+  };
+  if (sortBy) body.sortBy = sortBy;
+  const json = await paApiPost(CREATORS_API_PATH_SEARCH_ITEMS, body);
   if (!json.ok) return json;
   return { ok: true, data: { items: parseCatalogItems(json.data) } };
 }

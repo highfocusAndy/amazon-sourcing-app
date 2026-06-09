@@ -45,6 +45,19 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         { status: 429 },
       );
     }
+
+    // Check data-source availability before burning quota — if neither PA-API
+    // nor a connected Amazon account is available, return early for free.
+    const hasAmazon = await hasConnectedAmazonAccount(gate.userId);
+    const usePaApi = await isPaApiCatalogEnabled();
+    const hasPaApi = usePaApi && isPaApiConfigured();
+    if (!hasPaApi && !hasAmazon) {
+      return NextResponse.json(
+        { ok: false, error: CONNECT_AMAZON_FOR_SP_API_MESSAGE, results: [] },
+        { status: 503 },
+      );
+    }
+
     const usage = await consumeMonthlyUsage(gate.userId, "keyword_search");
     if (!usage.ok) {
       return NextResponse.json(
@@ -63,9 +76,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         { status: 429 },
       );
     }
-
-    const hasAmazon = await hasConnectedAmazonAccount(gate.userId);
-    const usePaApi = await isPaApiCatalogEnabled();
 
     if (usePaApi && isPaApiConfigured()) {
       try {

@@ -1058,6 +1058,7 @@ function AnalyzerPageContent() {
       .catch(() => {});
   }, []);
 
+
   useEffect(() => {
     if (!manualIdentifierResolved) {
       lastAutoManualCalcKeyRef.current = "";

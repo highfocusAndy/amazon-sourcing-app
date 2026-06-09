@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
 import { isBuyerModeEnabled } from "@/lib/featureFlags";
 import { searchBuyerCatalog, isPaApiConfigured, type BuyerCatalogItem } from "@/lib/paApiClient";
 import { prisma } from "@/lib/db";
+import { requireAppAccess } from "@/lib/billing/requireAppAccess";
+import { userBuyerSearchLimit } from "@/lib/apiRateLimit";
 
 export const runtime = "nodejs";
 
@@ -105,15 +106,16 @@ function decodeCursor(raw: string): Cursor | null {
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!isPaApiConfigured()) {
+    return NextResponse.json({ error: "Product catalog is not available. PA-API credentials required." }, { status: 503 });
   }
   if (!(await isBuyerModeEnabled())) {
     return NextResponse.json({ error: "Buyer mode is not enabled." }, { status: 403 });
   }
-  if (!isPaApiConfigured()) {
-    return NextResponse.json({ error: "Product catalog is not available. PA-API credentials required." }, { status: 503 });
+  const gate = await requireAppAccess();
+  if (!gate.ok) return gate.response;
+  if (!(await userBuyerSearchLimit(gate.userId))) {
+    return NextResponse.json({ error: "Too many requests. Slow down." }, { status: 429 });
   }
 
   const sp = request.nextUrl.searchParams;

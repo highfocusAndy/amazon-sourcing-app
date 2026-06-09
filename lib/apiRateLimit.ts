@@ -147,6 +147,12 @@ export async function userKeywordSearchLimit(userId: string): Promise<boolean> {
   );
 }
 
+export async function userBuyerSearchLimit(userId: string): Promise<boolean> {
+  // Buyer catalog pages are cached, so actual PA-API calls are rare.
+  // 60 requests/min (1/sec) is generous for scroll-based pagination.
+  return allowSlidingWindow("buyer_search", 60, `buyer_search:${userId}`, userId);
+}
+
 export async function userUploadLimit(userId: string): Promise<boolean> {
   return allowSlidingWindow("upload", rateLimitUploadPerMinute(), `upload:${userId}`, userId);
 }

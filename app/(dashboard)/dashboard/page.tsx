@@ -63,10 +63,9 @@ export default function ExplorerPage() {
   const {
     selectedCategory,
     selectedSubcategory,
-    clearCategorySelection,
   } = useExplorerCategory();
   const [error, setError] = useState<string | null>(null);
-  const [keyword, setKeyword] = useState("");
+  const [keyword] = useState("");
   const [productSort, setProductSort] = useState<ProductSort>("bsr_asc");
   const [bsrMax, setBsrMax] = useState("");
   const [catalogResults, setCatalogResults] = useState<CatalogItem[]>([]);
@@ -169,15 +168,6 @@ export default function ExplorerPage() {
       }
     }
   }, [catalogFetchSize]);
-
-  /** Best sellers catalog: clears category pick and reloads keyword list used for the default explorer feed. */
-  const openBestSellersList = useCallback(() => {
-    clearCategorySelection();
-    setKeyword("");
-    setInfoMessage(null);
-    setProductSort("bsr_asc");
-    void loadInitialBestSellers();
-  }, [clearCategorySelection, loadInitialBestSellers]);
 
   const searchProducts = useCallback(async () => {
     setLoadingPaused(false);
@@ -462,6 +452,15 @@ export default function ExplorerPage() {
     }
   }, [selectedSubcategory]);
 
+  const hasAutoLoadedRef = useRef(false);
+  useEffect(() => {
+    if (sessionStatus !== "authenticated") return;
+    if (hasAutoLoadedRef.current) return;
+    if (selectedCategory || selectedSubcategory) return;
+    hasAutoLoadedRef.current = true;
+    void loadInitialBestSellers();
+  }, [sessionStatus, selectedCategory, selectedSubcategory, loadInitialBestSellers]);
+
   const filteredAndSortedProducts = useMemo(() => {
     const seenAsins = new Set<string>();
     const list = catalogResults.filter((p) => {
@@ -739,15 +738,6 @@ const handleProductClick = useCallback(
                 className="w-24 rounded-lg border border-slate-600 bg-slate-700/50 px-2 py-1.5 text-sm text-slate-100 placeholder:text-slate-500 outline-none focus:ring-2 focus:ring-teal-500/50 focus:border-teal-500"
               />
             </label>
-            <button
-              type="button"
-              onClick={() => openBestSellersList()}
-              disabled={catalogLoading}
-              title="Clear category and load catalog results for Best sellers keyword search"
-              className="rounded-lg border border-slate-600 bg-slate-700/50 px-2.5 py-1 text-[13px] font-semibold text-slate-100 hover:bg-slate-600 disabled:opacity-45 sm:px-3 sm:py-1.5 sm:text-sm"
-            >
-              {catalogLoading ? "…" : "Best sellers"}
-            </button>
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
