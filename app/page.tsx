@@ -195,7 +195,7 @@ function LandingNav() {
 function HeroSection() {
   return (
     <section
-      className="lp-grid-bg relative flex min-h-[92vh] flex-col items-center justify-center overflow-hidden px-6 pb-20 pt-16 text-center"
+      className="lp-grid-bg relative flex min-h-[75vh] flex-col items-center justify-center overflow-hidden px-6 pb-10 pt-10 text-center"
     >
       {/* Floating orbs */}
       <div
@@ -260,7 +260,7 @@ function HeroSection() {
         </p>
 
         {/* Decision badges */}
-        <div className="mt-14 flex flex-wrap justify-center gap-2.5">
+        <div className="mt-8 flex flex-wrap justify-center gap-2.5">
           {[
             { label: "BUY",            c: "#4ade80", bg: "rgba(74,222,128,0.08)",   b: "rgba(74,222,128,0.22)"   },
             { label: "WORTH UNGATING", c: "#a78bfa", bg: "rgba(167,139,250,0.08)",  b: "rgba(167,139,250,0.22)"  },
@@ -285,8 +285,8 @@ function HeroSection() {
 // ── Stats bar ─────────────────────────────────────────────────────────────────
 function StatsBar() {
   return (
-    <div className="lp-b border-y px-6 py-7" style={{ borderColor: C_BORD, background: "rgba(255,255,255,0.015)" }}>
-      <div className="mx-auto grid max-w-4xl grid-cols-2 gap-y-7 sm:grid-cols-4">
+    <div className="lp-b border-y px-6 py-5" style={{ borderColor: C_BORD, background: "rgba(255,255,255,0.015)" }}>
+      <div className="mx-auto grid max-w-4xl grid-cols-2 gap-y-4 sm:grid-cols-4">
         {[
           { v: "200",       l: "Products per batch" },
           { v: "Live",      l: "SP-API data"        },
@@ -320,7 +320,7 @@ function FeaturesSection() {
   ];
 
   return (
-    <section className="px-6 py-24">
+    <section className="px-6 py-12">
       <div className="mx-auto max-w-6xl">
         <ScrollReveal>
           <Label>Features</Label>
@@ -330,7 +330,7 @@ function FeaturesSection() {
           >
             Everything you need to source smarter
           </h2>
-          <p className="lp-b mx-auto mb-14 max-w-lg text-center text-slate-500">
+          <p className="lp-b mx-auto mb-8 max-w-lg text-center text-slate-500">
             One tool replaces your fee calculator, Keepa research, and manual spreadsheet work.
           </p>
         </ScrollReveal>
@@ -398,21 +398,21 @@ function HowItWorksSection() {
   ];
 
   return (
-    <section className="px-6 py-24">
+    <section className="px-6 py-12">
       <div className="mx-auto max-w-6xl">
-        <div className="lp-divider mb-20" />
+        <div className="lp-divider mb-10" />
 
         <ScrollReveal>
           <Label>How It Works</Label>
           <h2
-            className="lp-h mb-16 text-center text-white"
+            className="lp-h mb-8 text-center text-white"
             style={{ fontSize: "clamp(2rem, 5vw, 3.2rem)", fontStyle: "italic", fontWeight: 600 }}
           >
             Three steps from search to profit
           </h2>
         </ScrollReveal>
 
-        <div className="grid gap-14 sm:grid-cols-3">
+        <div className="grid gap-8 sm:grid-cols-3">
           {steps.map(({ n, title, desc }, i) => (
             <ScrollReveal key={n} delay={i * 120}>
               <div>
@@ -435,7 +435,7 @@ function HowItWorksSection() {
           ))}
         </div>
 
-        <div className="lp-divider mt-20" />
+        <div className="lp-divider mt-10" />
       </div>
     </section>
   );

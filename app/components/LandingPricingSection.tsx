@@ -138,7 +138,7 @@ export function LandingPricingSection({
 
   return (
     <>
-      <section id="pricing" className="px-6 py-24">
+      <section id="pricing" className="px-6 py-12">
         <div className="mx-auto max-w-6xl">
           <ScrollReveal>
             <div className="mb-5 flex justify-center">
@@ -156,7 +156,7 @@ export function LandingPricingSection({
             >
               Simple, honest pricing
             </h2>
-            <p className="lp-b mx-auto mb-14 max-w-sm text-center text-slate-500">
+            <p className="lp-b mx-auto mb-8 max-w-sm text-center text-slate-500">
               Start free. Upgrade when you&apos;re ready to scale.
             </p>
           </ScrollReveal>
