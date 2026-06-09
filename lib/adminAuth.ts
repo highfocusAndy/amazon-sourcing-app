@@ -4,7 +4,7 @@ import { compare, hash } from "bcryptjs";
 export const ADMIN_AUTH_COOKIE = "admin_auth_v2";
 
 /** How long an admin-password verification stays valid in the JWT (and legacy cookie). */
-export const ADMIN_SESSION_MS = 12 * 60 * 60 * 1000;
+export const ADMIN_SESSION_MS = 30 * 60 * 1000;
 
 function authSecret(): string {
   return process.env.AUTH_SECRET ?? "no-secret-configured";
