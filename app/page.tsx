@@ -442,7 +442,7 @@ function HowItWorksSection() {
 }
 
 // ── Footer ────────────────────────────────────────────────────────────────────
-function LandingFooter() {
+function LandingFooter({ buyerModeEnabled }: { buyerModeEnabled: boolean }) {
   return (
     <footer className="lp-b border-t px-6 py-10" style={{ borderColor: C_BORD }}>
       <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-5 sm:flex-row">
@@ -469,16 +469,18 @@ function LandingFooter() {
           ))}
         </div>
       </div>
-      <div className="mx-auto mt-6 max-w-6xl space-y-2 text-center">
-        <p className="text-[12px] font-medium leading-relaxed text-slate-500">
-          As an Amazon Associate, we earn from qualifying purchases.
-        </p>
-        <p className="text-[11px] leading-relaxed text-slate-700">
-          HIGH FOCUS Sourcing is a participant in the Amazon Services LLC Associates Program, an affiliate
-          advertising program designed to provide a means for sites to earn advertising fees by advertising
-          and linking to Amazon.com.
-        </p>
-      </div>
+      {buyerModeEnabled && (
+        <div className="mx-auto mt-6 max-w-6xl space-y-2 text-center">
+          <p className="text-[12px] font-medium leading-relaxed text-slate-500">
+            As an Amazon Associate, we earn from qualifying purchases.
+          </p>
+          <p className="text-[11px] leading-relaxed text-slate-700">
+            HIGH FOCUS Sourcing is a participant in the Amazon Services LLC Associates Program, an affiliate
+            advertising program designed to provide a means for sites to earn advertising fees by advertising
+            and linking to Amazon.com.
+          </p>
+        </div>
+      )}
     </footer>
   );
 }
@@ -514,7 +516,7 @@ export default async function HomePage() {
         subscriptionTrialDays={subscriptionTrialDays}
         buyerModeEnabled={buyerModeEnabled}
       />
-      <LandingFooter />
+      <LandingFooter buyerModeEnabled={buyerModeEnabled} />
     </div>
   );
 }
