@@ -712,6 +712,26 @@ const handleProductClick = useCallback(
           </div>
         </header>
 
+        {/* Onboarding banner — shown until Amazon account is connected */}
+        {!amazonHeaderConnected && (
+          <div className="shrink-0 flex items-center justify-between gap-3 rounded-xl border border-teal-700/40 bg-teal-900/20 px-4 py-3 text-sm">
+            <div className="flex items-center gap-3 min-w-0">
+              <span className="shrink-0 text-teal-400 text-base">🔗</span>
+              <div className="min-w-0">
+                <p className="font-semibold text-teal-200">Connect your Amazon seller account to get started</p>
+                <p className="text-[12px] text-teal-400/80 mt-0.5">Required for live SP-API data — pricing, fees, BSR, and eligibility checks.</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowAmazonAccountModal(true)}
+              className="shrink-0 rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-teal-500 transition-colors"
+            >
+              Connect Amazon
+            </button>
+          </div>
+        )}
+
         {/* Filters: Keyword, Sort, BSR max, Ungated */}
         <section className="shrink-0 rounded-xl border border-slate-600/80 bg-slate-800/90 px-3 py-2 shadow-lg shadow-black/10 sm:px-3.5">
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">

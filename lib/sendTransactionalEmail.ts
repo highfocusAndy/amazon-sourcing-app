@@ -81,6 +81,58 @@ export function passwordResetEmailContent(opts: { resetUrl: string; appLabel: st
   return { subject, html, text };
 }
 
+export function trialExpiryReminderEmailContent(opts: {
+  appLabel: string;
+  upgradeUrl: string;
+  daysLeft: number;
+}): { subject: string; html: string; text: string } {
+  const { appLabel, upgradeUrl, daysLeft } = opts;
+  const subject = `Your ${appLabel} free trial ends in ${daysLeft} day${daysLeft !== 1 ? "s" : ""}`;
+  const text = [
+    `Your ${appLabel} free trial expires in ${daysLeft} day${daysLeft !== 1 ? "s" : ""}.`,
+    ``,
+    `You've had a chance to explore the tool — if it's been useful, upgrade to Starter to keep access:`,
+    upgradeUrl,
+    ``,
+    `After your trial ends you'll need an active subscription to continue using ${appLabel}.`,
+    ``,
+    `Questions? Just reply to this email.`,
+  ].join("\n");
+  const html = `
+  <p>Your <strong>${escapeHtml(appLabel)}</strong> free trial expires in <strong>${daysLeft} day${daysLeft !== 1 ? "s" : ""}</strong>.</p>
+  <p>If the tool has been useful, upgrade to Starter to keep full access:</p>
+  <p><a href="${escapeAttr(upgradeUrl)}" style="display:inline-block;background:#0d9488;color:#fff;padding:10px 22px;border-radius:8px;font-weight:700;text-decoration:none;">Upgrade to Starter →</a></p>
+  <p style="color:#64748b;font-size:13px">After your trial ends you'll need an active subscription to continue. Questions? Just reply to this email.</p>
+  `.trim();
+  return { subject, html, text };
+}
+
+export function welcomeEmailContent(opts: {
+  appLabel: string;
+  dashboardUrl: string;
+  trialDays: number;
+}): { subject: string; html: string; text: string } {
+  const { appLabel, dashboardUrl, trialDays } = opts;
+  const subject = `Welcome to ${appLabel} — your ${trialDays}-day trial starts now`;
+  const text = [
+    `Welcome to ${appLabel}!`,
+    ``,
+    `Your ${trialDays}-day free trial is active. You have 25 product analyses and 25 catalog searches to explore the tool.`,
+    ``,
+    `Get started here:`,
+    dashboardUrl,
+    ``,
+    `First step: connect your Amazon seller account in Settings to unlock live SP-API data.`,
+  ].join("\n");
+  const html = `
+  <p>Welcome to <strong>${escapeHtml(appLabel)}</strong>!</p>
+  <p>Your <strong>${trialDays}-day free trial</strong> is active. You have 25 product analyses and 25 catalog searches to explore the tool.</p>
+  <p><a href="${escapeAttr(dashboardUrl)}" style="display:inline-block;background:#0d9488;color:#fff;padding:10px 22px;border-radius:8px;font-weight:700;text-decoration:none;">Go to Dashboard →</a></p>
+  <p style="color:#64748b;font-size:13px"><strong>First step:</strong> connect your Amazon seller account in Settings to unlock live SP-API data.</p>
+  `.trim();
+  return { subject, html, text };
+}
+
 function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }

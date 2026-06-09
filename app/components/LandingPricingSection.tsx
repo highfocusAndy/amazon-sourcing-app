@@ -66,8 +66,8 @@ export function LandingPricingSection({
   };
 
   const freeTrialPlan: Plan = {
-    name: "Free", price: "$0", period: "/ forever",
-    desc: "Get started with no commitment, no card.",
+    name: "Free Trial", price: "$0", period: "/ 14 days",
+    desc: "Try the full tool free. No card needed.",
     features: [
       "10 product analyses",
       "10 catalog searches",
