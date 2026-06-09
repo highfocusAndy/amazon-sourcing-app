@@ -30,6 +30,10 @@ const PAGE_SIZE = 20;
 // PA-API only returns max 10 per request; make two calls for different categories to hit 20.
 const PA_API_BATCH = 10;
 
+// Module-level inflight lock — concurrent cold-cache requests share one SP-API / PA-API call
+// instead of each making their own. Cleared once the fetch settles.
+let inflightFetch: Promise<ProductAnalysis[] | null> | null = null;
+
 async function fetchViaPaApi(): Promise<ProductAnalysis[] | null> {
   const [general, home] = await Promise.all([
     searchCatalogByKeywordPaApi("best sellers", PA_API_BATCH, "All", "Featured"),
@@ -74,25 +78,40 @@ export async function GET(): Promise<NextResponse> {
     return NextResponse.json({ ok: true, results: cached });
   }
 
-  let results: ProductAnalysis[] | null = null;
+  if (!inflightFetch) {
+    inflightFetch = (async () => {
+      try {
+        let results: ProductAnalysis[] | null = null;
 
-  if (hasPaApi) {
-    results = await fetchViaPaApi();
+        if (hasPaApi) {
+          results = await fetchViaPaApi();
+        }
+
+        if (!results && hasAmazon) {
+          const client = await getSpApiClientForUser(gate.userId);
+          if (client) {
+            const items = await client.searchCatalogByKeywordMultiple("best sellers", PAGE_SIZE);
+            const mapped = items.map((c) => buildCatalogOnlyResult(c, "best sellers"));
+            if (mapped.length > 0) results = mapped;
+          }
+        }
+
+        if (results && results.length > 0) {
+          void setKeywordSearchCache(cacheMarketplace, BEST_SELLERS_QUERY, PAGE_SIZE, results);
+        }
+
+        return results;
+      } finally {
+        inflightFetch = null;
+      }
+    })();
   }
 
-  if (!results && hasAmazon) {
-    const client = await getSpApiClientForUser(gate.userId);
-    if (client) {
-      const items = await client.searchCatalogByKeywordMultiple("best sellers", PAGE_SIZE);
-      const mapped = items.map((c) => buildCatalogOnlyResult(c, "best sellers"));
-      if (mapped.length > 0) results = mapped;
-    }
-  }
+  const results = await inflightFetch;
 
   if (!results || results.length === 0) {
     return NextResponse.json({ ok: true, results: [] });
   }
 
-  void setKeywordSearchCache(cacheMarketplace, BEST_SELLERS_QUERY, PAGE_SIZE, results);
   return NextResponse.json({ ok: true, results });
 }
