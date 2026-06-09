@@ -44,7 +44,11 @@ export function LandingPricingSection({
       navigate("/register?mode=buyer");
       return;
     }
-    if (action === "trial" || action === "starter") {
+    if (action === "trial") {
+      navigate("/register");
+      return;
+    }
+    if (action === "starter") {
       if (stripeConfigured && !subscriptionsPaused) navigate("/billing?plan=starter");
       else { setNavigating(false); setPromoOpen(true); }
     } else {
@@ -62,8 +66,8 @@ export function LandingPricingSection({
   };
 
   const freeTrialPlan: Plan = {
-    name: "Free Trial", price: "$0", period: `${trialLabel}, then billed`,
-    desc: "Try the full tool, cancel before day 14 to pay nothing.",
+    name: "Free", price: "$0", period: "/ forever",
+    desc: "Get started with no commitment, no card.",
     features: [
       "10 product analyses",
       "10 catalog searches",
@@ -71,8 +75,9 @@ export function LandingPricingSection({
       "BUY / PASS / WORTH UNGATING",
       "Single-product manual search",
     ],
-    cta: subscriptionsPaused ? "Use promo code" : "Start Free Trial",
+    cta: "Get Started Free →",
     action: "trial",
+    badge: "No card required",
     pro: false,
     buyerPlan: false,
   };
@@ -229,10 +234,10 @@ export function LandingPricingSection({
                       {cta}
                     </button>
                     <p className="lp-b mt-2 min-h-[1rem] text-center text-[11px] text-slate-600">
-                      {(action === "trial" || action === "starter" || action === "pro") && !subscriptionsPaused
-                        ? "Credit card required · Cancel before day 14 · No refunds after"
-                        : isBuyerCard
+                      {action === "trial" || isBuyerCard
                         ? "No credit card required"
+                        : (action === "starter" || action === "pro") && !subscriptionsPaused
+                        ? "Credit card required · Cancel before day 14 · No refunds after"
                         : ""}
                     </p>
                   </div>
