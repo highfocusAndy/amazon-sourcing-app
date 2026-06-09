@@ -32,7 +32,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     where: {
       trialEndsAt: { gte: windowStart, lte: windowEnd },
       subscriptionStatus: { not: "active" },
-      email: { not: null },
+      email: { not: "" },
     },
     select: { id: true, email: true, trialEndsAt: true },
   });
