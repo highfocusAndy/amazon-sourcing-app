@@ -35,12 +35,18 @@ const DEFAULT_FLAGS: { key: string; label: string; description: string }[] = [
     label: "Keepa Integration",
     description: "Enable Keepa API price history chart on product detail page. Enable once Keepa API key is configured. Default: OFF.",
   },
+  {
+    key: "ff:amazon_on_listing",
+    label: "Amazon on Listing",
+    description: "Show whether Amazon retail is on the listing (product detail + analyzer table). SP-API data only — enable when accuracy is confirmed. Default: OFF.",
+  },
 ];
 
 const FLAG_DEFAULTS: Record<string, boolean> = {
   "ff:pa_api_catalog": false,
   "ff:buyer_mode": false,
   "ff:keepa": false,
+  "ff:amazon_on_listing": false,
 };
 
 export async function GET(): Promise<NextResponse> {

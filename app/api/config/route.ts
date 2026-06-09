@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getServerEnv } from "@/lib/env";
+import { isAmazonOnListingEnabled } from "@/lib/featureFlags";
 
 const MARKETPLACE_DOMAINS: Record<string, string> = {
   ATVPDKIKX0DER: "amazon.com",
@@ -20,12 +21,14 @@ export async function GET(): Promise<NextResponse> {
     const { marketplaceId } = getServerEnv();
     const marketplaceDomain = MARKETPLACE_DOMAINS[marketplaceId] ?? "amazon.com";
     const openai = Boolean(process.env.OPENAI_API_KEY?.trim());
+    const amazonOnListingEnabled = await isAmazonOnListingEnabled();
     return NextResponse.json({
       marketplaceId,
       marketplaceDomain,
       /** True when OPENAI_API_KEY is set — photo search, AI product insight, and Amazon chat (no secret exposed). */
       photoSearchAvailable: openai,
       openaiConfigured: openai,
+      amazonOnListingEnabled,
     });
   } catch {
     return NextResponse.json(
@@ -34,6 +37,7 @@ export async function GET(): Promise<NextResponse> {
         marketplaceDomain: "amazon.com",
         photoSearchAvailable: Boolean(process.env.OPENAI_API_KEY?.trim()),
         openaiConfigured: Boolean(process.env.OPENAI_API_KEY?.trim()),
+        amazonOnListingEnabled: false,
       },
       { status: 200 },
     );

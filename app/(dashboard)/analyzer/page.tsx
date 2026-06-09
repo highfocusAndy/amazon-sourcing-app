@@ -385,6 +385,7 @@ function AnalyzerPageContent() {
   const [marketplaceDomain, setMarketplaceDomain] = useState("amazon.com");
   /** From GET /api/config — OPENAI_API_KEY set on server (never exposes the key). */
   const [photoSearchAvailable, setPhotoSearchAvailable] = useState<boolean | null>(null);
+  const [amazonOnListingEnabled, setAmazonOnListingEnabled] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<ProductAnalysis | null>(null);
   const [mobileDetailsOpen, setMobileDetailsOpen] = useState(false);
   /** Popover on lg+; full-height sheet from the right on smaller screens (mirrors left nav direction). */
@@ -1049,10 +1050,13 @@ function AnalyzerPageContent() {
   useEffect(() => {
     fetch("/api/config")
       .then((res) => res.json())
-      .then((data: { marketplaceDomain?: string; photoSearchAvailable?: boolean }) => {
+      .then((data: { marketplaceDomain?: string; photoSearchAvailable?: boolean; amazonOnListingEnabled?: boolean }) => {
         if (data.marketplaceDomain) setMarketplaceDomain(data.marketplaceDomain);
         if (typeof data.photoSearchAvailable === "boolean") {
           setPhotoSearchAvailable(data.photoSearchAvailable);
+        }
+        if (typeof data.amazonOnListingEnabled === "boolean") {
+          setAmazonOnListingEnabled(data.amazonOnListingEnabled);
         }
       })
       .catch(() => {});
@@ -1738,6 +1742,7 @@ function AnalyzerPageContent() {
         openSellerModal={openSellerModal}
         variationDetail="analyzer"
         amazonConnected={amazonHeaderConnected}
+        amazonOnListingEnabled={amazonOnListingEnabled}
       >
         <ProductInsightBlurb
           product={selectedProduct}
@@ -2160,6 +2165,11 @@ function AnalyzerPageContent() {
                     </button>
                   </th>
                 ))}
+                {amazonOnListingEnabled && (
+                  <th className="bg-slate-700/95 px-3 py-3 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-300 whitespace-nowrap">
+                    Amazon?
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -2214,6 +2224,18 @@ function AnalyzerPageContent() {
                       ) : <span className="text-[13px] text-slate-400">—</span>}
                     </td>
                     <td className="px-3 py-1.5 text-[13px] text-slate-300">{item.brand || "—"}</td>
+                    {amazonOnListingEnabled && (
+                      <td className="px-3 py-1.5 text-[13px] whitespace-nowrap">
+                        {(() => {
+                          const ids = item.sellerIds ?? [];
+                          const details = item.sellerDetails ?? [];
+                          if (ids.includes("ATVPDKIKX0DER") || details.some((d) => d.sellerId === "ATVPDKIKX0DER")) {
+                            return <span className="font-semibold text-rose-400">⚠️ YES</span>;
+                          }
+                          return <span className="cursor-help text-slate-500" title="SP-API does not expose Amazon's own retail offer.">?</span>;
+                        })()}
+                      </td>
+                    )}
                   </tr>
                 ))
               )}

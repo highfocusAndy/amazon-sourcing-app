@@ -153,6 +153,8 @@ export type ProductIntelPanelContentProps = {
   variationDetail?: "explorer" | "analyzer";
   /** Whether the user has a connected Amazon seller account. When false, gating data is hidden. */
   amazonConnected?: boolean;
+  /** When true, shows the "Amazon on listing" KPI (ff:amazon_on_listing flag). */
+  amazonOnListingEnabled?: boolean;
   /** Optional content after structured sections (e.g. legacy ProductInsightBlurb) */
   children?: ReactNode;
 };
@@ -171,6 +173,7 @@ export function ProductIntelPanelContent({
   openSellerModal,
   variationDetail = "explorer",
   amazonConnected = true,
+  amazonOnListingEnabled = false,
   children,
 }: ProductIntelPanelContentProps) {
   const competitionThresholds = useCompetitionThresholds();
@@ -190,6 +193,19 @@ export function ProductIntelPanelContent({
     return null;
   }, [selectedProduct.estimatedMonthlySales, selectedProduct.salesRank, selectedProduct.salesRankCategory]);
 
+
+  const amazonOnListing = useMemo((): { entity: string } | "unknown" => {
+    if (!amazonOnListingEnabled) return "unknown";
+    const ids = selectedProduct.sellerIds ?? [];
+    const details = selectedProduct.sellerDetails ?? [];
+    const match = (id: string) => ids.includes(id) || details.some((d) => d.sellerId === id);
+    if (match("ATVPDKIKX0DER")) return { entity: "Amazon.com" };
+    if (match("A2R2RITDJNWIQ5")) return { entity: "Amazon Warehouse" };
+    if (match("A3ODHND3J0WMC8")) return { entity: "Amazon Renewed" };
+    if (match("A1AT7TNMFUTZL3")) return { entity: "Amazon Fresh" };
+    if (match("AUSPT0H4XKVI7")) return { entity: "Amazon Pantry" };
+    return "unknown";
+  }, [amazonOnListingEnabled, selectedProduct.sellerIds, selectedProduct.sellerDetails]);
 
   const amazonListingUrl =
     selectedProduct.asin ? amazonOfferListingUrl(marketplaceDomain, selectedProduct.asin) : null;
@@ -562,6 +578,18 @@ export function ProductIntelPanelContent({
       </div>
 
       <IntelSection eyebrow="Competition">
+        {amazonOnListingEnabled && (
+          <div className={HF_INNER_CARD_STATIC}>
+            <p className={HF_KPI_LABEL}>Amazon on listing</p>
+            {typeof amazonOnListing === "object" ? (
+              <p className="mt-0.5 text-sm font-bold text-rose-400">⚠️ YES — {amazonOnListing.entity}</p>
+            ) : (
+              <p className="mt-0.5 text-[11px] text-slate-500" title="SP-API does not expose Amazon's own retail offer. Check the listing manually to confirm.">
+                ? Cannot confirm via API
+              </p>
+            )}
+          </div>
+        )}
         {selectedProduct.amazonSalesVolumeLabel ? (
           <div className="rounded-lg border border-slate-600 bg-emerald-900/30 px-3 py-2">
             <p className="text-xs text-slate-500">Product sells (from Amazon)</p>

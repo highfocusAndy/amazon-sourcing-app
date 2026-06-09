@@ -30,3 +30,8 @@ export async function isBuyerModeEnabled(): Promise<boolean> {
 export async function isKeepaEnabled(): Promise<boolean> {
   return getSystemConfigFlag("ff:keepa", false);
 }
+
+/** When true, "Amazon on listing" indicator is shown on product detail and analyzer table. Default: false. */
+export async function isAmazonOnListingEnabled(): Promise<boolean> {
+  return getSystemConfigFlag("ff:amazon_on_listing", false);
+}
