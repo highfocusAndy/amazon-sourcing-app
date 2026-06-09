@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 
 type PromoRow = {
   id: string;
@@ -17,9 +17,22 @@ type PromoRow = {
   redemptions: { redeemedAt: string; user: { email: string } }[];
 };
 
+type EditForm = {
+  label: string;
+  grantsDays: string;
+  maxRedemptions: string;
+  expiresAt: string;
+  allowRepeatRedemption: boolean;
+};
+
 function fmt(d: string | null) {
   if (!d) return "—";
   return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function toDateInputValue(d: string | null) {
+  if (!d) return "";
+  return new Date(d).toISOString().slice(0, 10);
 }
 
 const EMPTY_FORM = {
@@ -38,6 +51,15 @@ export default function AdminPromosPage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [working, setWorking] = useState(false);
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<EditForm>({
+    label: "",
+    grantsDays: "",
+    maxRedemptions: "",
+    expiresAt: "",
+    allowRepeatRedemption: false,
+  });
+  const [editWorking, setEditWorking] = useState(false);
 
   useEffect(() => {
     void fetch("/api/admin/promos")
@@ -48,6 +70,69 @@ export default function AdminPromosPage() {
   function showToast(msg: string, ok: boolean) {
     setToast({ msg, ok });
     setTimeout(() => setToast(null), 3500);
+  }
+
+  function startEdit(promo: PromoRow) {
+    setEditingId(promo.id);
+    setEditForm({
+      label: promo.label ?? "",
+      grantsDays: String(promo.grantsDays),
+      maxRedemptions: promo.maxRedemptions !== null ? String(promo.maxRedemptions) : "",
+      expiresAt: toDateInputValue(promo.expiresAt),
+      allowRepeatRedemption: promo.allowRepeatRedemption,
+    });
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+  }
+
+  async function saveEdit(promo: PromoRow) {
+    const grantsDays = Number(editForm.grantsDays);
+    if (!Number.isFinite(grantsDays) || grantsDays < 1) {
+      showToast("Grant days must be a positive number", false);
+      return;
+    }
+    setEditWorking(true);
+    try {
+      const r = await fetch("/api/admin/promos", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: promo.id,
+          label: editForm.label || null,
+          grantsDays,
+          maxRedemptions: editForm.maxRedemptions ? Number(editForm.maxRedemptions) : null,
+          expiresAt: editForm.expiresAt || null,
+          allowRepeatRedemption: editForm.allowRepeatRedemption,
+        }),
+      });
+      const d = (await r.json()) as { ok?: boolean; error?: string };
+      if (d.ok) {
+        setPromos((prev) =>
+          prev.map((p) =>
+            p.id === promo.id
+              ? {
+                  ...p,
+                  label: editForm.label || null,
+                  grantsDays,
+                  maxRedemptions: editForm.maxRedemptions ? Number(editForm.maxRedemptions) : null,
+                  expiresAt: editForm.expiresAt ? new Date(editForm.expiresAt).toISOString() : null,
+                  allowRepeatRedemption: editForm.allowRepeatRedemption,
+                }
+              : p,
+          ),
+        );
+        setEditingId(null);
+        showToast("Promo updated!", true);
+      } else {
+        showToast(d.error ?? "Error", false);
+      }
+    } catch {
+      showToast("Network error", false);
+    } finally {
+      setEditWorking(false);
+    }
   }
 
   async function createPromo() {
@@ -231,51 +316,136 @@ export default function AdminPromosPage() {
             </thead>
             <tbody className="divide-y divide-slate-700/60">
               {promos.map((promo) => (
-                <tr key={promo.id} className="hover:bg-slate-800/40 transition-colors">
-                  <td className="px-4 py-3">
-                    <p className="font-mono font-semibold text-teal-300">{promo.code}</p>
-                    {promo.label && <p className="text-xs text-slate-500">{promo.label}</p>}
-                  </td>
-                  <td className="px-4 py-3 text-slate-300">{promo.grantsDays}d</td>
-                  <td className="px-4 py-3">
-                    <span className="text-slate-200">{promo._count.redemptions}</span>
-                    {promo.maxRedemptions !== null && (
-                      <span className="text-slate-500"> / {promo.maxRedemptions}</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-slate-400">{fmt(promo.expiresAt)}</td>
-                  <td className="px-4 py-3 text-xs text-slate-500">
-                    {promo.allowRepeatRedemption ? "Repeat OK" : "One-time"}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`font-semibold ${promo.active ? "text-teal-400" : "text-slate-500"}`}>
-                      {promo.active ? "Active" : "Inactive"}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-slate-400">{fmt(promo.createdAt)}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => void toggleActive(promo)}
-                        className={`rounded px-2.5 py-1 text-xs font-semibold transition-colors ${
-                          promo.active
-                            ? "border border-slate-600 text-slate-400 hover:bg-slate-700"
-                            : "bg-teal-700 text-white hover:bg-teal-600"
-                        }`}
-                      >
-                        {promo.active ? "Deactivate" : "Activate"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void deletePromo(promo)}
-                        className="rounded px-2.5 py-1 text-xs font-semibold text-rose-400 hover:bg-rose-900/40 transition-colors"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </td>
-                </tr>
+                <React.Fragment key={promo.id}>
+                  <tr className={`hover:bg-slate-800/40 transition-colors ${editingId === promo.id ? "bg-slate-800/60" : ""}`}>
+                    <td className="px-4 py-3">
+                      <p className="font-mono font-semibold text-teal-300">{promo.code}</p>
+                      {promo.label && <p className="text-xs text-slate-500">{promo.label}</p>}
+                    </td>
+                    <td className="px-4 py-3 text-slate-300">{promo.grantsDays}d</td>
+                    <td className="px-4 py-3">
+                      <span className="text-slate-200">{promo._count.redemptions}</span>
+                      {promo.maxRedemptions !== null && (
+                        <span className="text-slate-500"> / {promo.maxRedemptions}</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-slate-400">{fmt(promo.expiresAt)}</td>
+                    <td className="px-4 py-3 text-xs text-slate-500">
+                      {promo.allowRepeatRedemption ? "Repeat OK" : "One-time"}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`font-semibold ${promo.active ? "text-teal-400" : "text-slate-500"}`}>
+                        {promo.active ? "Active" : "Inactive"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-slate-400">{fmt(promo.createdAt)}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => (editingId === promo.id ? cancelEdit() : startEdit(promo))}
+                          className="rounded px-2.5 py-1 text-xs font-semibold border border-slate-600 text-slate-300 hover:bg-slate-700 transition-colors"
+                        >
+                          {editingId === promo.id ? "Cancel" : "Edit"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void toggleActive(promo)}
+                          className={`rounded px-2.5 py-1 text-xs font-semibold transition-colors ${
+                            promo.active
+                              ? "border border-slate-600 text-slate-400 hover:bg-slate-700"
+                              : "bg-teal-700 text-white hover:bg-teal-600"
+                          }`}
+                        >
+                          {promo.active ? "Deactivate" : "Activate"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void deletePromo(promo)}
+                          className="rounded px-2.5 py-1 text-xs font-semibold text-rose-400 hover:bg-rose-900/40 transition-colors"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                  {editingId === promo.id && (
+                    <tr>
+                      <td colSpan={8} className="bg-slate-800/80 px-4 py-4 border-t border-teal-700/30">
+                        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+                          <div>
+                            <label className="mb-1 block text-xs font-medium text-slate-400">Grant days *</label>
+                            <input
+                              type="number"
+                              value={editForm.grantsDays}
+                              onChange={(e) => setEditForm((f) => ({ ...f, grantsDays: e.target.value }))}
+                              min={1}
+                              className="w-full rounded-lg border border-teal-600 bg-slate-700 px-3 py-2 text-sm text-slate-100 outline-none focus:border-teal-400"
+                            />
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-xs font-medium text-slate-400">Label</label>
+                            <input
+                              type="text"
+                              value={editForm.label}
+                              onChange={(e) => setEditForm((f) => ({ ...f, label: e.target.value }))}
+                              placeholder="Partner access"
+                              className="w-full rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 outline-none focus:border-teal-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-xs font-medium text-slate-400">Max redemptions</label>
+                            <input
+                              type="number"
+                              value={editForm.maxRedemptions}
+                              onChange={(e) => setEditForm((f) => ({ ...f, maxRedemptions: e.target.value }))}
+                              placeholder="Unlimited"
+                              min={1}
+                              className="w-full rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 outline-none focus:border-teal-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-xs font-medium text-slate-400">Expires at</label>
+                            <input
+                              type="date"
+                              value={editForm.expiresAt}
+                              onChange={(e) => setEditForm((f) => ({ ...f, expiresAt: e.target.value }))}
+                              className="w-full rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-slate-100 outline-none focus:border-teal-500"
+                            />
+                          </div>
+                          <div className="flex items-end pb-1">
+                            <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-300">
+                              <input
+                                type="checkbox"
+                                checked={editForm.allowRepeatRedemption}
+                                onChange={(e) => setEditForm((f) => ({ ...f, allowRepeatRedemption: e.target.checked }))}
+                                className="h-4 w-4 rounded border-slate-500 accent-teal-500"
+                              />
+                              Allow repeat
+                            </label>
+                          </div>
+                        </div>
+                        <div className="mt-3 flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => void saveEdit(promo)}
+                            disabled={editWorking || !editForm.grantsDays}
+                            className="rounded-lg bg-teal-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-teal-500 disabled:opacity-50 transition-colors"
+                          >
+                            {editWorking ? "Saving…" : "Save changes"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={cancelEdit}
+                            className="rounded-lg border border-slate-600 px-4 py-1.5 text-sm text-slate-300 hover:bg-slate-700 transition-colors"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
               ))}
               {promos.length === 0 && (
                 <tr>
