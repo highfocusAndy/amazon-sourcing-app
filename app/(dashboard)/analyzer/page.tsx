@@ -904,18 +904,23 @@ function AnalyzerPageContent() {
       setLastRunMode(null);
       lastAutoManualCalcKeyRef.current = "";
       setErrorMessage(null);
-      setIsScannerOpen(false);
 
       if (isManualLoadingRef.current || isUploadLoadingRef.current) {
         setInfoMessage(`Scanned identifier: ${scannedValue}. Finish current run, then continue.`);
+        setIsScannerOpen(false);
         return;
       }
 
-      setInfoMessage(`Scanned identifier: ${scannedValue}. Loading product data...`);
+      disposeScannerMedia();
+      setScanPhase("analyzing");
       const run = runManualAnalysisRef.current;
-      if (run) {
-        void run(sellerTypeRef.current, false, scannedValue, true, true);
-      }
+      void (async () => {
+        if (run) {
+          await run(sellerTypeRef.current, false, scannedValue, true, true);
+        }
+        setScanPhase("idle");
+        setIsScannerOpen(false);
+      })();
     };
 
     const scanLoop = async (detector: BarcodeDetectorInstance): Promise<void> => {
@@ -1500,11 +1505,11 @@ function AnalyzerPageContent() {
       return;
     }
     const imageFile = new File([blob], "camera-product.jpg", { type: "image/jpeg" });
-    setIsScannerOpen(false);
     stopScanner();
     setScanPhase("analyzing");
     await runImageProductSearchFromFile(imageFile);
     setScanPhase("idle");
+    setIsScannerOpen(false);
   }
 
   captureScannerFrameAndSearchRef.current = captureScannerFrameAndSearch;
@@ -1821,27 +1826,6 @@ function AnalyzerPageContent() {
         playsInline
         aria-hidden
       />
-      {/* Scan phase overlay — shown while capturing or analyzing a product image */}
-      {(scanPhase === "capturing" || scanPhase === "analyzing") && (
-        <div className="pointer-events-none fixed inset-0 z-40 flex flex-col items-center justify-center gap-4 bg-slate-900/70 backdrop-blur-sm">
-          <div className="relative flex h-20 w-20 items-center justify-center">
-            <div className="absolute h-20 w-20 animate-ping rounded-full border-2 border-teal-400 opacity-30" />
-            <div className="absolute h-20 w-20 animate-spin rounded-full border-2 border-teal-400 border-t-transparent" />
-            <svg className="h-8 w-8 text-teal-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 013.75 9.375v-4.5zM3.75 14.625c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5a1.125 1.125 0 01-1.125-1.125v-4.5zM13.5 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0113.5 9.375v-4.5z" />
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 6.75h.75v.75h-.75v-.75zM6.75 16.5h.75v.75h-.75v-.75zM16.5 6.75h.75v.75h-.75v-.75z" />
-            </svg>
-          </div>
-          <div className="text-center">
-            <p className="text-base font-semibold text-teal-300">
-              {scanPhase === "capturing" ? "Capturing product…" : "Identifying product…"}
-            </p>
-            <p className="mt-1 text-sm text-slate-400">
-              {scanPhase === "capturing" ? "Taking photo" : "Searching Amazon catalog"}
-            </p>
-          </div>
-        </div>
-      )}
       {/* Regular loading spinner for non-scan loads */}
       {(isManualLoading && scanPhase === "idle" || isUploadLoading || panelAnalysisLoading) && (
         <div className="pointer-events-none fixed inset-0 z-40 flex items-center justify-center bg-slate-900/40">
@@ -2324,79 +2308,100 @@ function AnalyzerPageContent() {
           <div className="w-full max-w-2xl rounded-xl border border-slate-600 bg-slate-900 shadow-2xl shadow-black/50">
             <div className="flex items-center justify-between border-b border-slate-700 px-4 py-3">
               <div className="flex items-center gap-2.5">
-                <div className="h-2 w-2 animate-pulse rounded-full bg-teal-400" />
-                <h3 className="text-base font-semibold text-slate-100">Scanning product</h3>
+                <div className={`h-2 w-2 rounded-full ${scanPhase === "analyzing" || scanPhase === "capturing" ? "animate-spin border border-teal-400 border-t-transparent" : "animate-pulse bg-teal-400"}`} />
+                <h3 className="text-base font-semibold text-slate-100">
+                  {scanPhase === "analyzing" || scanPhase === "capturing" ? "Analyzing product…" : "Scanning product"}
+                </h3>
               </div>
               <button
                 type="button"
                 onClick={() => setIsScannerOpen(false)}
                 className="rounded-md border border-slate-600 px-2 py-1 text-xs font-semibold text-slate-300 hover:bg-slate-700"
               >
-                Close
+                {scanPhase === "analyzing" || scanPhase === "capturing" ? "Cancel" : "Close"}
               </button>
             </div>
             <div className="space-y-3 p-4">
-              {/* Camera feed with animated scan line */}
-              <div className="relative overflow-hidden rounded-lg bg-black">
-                <video ref={videoRef} className="aspect-video w-full rounded-lg bg-black" muted playsInline />
-                {/* Sweeping green scan line */}
-                <div
-                  className="pointer-events-none absolute inset-x-3 h-px bg-teal-400"
-                  style={{ boxShadow: "0 0 8px 2px rgba(45,212,191,0.7)", animation: "scanLine 2s ease-in-out infinite" }}
-                />
-                {/* Corner bracket markers */}
-                <div className="pointer-events-none absolute inset-0">
-                  <div className="absolute left-4 top-4 h-6 w-6 rounded-tl border-l-2 border-t-2 border-teal-400" />
-                  <div className="absolute right-4 top-4 h-6 w-6 rounded-tr border-r-2 border-t-2 border-teal-400" />
-                  <div className="absolute bottom-4 left-4 h-6 w-6 rounded-bl border-b-2 border-l-2 border-teal-400" />
-                  <div className="absolute bottom-4 right-4 h-6 w-6 rounded-br border-b-2 border-r-2 border-teal-400" />
+              {scanPhase === "analyzing" || scanPhase === "capturing" ? (
+                <div className="flex flex-col items-center justify-center gap-4 py-10">
+                  <div className="relative flex h-16 w-16 items-center justify-center">
+                    <div className="absolute h-16 w-16 animate-ping rounded-full border-2 border-teal-400 opacity-30" />
+                    <div className="absolute h-16 w-16 animate-spin rounded-full border-2 border-teal-400 border-t-transparent" />
+                    <svg className="h-7 w-7 text-teal-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 013.75 9.375v-4.5zM3.75 14.625c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5a1.125 1.125 0 01-1.125-1.125v-4.5zM13.5 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0113.5 9.375v-4.5z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 6.75h.75v.75h-.75v-.75zM6.75 16.5h.75v.75h-.75v-.75zM16.5 6.75h.75v.75h-.75v-.75z" />
+                    </svg>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-base font-semibold text-teal-300">Identifying product…</p>
+                    <p className="mt-1 text-sm text-slate-400">Searching Amazon catalog</p>
+                  </div>
                 </div>
-                {/* Live status badge */}
-                <div className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2">
-                  <span className="flex items-center gap-1.5 rounded-full bg-slate-900/75 px-3 py-1 text-xs font-medium text-teal-300 backdrop-blur-sm">
-                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-teal-400" />
-                    {photoSearchAvailable === true ? "Looking for barcode · photo scan ready" : "Looking for barcode…"}
-                  </span>
-                </div>
-              </div>
-              {scannerError ? (
-                <p className="text-sm text-rose-400">{scannerError}</p>
               ) : (
-                <p className="text-sm text-slate-400">
-                  Point at a barcode or QR for an instant match.
-                  {photoSearchAvailable === false
-                    ? " Photo fallback is off (server missing OPENAI_API_KEY) — use barcode only."
-                    : photoSearchAvailable === true
-                      ? " If no barcode is detected, the app automatically captures the frame and identifies the product."
-                      : " To enable photo fallback, set OPENAI_API_KEY on the server."}
-                </p>
+                <>
+                  {/* Camera feed with animated scan line */}
+                  <div className="relative overflow-hidden rounded-lg bg-black">
+                    <video ref={videoRef} className="aspect-video w-full rounded-lg bg-black" muted playsInline />
+                    {/* Sweeping green scan line */}
+                    <div
+                      className="pointer-events-none absolute inset-x-3 h-px bg-teal-400"
+                      style={{ boxShadow: "0 0 8px 2px rgba(45,212,191,0.7)", animation: "scanLine 2s ease-in-out infinite" }}
+                    />
+                    {/* Corner bracket markers */}
+                    <div className="pointer-events-none absolute inset-0">
+                      <div className="absolute left-4 top-4 h-6 w-6 rounded-tl border-l-2 border-t-2 border-teal-400" />
+                      <div className="absolute right-4 top-4 h-6 w-6 rounded-tr border-r-2 border-t-2 border-teal-400" />
+                      <div className="absolute bottom-4 left-4 h-6 w-6 rounded-bl border-b-2 border-l-2 border-teal-400" />
+                      <div className="absolute bottom-4 right-4 h-6 w-6 rounded-br border-b-2 border-r-2 border-teal-400" />
+                    </div>
+                    {/* Live status badge */}
+                    <div className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2">
+                      <span className="flex items-center gap-1.5 rounded-full bg-slate-900/75 px-3 py-1 text-xs font-medium text-teal-300 backdrop-blur-sm">
+                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-teal-400" />
+                        {photoSearchAvailable === true ? "Looking for barcode · photo scan ready" : "Looking for barcode…"}
+                      </span>
+                    </div>
+                  </div>
+                  {scannerError ? (
+                    <p className="text-sm text-rose-400">{scannerError}</p>
+                  ) : (
+                    <p className="text-sm text-slate-400">
+                      Point at a barcode or QR for an instant match.
+                      {photoSearchAvailable === false
+                        ? " Photo fallback is off (server missing OPENAI_API_KEY) — use barcode only."
+                        : photoSearchAvailable === true
+                          ? " If no barcode is detected, the app automatically captures the frame and identifies the product."
+                          : " To enable photo fallback, set OPENAI_API_KEY on the server."}
+                    </p>
+                  )}
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsScannerOpen(false)}
+                      className="rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-700"
+                    >
+                      Stop Scanner
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsScannerOpen(false);
+                        setScannerError(null);
+                        disposeScannerMedia();
+                        void (async () => {
+                          const ok = await acquireScannerStream();
+                          if (ok) {
+                            setIsScannerOpen(true);
+                          }
+                        })();
+                      }}
+                      className="rounded-lg bg-gradient-to-r from-teal-500 to-cyan-600 px-3 py-2 text-xs font-semibold text-white shadow-md shadow-teal-500/20 hover:from-teal-400 hover:to-cyan-500"
+                    >
+                      Restart Scanner
+                    </button>
+                  </div>
+                </>
               )}
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsScannerOpen(false)}
-                  className="rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-700"
-                >
-                  Stop Scanner
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsScannerOpen(false);
-                    setScannerError(null);
-                    disposeScannerMedia();
-                    void (async () => {
-                      const ok = await acquireScannerStream();
-                      if (ok) {
-                        setIsScannerOpen(true);
-                      }
-                    })();
-                  }}
-                  className="rounded-lg bg-gradient-to-r from-teal-500 to-cyan-600 px-3 py-2 text-xs font-semibold text-white shadow-md shadow-teal-500/20 hover:from-teal-400 hover:to-cyan-500"
-                >
-                  Restart Scanner
-                </button>
-              </div>
             </div>
           </div>
         </div>
