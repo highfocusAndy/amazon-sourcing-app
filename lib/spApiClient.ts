@@ -1296,7 +1296,8 @@ export class SpApiClient {
     return item;
   }
 
-  private async searchCatalogByIdentifier(identifierType: "UPC" | "EAN" | "GTIN", identifier: string): Promise<CatalogItem | null> {
+  /** Returns ALL catalog items Amazon maps to this identifier (UPC/EAN/GTIN), deduped by ASIN. */
+  private async searchAllCatalogByIdentifier(identifierType: "UPC" | "EAN" | "GTIN", identifier: string): Promise<CatalogItem[]> {
     const response = await this.request<unknown>("GET", "/catalog/2022-04-01/items", {
       query: {
         marketplaceIds: this.config.marketplaceId,
@@ -1308,11 +1309,70 @@ export class SpApiClient {
 
     const root = asObject(response);
     const items = asArray(root?.items);
-    if (items.length === 0) {
-      return null;
+    return items.map((i) => this.extractCatalogItem(i)).filter((x): x is CatalogItem => Boolean(x));
+  }
+
+  private async searchCatalogByIdentifier(identifierType: "UPC" | "EAN" | "GTIN", identifier: string): Promise<CatalogItem | null> {
+    const all = await this.searchAllCatalogByIdentifier(identifierType, identifier);
+    if (all.length === 0) return null;
+    if (all.length === 1) return all[0]!;
+
+    // Amazon can return multiple matches for a UPC — sometimes the parent/family ASIN comes
+    // first. Always prefer a true child (has parentAsins) over a parent (has childAsins only).
+    const child = all.find((it) => (it.parentAsins?.length ?? 0) > 0);
+    if (child) return child;
+
+    const standalone = all.find((it) => (it.childAsins?.length ?? 0) === 0);
+    return standalone ?? all[0]!;
+  }
+
+  /**
+   * Returns ALL catalog items matching a barcode (UPC/EAN), deduped by ASIN.
+   * Mirrors what Amazon Seller app shows when you scan a product.
+   */
+  async resolveAllCatalogItems(identifier: string): Promise<CatalogItem[]> {
+    const normalized = normalizeIdentifier(identifier);
+    if (!normalized) return [];
+
+    const asinCandidate = extractAsinCandidate(normalized);
+    if (asinCandidate) {
+      const result = await this.fetchCatalogItem(asinCandidate).catch(() => null);
+      return result ? [result] : [];
     }
 
-    return this.extractCatalogItem(items[0]);
+    const digits = normalized.replace(/\D/g, "");
+    if (!UPC_EAN_REGEX.test(digits)) return [];
+
+    const seen = new Set<string>();
+    const results: CatalogItem[] = [];
+
+    const addItems = (items: CatalogItem[]) => {
+      for (const item of items) {
+        if (!seen.has(item.asin)) {
+          seen.add(item.asin);
+          results.push(item);
+        }
+      }
+    };
+
+    for (const candidate of buildNumericIdentifierCandidates(digits)) {
+      const primaryType: "UPC" | "EAN" | "GTIN" =
+        candidate.length === 13 ? "EAN" : candidate.length === 12 ? "UPC" : "GTIN";
+
+      addItems(await this.searchAllCatalogByIdentifier(primaryType, candidate).catch(() => []));
+
+      if (results.length === 0) {
+        const fallbackType: "UPC" | "EAN" | null =
+          primaryType === "UPC" ? "EAN" : primaryType === "EAN" ? "UPC" : null;
+        if (fallbackType) {
+          addItems(await this.searchAllCatalogByIdentifier(fallbackType, candidate).catch(() => []));
+        }
+      }
+
+      if (results.length > 0) break;
+    }
+
+    return results;
   }
 
   async searchCatalogByKeyword(keyword: string): Promise<CatalogItem | null> {

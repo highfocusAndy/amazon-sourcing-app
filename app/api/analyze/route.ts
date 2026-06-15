@@ -9,8 +9,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { userAnalyzeLimit } from "@/lib/apiRateLimit";
 import { requireAppAccess } from "@/lib/billing/requireAppAccess";
 import { getSpApiClientForUser, getSpApiClientForUserOrGlobal, hasConnectedAmazonAccount } from "@/lib/amazonAccount";
-import { analyzeProduct, analyzeProductPublicOnly } from "@/lib/analysis";
-import { isPaApiCatalogEnabled } from "@/lib/featureFlags";
+import { analyzeProduct } from "@/lib/analysis";
 import type { ProductAnalysis } from "@/lib/types";
 import { consumeMonthlyUsage } from "@/lib/usageQuota";
 
@@ -101,7 +100,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
     const hasAmazon = await hasConnectedAmazonAccount(gate.userId);
-    const usePaApi = await isPaApiCatalogEnabled();
     const input = {
       identifier: body.identifier,
       wholesalePrice: Number(body.wholesalePrice ?? 0),
@@ -113,9 +111,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     const result = hasAmazon
       ? await analyzeProduct(input, await getSpApiClientForUser(gate.userId))
-      : usePaApi
-        ? await analyzeProductPublicOnly(input)
-        : await analyzeProduct(input, await getSpApiClientForUserOrGlobal(gate.userId), { skipRestrictions: true });
+      : await analyzeProduct(input, await getSpApiClientForUserOrGlobal(gate.userId), { skipRestrictions: true });
 
     return NextResponse.json({
       ok: !result.error,

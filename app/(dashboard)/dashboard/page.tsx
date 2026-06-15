@@ -84,6 +84,7 @@ export default function ExplorerPage() {
   const [ungatedOnly, setUngatedOnly] = useState(false);
   const [eligibilityByAsin, setEligibilityByAsin] = useState<Record<string, boolean | null>>({});
   const [analyzeRequiresAuth, setAnalyzeRequiresAuth] = useState(false);
+  const [catalogRequiresAmazonConnect, setCatalogRequiresAmazonConnect] = useState(false);
   const [pendingProductAsin, setPendingProductAsin] = useState<string | null>(null);
   /** Popover on lg+; full-height sheet from the right on smaller screens (mirrors left nav direction). */
   const [sellerModal, setSellerModal] = useState<SellerModalState>(null);
@@ -141,6 +142,7 @@ export default function ExplorerPage() {
     catalogAbortRef.current = controller;
     setCatalogLoading(true);
     setError(null);
+    setCatalogRequiresAmazonConnect(false);
     setCatalogNextPageToken(null);
     setEligibilityByAsin({});
     setSelectedProduct(null);
@@ -154,8 +156,12 @@ export default function ExplorerPage() {
         items?: CatalogItem[];
         nextPageToken?: string | null;
         error?: string;
+        code?: string;
       };
-      if (!res.ok) throw new Error(json.error ?? "Search failed.");
+      if (!res.ok) {
+        if (json.code === "AMAZON_CONNECT_REQUIRED") { setCatalogRequiresAmazonConnect(true); return; }
+        throw new Error(json.error ?? "Search failed.");
+      }
       setCatalogResults(json.items ?? []);
       setCatalogNextPageToken(json.nextPageToken ?? null);
     } catch (e) {
@@ -177,6 +183,7 @@ export default function ExplorerPage() {
     setCatalogLoading(true);
     setError(null);
     setAnalyzeRequiresAuth(false);
+    setCatalogRequiresAmazonConnect(false);
     setCatalogNextPageToken(null);
     setEligibilityByAsin({});
     setSelectedProduct(null);
@@ -196,8 +203,12 @@ export default function ExplorerPage() {
         items?: CatalogItem[];
         nextPageToken?: string | null;
         error?: string;
+        code?: string;
       };
-      if (!res.ok) throw new Error(json.error ?? "Search failed.");
+      if (!res.ok) {
+        if (json.code === "AMAZON_CONNECT_REQUIRED") { setCatalogRequiresAmazonConnect(true); return; }
+        throw new Error(json.error ?? "Search failed.");
+      }
       setCatalogResults(json.items ?? []);
       setCatalogNextPageToken(json.nextPageToken ?? null);
       setInfoMessage(
@@ -227,6 +238,7 @@ export default function ExplorerPage() {
     if (!token) return;
     setLoadMoreLoading(true);
     setError(null);
+    setCatalogRequiresAmazonConnect(false);
     try {
       const res = await fetch(
         `/api/catalog/search?${buildCatalogSearchQuery({
@@ -242,8 +254,12 @@ export default function ExplorerPage() {
         items?: CatalogItem[];
         nextPageToken?: string | null;
         error?: string;
+        code?: string;
       };
-      if (!res.ok) throw new Error(json.error ?? "Search failed.");
+      if (!res.ok) {
+        if (json.code === "AMAZON_CONNECT_REQUIRED") { setCatalogRequiresAmazonConnect(true); return; }
+        throw new Error(json.error ?? "Search failed.");
+      }
       const newItems = json.items ?? [];
       setCatalogResults((prev) => {
         const existingAsins = new Set(prev.map((p) => p.asin));
@@ -680,8 +696,14 @@ const handleProductClick = useCallback(
       {showAmazonAccountModal && (
         <AmazonAccountModal
           onClose={() => {
+            const wasGated = catalogRequiresAmazonConnect;
             setShowAmazonAccountModal(false);
             refreshAmazonHeaderStatus();
+            if (wasGated) {
+              setCatalogRequiresAmazonConnect(false);
+              setError(null);
+              void loadInitialBestSellers();
+            }
           }}
           isPaidPlan={subscriptionPaid}
         />
@@ -813,7 +835,11 @@ const handleProductClick = useCallback(
           </div>
         </section>
 
-        {error ? (
+        {catalogRequiresAmazonConnect ? (
+          <div className="shrink-0 rounded-lg border border-slate-600 bg-slate-800/60 px-3 py-2 text-sm text-slate-300">
+            Connect your Amazon seller account to browse the catalog — use the <span className="font-medium text-teal-400">Connect Amazon</span> button above.
+          </div>
+        ) : error ? (
           <div className="shrink-0 rounded-lg border border-rose-800 bg-rose-900/30 px-3 py-2 text-sm text-rose-300">
             {error}
             {analyzeRequiresAuth && (

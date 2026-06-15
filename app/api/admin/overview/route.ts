@@ -9,7 +9,6 @@ import { requireAdminAccess } from "@/app/api/admin/guard";
 import { prisma } from "@/lib/db";
 import { tryReadSpApiConfig } from "@/lib/spApiClient";
 import { getPaApiConfigurationIssue, isPaApiConfigured } from "@/lib/paApiClient";
-import { isPaApiCatalogEnabled } from "@/lib/featureFlags";
 
 export const runtime = "nodejs";
 
@@ -34,7 +33,6 @@ export async function GET(): Promise<NextResponse> {
     spConfigured,
     paApiConfigured,
     paApiConfigurationIssue,
-    paApiCatalogEnabled,
     estimatedStarterUsd,
     estimatedProUsd,
   ] = await Promise.all([
@@ -74,7 +72,6 @@ export async function GET(): Promise<NextResponse> {
     Promise.resolve(tryReadSpApiConfig()),
     Promise.resolve(isPaApiConfigured()),
     Promise.resolve(getPaApiConfigurationIssue()),
-    isPaApiCatalogEnabled(),
     Promise.resolve(Number(process.env.ADMIN_ESTIMATE_STARTER_USD ?? "29") || 29),
     Promise.resolve(Number(process.env.ADMIN_ESTIMATE_PRO_USD ?? "79") || 79),
   ]);
@@ -137,7 +134,6 @@ export async function GET(): Promise<NextResponse> {
       keepaConfigured: keepaEnv,
       paApiConfigured,
       paApiConfigurationIssue,
-      paApiCatalogEnabled,
       uptimeSeconds: Math.floor(process.uptime()),
     },
     generatedAt: now.toISOString(),

@@ -12,7 +12,6 @@ import type { CatalogItem } from "@/lib/spApiClient";
 import { buildCatalogOnlyResult } from "@/lib/analysis";
 import {
   buildStableAmazonIdentityQuery,
-  buildVisionParseFromCatalogSeed,
   catalogBrandsCompatibleForFamily,
   catalogItemSameProductFamilyLine,
   catalogTitleMatchesAuxProductType,
@@ -406,8 +405,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // Client / hardware barcode first (before vision — no LLM cost).
     // -----------------------------------------------------------------
     if (formBarcodeOk) {
-      const seedFromForm = await client.resolveCatalogItem(formBarcodeDigits).catch(() => null);
-      if (seedFromForm) {
+      const allFromForm = await client.resolveAllCatalogItems(formBarcodeDigits).catch(() => []);
+      if (allFromForm.length > 0) {
         const usageEarly = await consumeMonthlyUsage(gate.userId, "keyword_search");
         if (!usageEarly.ok) {
           return NextResponse.json(
@@ -426,19 +425,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             { status: 429 },
           );
         }
-        const parseFromBarcode = buildVisionParseFromCatalogSeed(seedFromForm);
         console.log(
-          `[image-search] form barcode ${formBarcodeDigits} resolved → ${seedFromForm.asin} :: ${seedFromForm.title.slice(0, 90)}`,
+          `[image-search] form barcode ${formBarcodeDigits} → ${allFromForm.length} catalog match(es): ${allFromForm.map((i) => i.asin).join(", ")}`,
         );
-        const grouped = await collectFamilyResults({
-          client,
-          parse: parseFromBarcode,
-          seed: seedFromForm,
-          seedReason: "exact barcode match",
-        });
+        const results = allFromForm.map((item) =>
+          buildCatalogOnlyResult(item, formBarcodeDigits, { group: "exact", reason: "Exact barcode match" }),
+        );
         return NextResponse.json({
           ok: true,
-          results: grouped.results.slice(0, Math.max(pageSize, grouped.results.length)),
+          results,
           derivedQuery: formBarcodeDigits,
           matchPath: "barcode",
           visionParse: null,
@@ -582,21 +577,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // Vision-read barcode (only when explicitly detected — no false positives)
     // ---------------------------------------------------------------
     if (parse.barcode_detected && parse.barcode_value) {
-      const seed = await client.resolveCatalogItem(parse.barcode_value).catch(() => null);
-      if (seed) {
+      const allFromVision = await client.resolveAllCatalogItems(parse.barcode_value).catch(() => []);
+      if (allFromVision.length > 0) {
         console.log(
-          `[image-search] vision barcode ${parse.barcode_value} resolved → ${seed.asin} :: ${seed.title.slice(0, 90)}`,
+          `[image-search] vision barcode ${parse.barcode_value} → ${allFromVision.length} catalog match(es): ${allFromVision.map((i) => i.asin).join(", ")}`,
         );
-        const parseFromBarcode = buildVisionParseFromCatalogSeed(seed);
-        const grouped = await collectFamilyResults({
-          client,
-          parse: parseFromBarcode,
-          seed,
-          seedReason: "exact barcode match",
-        });
+        const results = allFromVision.map((item) =>
+          buildCatalogOnlyResult(item, parse.barcode_value, { group: "exact", reason: "Exact barcode match" }),
+        );
         return NextResponse.json({
           ok: true,
-          results: grouped.results.slice(0, Math.max(pageSize, grouped.results.length)),
+          results,
           derivedQuery: parse.barcode_value,
           matchPath: "barcode",
           visionParse: parse,

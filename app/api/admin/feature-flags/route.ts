@@ -18,12 +18,6 @@ const DEFAULT_FLAGS: { key: string; label: string; description: string }[] = [
   { key: "ff:ai_product_insight", label: "AI Product Insight", description: "Show AI analysis panel on product detail" },
   { key: "ff:ai_chat", label: "AI Amazon Chat", description: "Show the Ask AI chat widget" },
   { key: "ff:bulk_upload", label: "Bulk Upload", description: "Allow .xlsx/.csv list uploads" },
-  { key: "ff:pa_api_bsr", label: "PA-API Main BSR", description: "Fetch main-category BSR via Product Advertising API" },
-  {
-    key: "ff:pa_api_catalog",
-    label: "PA-API Catalog Browse",
-    description: "Use Product Advertising API for catalog search. When off, catalog uses SP-API.",
-  },
   { key: "ff:analyzer_page", label: "Catalog Analyzer", description: "Enable the Analyzer / Explorer page" },
   {
     key: "ff:buyer_mode",
@@ -43,7 +37,6 @@ const DEFAULT_FLAGS: { key: string; label: string; description: string }[] = [
 ];
 
 const FLAG_DEFAULTS: Record<string, boolean> = {
-  "ff:pa_api_catalog": false,
   "ff:buyer_mode": false,
   "ff:keepa": false,
   "ff:amazon_on_listing": false,

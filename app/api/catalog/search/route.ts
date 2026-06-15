@@ -1,25 +1,18 @@
 /**
  * GET /api/catalog/search
- * Catalog browsing via PA-API when ff:pa_api_catalog is enabled, otherwise SP-API.
+ * Catalog browsing via SP-API only. PA-API is reserved for buyer mode.
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { userCatalogSearchLimit } from "@/lib/apiRateLimit";
 import {
   getSpApiClientForUserOrGlobal,
+  hasConnectedAmazonAccount,
   SP_API_UNAVAILABLE_USER_MESSAGE,
 } from "@/lib/amazonAccount";
+import { isAppOwnerEmail } from "@/lib/billing/appOwner";
+import { isBillingDisabled, isTestingBillingPass, loadBillingUser } from "@/lib/billing/access";
 import { requireAppAccess } from "@/lib/billing/requireAppAccess";
-import { isPaApiCatalogEnabled } from "@/lib/featureFlags";
-import {
-  getPaApiConfigurationIssue,
-  isPaApiConfigured,
-  fetchCatalogItemsFromPaApi,
-  resolvePaApiSearchParams,
-  searchCatalogByKeywordPaApi,
-  enrichCatalogItemsWithMainBsr,
-  type PaApiCatalogItem,
-} from "@/lib/paApiClient";
 import type { CatalogItem } from "@/lib/spApiClient";
 import { consumeMonthlyUsage } from "@/lib/usageQuota";
 
@@ -34,16 +27,6 @@ function isAsinQuery(q: string): boolean {
 function maxCatalogPageSize(): number {
   const n = Number(process.env.CATALOG_SEARCH_MAX_PAGE_SIZE ?? 60);
   return Number.isFinite(n) && n >= 10 && n <= 100 ? Math.floor(n) : 60;
-}
-
-function paApiItemsToCatalogItems(items: PaApiCatalogItem[]): CatalogItem[] {
-  return items.map((p) => ({
-    asin: p.asin,
-    title: p.title,
-    brand: p.brand,
-    rank: p.salesRank,
-    imageUrl: p.imageUrl,
-  }));
 }
 
 async function searchCatalogViaSpApi(
@@ -73,42 +56,6 @@ async function searchCatalogViaSpApi(
   return { ok: true, items, nextPageToken };
 }
 
-async function searchCatalogViaPaApi(
-  q: string,
-  size: number,
-  category: string | null,
-  subcategory: string | null,
-  keywordParam: string | null,
-): Promise<
-  | { ok: true; items: CatalogItem[]; nextPageToken: string | null }
-  | { ok: false; error: string; status: number }
-> {
-  if (!isPaApiConfigured()) {
-    const issue = getPaApiConfigurationIssue();
-    return { ok: false, error: issue ?? CATALOG_UNAVAILABLE, status: 503 };
-  }
-
-  if (isAsinQuery(q)) {
-    const result = await fetchCatalogItemsFromPaApi([q]);
-    if (!result.ok) {
-      return { ok: false, error: result.error || CATALOG_UNAVAILABLE, status: 503 };
-    }
-    return { ok: true, items: paApiItemsToCatalogItems(result.data), nextPageToken: null };
-  }
-
-  const { keywords, searchIndex } = resolvePaApiSearchParams({
-    category,
-    subcategory,
-    keyword: keywordParam,
-    fallbackQuery: q,
-  });
-  const result = await searchCatalogByKeywordPaApi(keywords, size, searchIndex);
-  if (!result.ok) {
-    return { ok: false, error: result.error || CATALOG_UNAVAILABLE, status: 503 };
-  }
-  return { ok: true, items: paApiItemsToCatalogItems(result.data.items), nextPageToken: null };
-}
-
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const { searchParams } = new URL(request.url);
   const category = searchParams.get("category")?.trim() || null;
@@ -127,6 +74,26 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const gate = await requireAppAccess();
   if (!gate.ok) return gate.response;
+
+  if (!isBillingDisabled() && !isTestingBillingPass()) {
+    const billingUser = await loadBillingUser(gate.userId);
+    const isPaid =
+      billingUser &&
+      (isAppOwnerEmail(billingUser.email) ||
+        billingUser.subscriptionStatus === "active" ||
+        billingUser.subscriptionStatus === "trialing");
+    if (!isPaid && !(await hasConnectedAmazonAccount(gate.userId))) {
+      return NextResponse.json(
+        {
+          error: "Connect your Amazon seller account to access the catalog.",
+          code: "AMAZON_CONNECT_REQUIRED",
+          items: [],
+          nextPageToken: null,
+        },
+        { status: 403 },
+      );
+    }
+  }
 
   if (!(await userCatalogSearchLimit(gate.userId))) {
     return NextResponse.json(
@@ -158,10 +125,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const pageToken = searchParams.get("pageToken")?.trim() || null;
 
   try {
-    const usePaApi = await isPaApiCatalogEnabled();
-    const result = usePaApi
-      ? await searchCatalogViaPaApi(q, size, category, subcategory, keywordParam)
-      : await searchCatalogViaSpApi(gate.userId, q, size, pageToken);
+    const result = await searchCatalogViaSpApi(gate.userId, q, size, pageToken);
 
     if (!result.ok) {
       return NextResponse.json(
@@ -170,8 +134,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const items = await enrichCatalogItemsWithMainBsr(result.items);
-    return NextResponse.json({ items, nextPageToken: result.nextPageToken ?? null });
+    return NextResponse.json({ items: result.items, nextPageToken: result.nextPageToken ?? null });
   } catch (e) {
     console.error("Catalog search error:", e);
     return NextResponse.json(
