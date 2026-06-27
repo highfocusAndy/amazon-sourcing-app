@@ -3,9 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { userKeywordSearchLimit } from "@/lib/apiRateLimit";
 import { requireAppAccess } from "@/lib/billing/requireAppAccess";
 import {
-  CONNECT_AMAZON_FOR_SP_API_MESSAGE,
-  getSpApiClientForUser,
-  hasConnectedAmazonAccount,
+  getSpApiClientForUserOrGlobal,
   SP_API_UNAVAILABLE_USER_MESSAGE,
 } from "@/lib/amazonAccount";
 import type { CatalogItem } from "@/lib/spApiClient";
@@ -35,6 +33,8 @@ const FAMILY_SEARCH_FETCH_CAP = 100;
 /** Extremely low vision confidence means the image is unusable. */
 const MIN_USABLE_IMAGE_CONFIDENCE = 0.05;
 const FALLBACK_VISIBLE_TEXT_LIMIT = 4;
+const MIN_CANDIDATE_SCORE = 4;
+const MIN_SEED_SCORE = 6;
 
 const NOTICE_UNCLEAR =
   "Unable to confidently identify the product. Please rescan.";
@@ -285,6 +285,68 @@ function titleMatchesPackageForm(title: string, packageForm: string): boolean {
   return tokens.every((tok) => t.includes(tok));
 }
 
+function scoreUniversalCandidate(
+  item: CatalogItem,
+  parse: VisionProductFamilyParse,
+  semanticTokens: string[],
+): number {
+  if (!item.asin) return 0;
+  const titleLower = item.title.toLowerCase();
+  if (semanticTokens.length > 0) {
+    const semanticHit = semanticTokens.some((tok) => titleLower.includes(tok));
+    if (!semanticHit) return 0;
+  }
+
+  const familyCue = parse.core_product_family.trim()
+    ? catalogTitleMatchesProductFamily(item.title, parse.core_product_family)
+    : false;
+  const productNameCue = parse.product_name.trim()
+    ? titleLower.includes(parse.product_name.trim().toLowerCase())
+    : false;
+  const visibleCue = titleMatchesVisibleText(item.title, parse.visible_text);
+  const typeCue = parse.product_type.trim()
+    ? catalogTitleMatchesAuxProductType(item.title, parse.product_type)
+    : false;
+  const formCue = parse.package_form.trim() ? titleMatchesPackageForm(item.title, parse.package_form) : false;
+  const brandCue = parse.brand.trim() ? catalogBrandsCompatibleForFamily(parse.brand, item.brand ?? "") : false;
+
+  let score = 0;
+  let cueCount = 0;
+  if (familyCue) {
+    score += 5;
+    cueCount += 1;
+  }
+  if (productNameCue) {
+    score += 6;
+    cueCount += 1;
+  }
+  if (visibleCue) {
+    score += 2;
+    cueCount += 1;
+  }
+  if (typeCue) {
+    score += 3;
+    cueCount += 1;
+  }
+  if (formCue) {
+    score += 2;
+    cueCount += 1;
+  }
+  if (brandCue) {
+    score += 3;
+    cueCount += 1;
+  } else if (parse.brand.trim()) {
+    score -= 3;
+  }
+  if (isLikelyCrossProductBundleTitle(item.title, parse)) {
+    score -= 7;
+  }
+
+  const hasStrongIdentityCue = familyCue || productNameCue;
+  if (!hasStrongIdentityCue && cueCount < 2) return 0;
+  return score >= MIN_CANDIDATE_SCORE ? score : 0;
+}
+
 async function requestVisionParse(opts: {
   apiKey: string;
   dataUrl: string;
@@ -375,19 +437,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const hasAmazon = await hasConnectedAmazonAccount(gate.userId);
-    if (!hasAmazon) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: CONNECT_AMAZON_FOR_SP_API_MESSAGE,
-          results: [],
-        },
-        { status: 403 },
-      );
-    }
-
-    const client = await getSpApiClientForUser(gate.userId);
+    const client = await getSpApiClientForUserOrGlobal(gate.userId);
     if (!client) {
       return NextResponse.json(
         {
@@ -577,13 +627,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // Vision-read barcode (only when explicitly detected — no false positives)
     // ---------------------------------------------------------------
     if (parse.barcode_detected && parse.barcode_value) {
-      const allFromVision = await client.resolveAllCatalogItems(parse.barcode_value).catch(() => []);
+      const barcodeValue = parse.barcode_value;
+      const allFromVision = await client.resolveAllCatalogItems(barcodeValue).catch(() => []);
       if (allFromVision.length > 0) {
         console.log(
-          `[image-search] vision barcode ${parse.barcode_value} → ${allFromVision.length} catalog match(es): ${allFromVision.map((i) => i.asin).join(", ")}`,
+          `[image-search] vision barcode ${barcodeValue} → ${allFromVision.length} catalog match(es): ${allFromVision.map((i) => i.asin).join(", ")}`,
         );
         const results = allFromVision.map((item) =>
-          buildCatalogOnlyResult(item, parse.barcode_value, { group: "exact", reason: "Exact barcode match" }),
+          buildCatalogOnlyResult(item, barcodeValue, { group: "exact", reason: "Exact barcode match" }),
         );
         return NextResponse.json({
           ok: true,
@@ -683,27 +734,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     const rawUniversalItems = await client.searchCatalogByKeywordMultiple(searchKeyword, FAMILY_SEARCH_FETCH_CAP);
     const semanticTokens = nonBrandKeywordTokens(searchKeyword, parse.brand);
-    const universalCandidates = rawUniversalItems.filter((item) => {
-      if (!item.asin) return false;
-      if (semanticTokens.length > 0) {
-        const titleLower = item.title.toLowerCase();
-        const semanticHit = semanticTokens.some((tok) => titleLower.includes(tok));
-        if (!semanticHit) return false;
-      }
-      const familyCue = parse.core_product_family.trim()
-        ? catalogTitleMatchesProductFamily(item.title, parse.core_product_family)
-        : false;
-      const productNameCue = parse.product_name.trim()
-        ? item.title.toLowerCase().includes(parse.product_name.trim().toLowerCase())
-        : false;
-      const visibleCue = titleMatchesVisibleText(item.title, parse.visible_text);
-      const typeCue = parse.product_type.trim()
-        ? catalogTitleMatchesAuxProductType(item.title, parse.product_type)
-        : false;
-      const formCue = parse.package_form.trim() ? titleMatchesPackageForm(item.title, parse.package_form) : false;
-      return familyCue || productNameCue || visibleCue || typeCue || formCue;
-    });
-    if (universalCandidates.length === 0) {
+    const scoredCandidates = rawUniversalItems
+      .map((item) => ({
+        item,
+        score: scoreUniversalCandidate(item, parse, semanticTokens),
+      }))
+      .filter((entry) => entry.score > 0)
+      .sort((a, b) => b.score - a.score);
+    if (scoredCandidates.length === 0 || scoredCandidates[0]!.score < MIN_SEED_SCORE) {
       return NextResponse.json({
         ok: true,
         results: [] as ProductAnalysis[],
@@ -714,7 +752,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       });
     }
 
-    const seed = pickFamilySeed(universalCandidates, parse);
+    const universalCandidates = scoredCandidates.map((entry) => entry.item);
+    const seed = pickFamilySeed(universalCandidates.slice(0, 12), parse);
     const grouped = await collectFamilyResults({
       client,
       parse: {
@@ -797,7 +836,7 @@ function pickFamilySeed(items: CatalogItem[], parse: VisionProductFamilyParse): 
  *    with a strict same-line filter (0.68 Jaccard) to avoid cross-product brand noise.
  */
 async function collectFamilyResults(opts: {
-  client: Awaited<ReturnType<typeof getSpApiClientForUser>>;
+  client: Awaited<ReturnType<typeof getSpApiClientForUserOrGlobal>>;
   parse: VisionProductFamilyParse;
   seed: CatalogItem;
   seedReason: string;

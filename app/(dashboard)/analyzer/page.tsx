@@ -149,6 +149,26 @@ function normalizeLookupInput(input: string): string {
   return trimmed;
 }
 
+/** Normalize scanner payloads (raw barcode text, URL, or mixed content) into a lookup identifier. */
+function normalizeScannedIdentifier(input: string): string {
+  const base = normalizeLookupInput(input).trim();
+  if (!base) return "";
+
+  const digits = base.replace(/\D/g, "");
+  if (digits.length >= 8 && digits.length <= 14) {
+    return digits;
+  }
+
+  const asinLike = base.toUpperCase().match(/[A-Z0-9]{10}/g) ?? [];
+  for (const token of asinLike) {
+    if (/[A-Z]/.test(token) && /\d/.test(token)) {
+      return token;
+    }
+  }
+
+  return base;
+}
+
 function evaluateCalculatorExpression(rawValue: string): number | null {
   const source = rawValue.replace(/\s+/g, "");
   if (!source) {
@@ -408,6 +428,7 @@ function AnalyzerPageContent() {
   const scannerFrameRef = useRef<number | null>(null);
   const zxingReaderRef = useRef<ZxingReaderLike | null>(null);
   const hasScannedRef = useRef(false);
+  const isScanLoadingRef = useRef(false);
   /** Latest handler for auto photo fallback (set after `captureScannerFrameAndSearch` is defined). */
   const captureScannerFrameAndSearchRef = useRef<() => Promise<void>>(async () => {});
   const lastAutoManualCalcKeyRef = useRef("");
@@ -418,6 +439,19 @@ function AnalyzerPageContent() {
   const isUploadLoadingRef = useRef(isUploadLoading);
 
   const { llmInsight, llmLoading, llmError } = useProductAiInsight(selectedProduct, photoSearchAvailable);
+
+  const fetchWithTimeout = useCallback(
+    async (input: RequestInfo | URL, init?: RequestInit, timeoutMs = 25000): Promise<Response> => {
+      const controller = new AbortController();
+      const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        return await fetch(input, { ...init, signal: controller.signal });
+      } finally {
+        window.clearTimeout(timeoutId);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     if (llmInsight) {
@@ -643,14 +677,15 @@ function AnalyzerPageContent() {
   const runManualAnalysis = useCallback(
     async (
       selectedSellerType: SellerType,
-      _isAutoRerun = false,
+      isAutoRerun = false,
       identifierOverride?: string,
-      _isScannerTriggered = false,
+      isScannerTriggered = false,
       lookupOnly = false,
     ): Promise<void> => {
-      void _isAutoRerun;
-      void _isScannerTriggered;
-      const effectiveIdentifier = normalizeLookupInput(identifierOverride ?? identifier);
+      void isAutoRerun;
+      const effectiveIdentifier = isScannerTriggered
+        ? normalizeScannedIdentifier(identifierOverride ?? identifier)
+        : normalizeLookupInput(identifierOverride ?? identifier);
       if (!effectiveIdentifier) {
         setErrorMessage("Enter ASIN/UPC/EAN before running manual analysis.");
         return;
@@ -681,45 +716,123 @@ function AnalyzerPageContent() {
       };
 
       try {
-        const variationsResponse = await fetch("/api/analyze/variations", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ identifier: effectiveIdentifier }),
-        });
-        const variationsJson = (await variationsResponse.json()) as {
-          ok?: boolean;
-          error?: string;
-          results?: ProductAnalysis[];
-        };
-
-        let analysisResults: ProductAnalysis[];
-        if (variationsResponse.ok && variationsJson.results && variationsJson.results.length > 0) {
-          analysisResults = variationsJson.results;
-        } else {
-          const offersResponse = await fetch("/api/analyze/offers", {
+        const runSingleAnalysis = async (): Promise<ProductAnalysis[]> => {
+          const singleResponse = await fetchWithTimeout("/api/analyze", {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify(requestBody),
           });
-          const offersJson = (await offersResponse.json()) as {
+          const singleJson = (await singleResponse.json()) as { error?: string; result?: ProductAnalysis };
+          if (!singleResponse.ok || !singleJson.result) {
+            throw new Error(singleJson.error ?? "Manual analysis failed.");
+          }
+          return [singleJson.result as ProductAnalysis];
+        };
+
+        let analysisResults: ProductAnalysis[];
+
+        if (lookupOnly && isScannerTriggered) {
+          // Step 1 – exact barcode identification
+          const barcodeResponse = await fetchWithTimeout("/api/analyze/barcode-scan", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ identifier: effectiveIdentifier }),
+          });
+          const barcodeJson = (await barcodeResponse.json()) as {
+            ok?: boolean;
+            error?: string;
+            results?: ProductAnalysis[];
+          };
+          if (!barcodeResponse.ok || !barcodeJson.results?.length) {
+            setManualIdentifierResolved(false);
+            setResults([]);
+            setErrorMessage(null);
+            setInfoMessage(
+              "Product not found for this barcode. Try Search by photo or enter ASIN/keyword.",
+            );
+            return;
+          }
+
+          const catalogResults = barcodeJson.results;
+          const exactAsin = catalogResults[0]?.asin;
+
+          // Step 2 – full analysis on the exact ASIN so the detail panel gets prices/decisions
+          let enrichedResults: ProductAnalysis[] = catalogResults;
+          if (exactAsin) {
+            try {
+              const analyzeRes = await fetchWithTimeout("/api/analyze", {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({
+                  identifier: exactAsin,
+                  wholesalePrice: parsedWholesalePrice ?? 0,
+                  brand,
+                  projectedMonthlyUnits: parsedProjectedUnits ?? 1,
+                  sellerType: selectedSellerType,
+                  shippingCost: selectedSellerType === "FBM" ? Number(shippingCost) : 0,
+                }),
+              });
+              const analyzeJson = (await analyzeRes.json()) as { result?: ProductAnalysis; error?: string };
+              if (analyzeRes.ok && analyzeJson.result) {
+                enrichedResults = [analyzeJson.result, ...catalogResults.slice(1)];
+              }
+            } catch {
+              // Full analysis failed; keep catalog result so the panel still shows something
+            }
+          }
+
+          setManualIdentifierResolved(true);
+          setResults(enrichedResults);
+          addProducts(enrichedResults);
+
+          // Auto-open detail panel with the exact match (mirrors Amazon Seller app behaviour)
+          const firstResult = enrichedResults[0];
+          if (firstResult) {
+            setSelectedProduct(firstResult);
+            setMobileDetailsOpen(true);
+            setDetailPanelCost("");
+          }
+
+          setViewFilter("all");
+          setLastRunMode("manual");
+          setInfoMessage(null);
+          trackProductSearch({ identifier: effectiveIdentifier, lookup_only: false });
+          return;
+        } else {
+          if (!amazonHeaderConnected) {
+            analysisResults = await runSingleAnalysis();
+          } else {
+          const variationsResponse = await fetchWithTimeout("/api/analyze/variations", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ identifier: effectiveIdentifier }),
+          });
+          const variationsJson = (await variationsResponse.json()) as {
             ok?: boolean;
             error?: string;
             results?: ProductAnalysis[];
           };
 
-          if (offersResponse.ok && offersJson.results && offersJson.results.length > 0) {
-            analysisResults = offersJson.results;
+          if (variationsResponse.ok && variationsJson.results && variationsJson.results.length > 0) {
+            analysisResults = variationsJson.results;
           } else {
-            const singleResponse = await fetch("/api/analyze", {
+            const offersResponse = await fetchWithTimeout("/api/analyze/offers", {
               method: "POST",
               headers: { "content-type": "application/json" },
               body: JSON.stringify(requestBody),
             });
-            const singleJson = (await singleResponse.json()) as { error?: string; result?: ProductAnalysis };
-            if (!singleResponse.ok || !singleJson.result) {
-              throw new Error(singleJson.error ?? "Manual analysis failed.");
+            const offersJson = (await offersResponse.json()) as {
+              ok?: boolean;
+              error?: string;
+              results?: ProductAnalysis[];
+            };
+
+            if (offersResponse.ok && offersJson.results && offersJson.results.length > 0) {
+              analysisResults = offersJson.results;
+            } else {
+                analysisResults = await runSingleAnalysis();
+              }
             }
-            analysisResults = [singleJson.result as ProductAnalysis];
           }
         }
 
@@ -769,7 +882,7 @@ function AnalyzerPageContent() {
         setIsManualLoading(false);
       }
     },
-    [identifier, wholesalePrice, brand, projectedMonthlyUnits, shippingCost, addProducts],
+    [identifier, wholesalePrice, brand, projectedMonthlyUnits, shippingCost, addProducts, amazonHeaderConnected, fetchWithTimeout],
   );
 
   const refetchManualRowAnalysis = useCallback(
@@ -793,7 +906,7 @@ function AnalyzerPageContent() {
       }
       setIsManualLoading(true);
       try {
-        const res = await fetch("/api/analyze", {
+        const res = await fetchWithTimeout("/api/analyze", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
@@ -845,7 +958,7 @@ function AnalyzerPageContent() {
         setIsManualLoading(false);
       }
     },
-    [wholesalePrice, projectedMonthlyUnits, brand, sellerType, shippingCost],
+    [wholesalePrice, projectedMonthlyUnits, brand, sellerType, shippingCost, fetchWithTimeout],
   );
 
   const syncLastAutoManualCalcKeyForRow = useCallback(
@@ -896,8 +1009,12 @@ function AnalyzerPageContent() {
       if (!scannedValue || cancelled || hasScannedRef.current) {
         return;
       }
+      const normalizedScanned = normalizeScannedIdentifier(scannedValue);
+      if (!normalizedScanned) {
+        return;
+      }
       hasScannedRef.current = true;
-      setIdentifier(scannedValue);
+      setIdentifier(normalizedScanned);
       setManualIdentifierResolved(false);
       setBrand("");
       setResults([]);
@@ -905,22 +1022,22 @@ function AnalyzerPageContent() {
       lastAutoManualCalcKeyRef.current = "";
       setErrorMessage(null);
 
+      setIsScannerOpen(false);
+
       if (isManualLoadingRef.current || isUploadLoadingRef.current) {
-        setInfoMessage(`Scanned identifier: ${scannedValue}. Finish current run, then continue.`);
-        setIsScannerOpen(false);
+        setInfoMessage(`Scanned identifier: ${normalizedScanned}. Finish current run, then continue.`);
         return;
       }
 
-      disposeScannerMedia();
+      isScanLoadingRef.current = true;
       setScanPhase("analyzing");
       const run = runManualAnalysisRef.current;
-      void (async () => {
-        if (run) {
-          await run(sellerTypeRef.current, false, scannedValue, true, true);
-        }
-        setScanPhase("idle");
-        setIsScannerOpen(false);
-      })();
+      if (run) {
+        void run(sellerTypeRef.current, false, normalizedScanned, true, true).finally(() => {
+          isScanLoadingRef.current = false;
+          setScanPhase("idle");
+        });
+      }
     };
 
     const scanLoop = async (detector: BarcodeDetectorInstance): Promise<void> => {
@@ -1178,7 +1295,7 @@ function AnalyzerPageContent() {
       let settledRow: ProductAnalysis = item;
       setPanelAnalysisLoading(true);
       try {
-        const res = await fetch("/api/analyze", {
+        const res = await fetchWithTimeout("/api/analyze", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
@@ -1199,7 +1316,10 @@ function AnalyzerPageContent() {
           // Keep the visible list stable while enriching a clicked row.
           setResults((prev) => prev.map((row) => (row.id === item.id ? { ...settledRow, id: row.id } : row)));
         }
-      } catch {
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") {
+          setErrorMessage("Product details timed out. Please tap the product again.");
+        }
         // keep catalog-only selection
       } finally {
         setPendingProductId(null);
@@ -1410,7 +1530,7 @@ function AnalyzerPageContent() {
       if (digits.length >= 8 && digits.length <= 14) {
         form.append("barcode", digits);
       }
-      const res = await fetch("/api/analyze/image-search", { method: "POST", body: form });
+      const res = await fetchWithTimeout("/api/analyze/image-search", { method: "POST", body: form }, 35000);
       const json = (await res.json()) as {
         ok?: boolean;
         error?: string;
@@ -1466,13 +1586,20 @@ function AnalyzerPageContent() {
         }
       }
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : "Photo search failed.");
+      if (err instanceof DOMException && err.name === "AbortError") {
+        setErrorMessage("Photo search timed out. Try a clearer photo or scan barcode.");
+      } else {
+        setErrorMessage(err instanceof Error ? err.message : "Photo search failed.");
+      }
     } finally {
       setIsManualLoading(false);
     }
   }
 
   async function captureScannerFrameAndSearch(): Promise<void> {
+    if (isScanLoadingRef.current) {
+      return;
+    }
     const video = videoRef.current;
     if (!video || video.readyState < 2) {
       setScannerError("Wait for the camera preview, then try again.");
@@ -1505,25 +1632,16 @@ function AnalyzerPageContent() {
       return;
     }
     const imageFile = new File([blob], "camera-product.jpg", { type: "image/jpeg" });
+    isScanLoadingRef.current = true;
+    setIsScannerOpen(false);
     stopScanner();
     setScanPhase("analyzing");
     await runImageProductSearchFromFile(imageFile);
+    isScanLoadingRef.current = false;
     setScanPhase("idle");
-    setIsScannerOpen(false);
   }
 
   captureScannerFrameAndSearchRef.current = captureScannerFrameAndSearch;
-
-  /** Barcode is tried first; if nothing is decoded after a short window, capture runs photo search automatically. */
-  useEffect(() => {
-    if (!isScannerOpen || photoSearchAvailable !== true) return;
-    const barcodeFirstMs = 1400;
-    const id = window.setTimeout(() => {
-      if (hasScannedRef.current) return;
-      void captureScannerFrameAndSearchRef.current();
-    }, barcodeFirstMs);
-    return () => window.clearTimeout(id);
-  }, [isScannerOpen, photoSearchAvailable]);
 
   async function handleLookupSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
@@ -1648,7 +1766,7 @@ function AnalyzerPageContent() {
           await runImageProductSearchFromFile(file, 20, decodedCode);
         } else {
           setInfoMessage(`Code from image: ${decodedCode}. Loading product...`);
-          void runManualAnalysis(sellerType, false, decodedCode, false, true);
+          void runManualAnalysis(sellerType, false, decodedCode, true, true);
         }
         return;
       }
@@ -1826,10 +1944,15 @@ function AnalyzerPageContent() {
         playsInline
         aria-hidden
       />
-      {/* Regular loading spinner for non-scan loads */}
-      {(isManualLoading && scanPhase === "idle" || isUploadLoading || panelAnalysisLoading) && (
+      {/* Global loading spinner (includes scan/photo processing). */}
+      {(isManualLoading || isUploadLoading || panelAnalysisLoading || isScanLoadingRef.current) && (
         <div className="pointer-events-none fixed inset-0 z-40 flex items-center justify-center bg-slate-900/40">
-          <div className="h-10 w-10 animate-spin rounded-full border-2 border-teal-400 border-t-transparent" />
+          <div className="flex flex-col items-center gap-3">
+            <div className="h-10 w-10 animate-spin rounded-full border-2 border-teal-400 border-t-transparent" />
+            <p className="text-xs font-medium text-slate-200">
+              {isScanLoadingRef.current ? "Scanning product..." : "Loading..."}
+            </p>
+          </div>
         </div>
       )}
       {showAmazonAccountModal && (
@@ -1919,8 +2042,8 @@ function AnalyzerPageContent() {
             </p>
           ) : photoSearchAvailable === true ? (
             <p className="mt-2 text-xs text-slate-500">
-              <span className="text-slate-400">Upload image</span> or use <span className="text-slate-400">Scan</span>: we read
-              the barcode first; if there isn’t one, we search by photo automatically.
+              <span className="text-slate-400">Scan</span> is exact barcode match (no guess fallback).{" "}
+              <span className="text-slate-400">Upload image</span> also uses photo search.
             </p>
           ) : null}
         </label>
@@ -2308,100 +2431,89 @@ function AnalyzerPageContent() {
           <div className="w-full max-w-2xl rounded-xl border border-slate-600 bg-slate-900 shadow-2xl shadow-black/50">
             <div className="flex items-center justify-between border-b border-slate-700 px-4 py-3">
               <div className="flex items-center gap-2.5">
-                <div className={`h-2 w-2 rounded-full ${scanPhase === "analyzing" || scanPhase === "capturing" ? "animate-spin border border-teal-400 border-t-transparent" : "animate-pulse bg-teal-400"}`} />
-                <h3 className="text-base font-semibold text-slate-100">
-                  {scanPhase === "analyzing" || scanPhase === "capturing" ? "Analyzing product…" : "Scanning product"}
-                </h3>
+                <div className="h-2 w-2 animate-pulse rounded-full bg-teal-400" />
+                <h3 className="text-base font-semibold text-slate-100">Scanning product</h3>
               </div>
               <button
                 type="button"
                 onClick={() => setIsScannerOpen(false)}
                 className="rounded-md border border-slate-600 px-2 py-1 text-xs font-semibold text-slate-300 hover:bg-slate-700"
               >
-                {scanPhase === "analyzing" || scanPhase === "capturing" ? "Cancel" : "Close"}
+                Close
               </button>
             </div>
             <div className="space-y-3 p-4">
-              {scanPhase === "analyzing" || scanPhase === "capturing" ? (
-                <div className="flex flex-col items-center justify-center gap-4 py-10">
-                  <div className="relative flex h-16 w-16 items-center justify-center">
-                    <div className="absolute h-16 w-16 animate-ping rounded-full border-2 border-teal-400 opacity-30" />
-                    <div className="absolute h-16 w-16 animate-spin rounded-full border-2 border-teal-400 border-t-transparent" />
-                    <svg className="h-7 w-7 text-teal-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 013.75 9.375v-4.5zM3.75 14.625c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5a1.125 1.125 0 01-1.125-1.125v-4.5zM13.5 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0113.5 9.375v-4.5z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 6.75h.75v.75h-.75v-.75zM6.75 16.5h.75v.75h-.75v-.75zM16.5 6.75h.75v.75h-.75v-.75z" />
-                    </svg>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-base font-semibold text-teal-300">Identifying product…</p>
-                    <p className="mt-1 text-sm text-slate-400">Searching Amazon catalog</p>
-                  </div>
+              {/* Camera feed with animated scan line */}
+              <div className="relative overflow-hidden rounded-lg bg-black">
+                <video ref={videoRef} className="aspect-video w-full rounded-lg bg-black" muted playsInline />
+                {/* Sweeping green scan line */}
+                <div
+                  className="pointer-events-none absolute inset-x-3 h-px bg-teal-400"
+                  style={{ boxShadow: "0 0 8px 2px rgba(45,212,191,0.7)", animation: "scanLine 2s ease-in-out infinite" }}
+                />
+                {/* Corner bracket markers */}
+                <div className="pointer-events-none absolute inset-0">
+                  <div className="absolute left-4 top-4 h-6 w-6 rounded-tl border-l-2 border-t-2 border-teal-400" />
+                  <div className="absolute right-4 top-4 h-6 w-6 rounded-tr border-r-2 border-t-2 border-teal-400" />
+                  <div className="absolute bottom-4 left-4 h-6 w-6 rounded-bl border-b-2 border-l-2 border-teal-400" />
+                  <div className="absolute bottom-4 right-4 h-6 w-6 rounded-br border-b-2 border-r-2 border-teal-400" />
                 </div>
+                {/* Live status badge */}
+                <div className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2">
+                  <span className="flex items-center gap-1.5 rounded-full bg-slate-900/75 px-3 py-1 text-xs font-medium text-teal-300 backdrop-blur-sm">
+                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-teal-400" />
+                    {photoSearchAvailable === true ? "Looking for barcode · photo scan ready" : "Looking for barcode…"}
+                  </span>
+                </div>
+              </div>
+              {scannerError ? (
+                <p className="text-sm text-rose-400">{scannerError}</p>
               ) : (
-                <>
-                  {/* Camera feed with animated scan line */}
-                  <div className="relative overflow-hidden rounded-lg bg-black">
-                    <video ref={videoRef} className="aspect-video w-full rounded-lg bg-black" muted playsInline />
-                    {/* Sweeping green scan line */}
-                    <div
-                      className="pointer-events-none absolute inset-x-3 h-px bg-teal-400"
-                      style={{ boxShadow: "0 0 8px 2px rgba(45,212,191,0.7)", animation: "scanLine 2s ease-in-out infinite" }}
-                    />
-                    {/* Corner bracket markers */}
-                    <div className="pointer-events-none absolute inset-0">
-                      <div className="absolute left-4 top-4 h-6 w-6 rounded-tl border-l-2 border-t-2 border-teal-400" />
-                      <div className="absolute right-4 top-4 h-6 w-6 rounded-tr border-r-2 border-t-2 border-teal-400" />
-                      <div className="absolute bottom-4 left-4 h-6 w-6 rounded-bl border-b-2 border-l-2 border-teal-400" />
-                      <div className="absolute bottom-4 right-4 h-6 w-6 rounded-br border-b-2 border-r-2 border-teal-400" />
-                    </div>
-                    {/* Live status badge */}
-                    <div className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2">
-                      <span className="flex items-center gap-1.5 rounded-full bg-slate-900/75 px-3 py-1 text-xs font-medium text-teal-300 backdrop-blur-sm">
-                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-teal-400" />
-                        {photoSearchAvailable === true ? "Looking for barcode · photo scan ready" : "Looking for barcode…"}
-                      </span>
-                    </div>
-                  </div>
-                  {scannerError ? (
-                    <p className="text-sm text-rose-400">{scannerError}</p>
-                  ) : (
-                    <p className="text-sm text-slate-400">
-                      Point at a barcode or QR for an instant match.
-                      {photoSearchAvailable === false
-                        ? " Photo fallback is off (server missing OPENAI_API_KEY) — use barcode only."
-                        : photoSearchAvailable === true
-                          ? " If no barcode is detected, the app automatically captures the frame and identifies the product."
-                          : " To enable photo fallback, set OPENAI_API_KEY on the server."}
-                    </p>
-                  )}
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setIsScannerOpen(false)}
-                      className="rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-700"
-                    >
-                      Stop Scanner
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsScannerOpen(false);
-                        setScannerError(null);
-                        disposeScannerMedia();
-                        void (async () => {
-                          const ok = await acquireScannerStream();
-                          if (ok) {
-                            setIsScannerOpen(true);
-                          }
-                        })();
-                      }}
-                      className="rounded-lg bg-gradient-to-r from-teal-500 to-cyan-600 px-3 py-2 text-xs font-semibold text-white shadow-md shadow-teal-500/20 hover:from-teal-400 hover:to-cyan-500"
-                    >
-                      Restart Scanner
-                    </button>
-                  </div>
-                </>
+                <p className="text-sm text-slate-400">
+                  Point at a barcode or QR for an exact match only.
+                  {photoSearchAvailable === true
+                    ? " If barcode is unclear, use Search by photo."
+                    : " If nothing is detected, adjust lighting/distance and rescan."}
+                </p>
               )}
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsScannerOpen(false)}
+                  className="rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-700"
+                >
+                  Stop Scanner
+                </button>
+                {photoSearchAvailable === true ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void captureScannerFrameAndSearchRef.current();
+                    }}
+                    disabled={scanPhase === "capturing" || scanPhase === "analyzing"}
+                    className="rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-700"
+                  >
+                    {scanPhase === "capturing" || scanPhase === "analyzing" ? "Searching..." : "Search by photo"}
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsScannerOpen(false);
+                    setScannerError(null);
+                    disposeScannerMedia();
+                    void (async () => {
+                      const ok = await acquireScannerStream();
+                      if (ok) {
+                        setIsScannerOpen(true);
+                      }
+                    })();
+                  }}
+                  className="rounded-lg bg-gradient-to-r from-teal-500 to-cyan-600 px-3 py-2 text-xs font-semibold text-white shadow-md shadow-teal-500/20 hover:from-teal-400 hover:to-cyan-500"
+                >
+                  Restart Scanner
+                </button>
+              </div>
             </div>
           </div>
         </div>
