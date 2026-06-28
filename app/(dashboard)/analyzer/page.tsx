@@ -1040,35 +1040,6 @@ function AnalyzerPageContent() {
       }
     };
 
-    const scanLoop = async (detector: BarcodeDetectorInstance): Promise<void> => {
-      if (cancelled || hasScannedRef.current || !videoRef.current) {
-        return;
-      }
-
-      try {
-        if (videoRef.current.readyState >= 2) {
-          const detections = await detector.detect(videoRef.current);
-          const scannedValue = detections
-            .map((entry) => entry.rawValue?.trim() ?? "")
-            .find((value) => value.length > 0);
-
-          if (scannedValue) {
-            applyScannedValue(scannedValue);
-            return;
-          }
-        }
-      } catch {
-        if (!detectionErrorShown) {
-          setScannerError("Scanner is active but could not decode this frame. Try better lighting and distance.");
-          detectionErrorShown = true;
-        }
-      }
-
-      scannerFrameRef.current = window.requestAnimationFrame(() => {
-        void scanLoop(detector);
-      });
-    };
-
     const startDecodeOnVideo = async (video: HTMLVideoElement): Promise<void> => {
       try {
         const park = scannerParkVideoRef.current;
@@ -1079,60 +1050,83 @@ function AnalyzerPageContent() {
         video.srcObject = stream;
         await video.play();
 
-        const detectorCtor = (window as Window & { BarcodeDetector?: BarcodeDetectorCtor }).BarcodeDetector;
-
-        if (!detectorCtor) {
-          const zxingModule = await import("@zxing/library");
-          if (cancelled || hasScannedRef.current) {
+        const onZXingResult = (result: ZxingScanResultLike | undefined, error?: ZxingScanErrorLike): void => {
+          if (cancelled || hasScannedRef.current) return;
+          const scannedValue = result?.getText().trim();
+          if (scannedValue) {
+            applyScannedValue(scannedValue);
             return;
           }
+          const errorName = error?.name ?? "";
+          if (
+            errorName &&
+            errorName !== "NotFoundException" &&
+            errorName !== "ChecksumException" &&
+            errorName !== "FormatException" &&
+            !detectionErrorShown
+          ) {
+            setScannerError("Scanner is active but could not decode this frame. Try better lighting and distance.");
+            detectionErrorShown = true;
+          }
+        };
 
+        const startZXingDecode = async (): Promise<void> => {
+          if (cancelled || hasScannedRef.current) return;
+          const zxingModule = await import("@zxing/library");
+          if (cancelled || hasScannedRef.current) return;
           const zxingReader = new zxingModule.BrowserMultiFormatReader() as unknown as ZxingReaderLike;
           zxingReaderRef.current = zxingReader;
-
-          const onZXingResult = (result: ZxingScanResultLike | undefined, error?: ZxingScanErrorLike): void => {
-            if (cancelled || hasScannedRef.current) {
-              return;
-            }
-
-            const scannedValue = result?.getText().trim();
-            if (scannedValue) {
-              applyScannedValue(scannedValue);
-              return;
-            }
-
-            const errorName = error?.name ?? "";
-            if (
-              errorName &&
-              errorName !== "NotFoundException" &&
-              errorName !== "ChecksumException" &&
-              errorName !== "FormatException" &&
-              !detectionErrorShown
-            ) {
-              setScannerError("Scanner is active but could not decode this frame. Try better lighting and distance.");
-              detectionErrorShown = true;
-            }
-          };
-
           if (zxingReader.decodeFromStream) {
             await zxingReader.decodeFromStream(stream, video, onZXingResult);
           } else {
             await zxingReader.decodeFromVideoDevice(null, video, onZXingResult);
           }
+        };
+
+        const detectorCtor = (window as Window & { BarcodeDetector?: BarcodeDetectorCtor }).BarcodeDetector;
+
+        if (!detectorCtor) {
+          await startZXingDecode();
           return;
         }
 
-        const detector = new detectorCtor({
-          formats: [...BARCODE_DETECTOR_FORMATS],
-        });
+        const detector = new detectorCtor({ formats: [...BARCODE_DETECTOR_FORMATS] });
+        let nativeDetectFailCount = 0;
+
+        const scanLoop = async (): Promise<void> => {
+          if (cancelled || hasScannedRef.current || !videoRef.current) return;
+
+          try {
+            if (videoRef.current.readyState >= 2 && videoRef.current.videoWidth > 0) {
+              const detections = await detector.detect(videoRef.current);
+              nativeDetectFailCount = 0;
+              const scannedValue = detections
+                .map((entry) => entry.rawValue?.trim() ?? "")
+                .find((value) => value.length > 0);
+              if (scannedValue) {
+                applyScannedValue(scannedValue);
+                return;
+              }
+            }
+          } catch {
+            nativeDetectFailCount++;
+            if (nativeDetectFailCount >= 15) {
+              // BarcodeDetector consistently failing — fall back to ZXing.
+              void startZXingDecode();
+              return;
+            }
+          }
+
+          scannerFrameRef.current = window.requestAnimationFrame(() => {
+            void scanLoop();
+          });
+        };
 
         scannerFrameRef.current = window.requestAnimationFrame(() => {
-          void scanLoop(detector);
+          void scanLoop();
         });
       } catch (error) {
-        if (cancelled) {
-          return;
-        }
+        if (cancelled) return;
         setScannerError(error instanceof Error ? error.message : "Unable to start scanner preview.");
       }
     };
