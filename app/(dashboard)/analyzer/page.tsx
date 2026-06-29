@@ -79,7 +79,7 @@ type BarcodeDetectorInstance = {
 
 type BarcodeDetectorCtor = new (options?: { formats?: string[] }) => BarcodeDetectorInstance;
 
-/** Formats we try for camera + still images (QR/Datamatrix help with “photo of label” cases). */
+/** Formats we try for camera + still images (QR/Datamatrix help with "photo of label" cases). */
 const BARCODE_DETECTOR_FORMATS = [
   "aztec",
   "code_128",
@@ -422,7 +422,7 @@ function AnalyzerPageContent() {
   const [bulkUploadEnabled, setBulkUploadEnabled] = useState(false);
   const [pendingProductId, setPendingProductId] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  /** Hidden element used when moving the live stream from “park” to the visible preview (mobile decode quirks). */
+  /** Hidden element used when moving the live stream from "park" to the visible preview (mobile decode quirks). */
   const scannerParkVideoRef = useRef<HTMLVideoElement | null>(null);
   const scannerStreamRef = useRef<MediaStream | null>(null);
   const scannerFrameRef = useRef<number | null>(null);
@@ -431,6 +431,7 @@ function AnalyzerPageContent() {
   const isScanLoadingRef = useRef(false);
   /** Latest handler for auto photo fallback (set after `captureScannerFrameAndSearch` is defined). */
   const captureScannerFrameAndSearchRef = useRef<() => Promise<void>>(async () => {});
+  const photoSearchAvailableRef = useRef<boolean | null>(null);
   const lastAutoManualCalcKeyRef = useRef("");
   const scannerPreferredDeviceIdRef = useRef<string | null>(null);
   const sellerTypeRef = useRef<SellerType>(sellerType);
@@ -984,6 +985,7 @@ function AnalyzerPageContent() {
   runManualAnalysisRef.current = runManualAnalysis;
   isManualLoadingRef.current = isManualLoading;
   isUploadLoadingRef.current = isUploadLoading;
+  photoSearchAvailableRef.current = photoSearchAvailable;
 
   useEffect(() => {
     if (!isScannerOpen) {
@@ -1151,8 +1153,18 @@ function AnalyzerPageContent() {
 
     tryAttach();
 
+    let autoPhotoTimerId: number | null = null;
+    if (photoSearchAvailableRef.current === true) {
+      autoPhotoTimerId = window.setTimeout(() => {
+        if (!cancelled && !hasScannedRef.current) {
+          void captureScannerFrameAndSearchRef.current();
+        }
+      }, 4000);
+    }
+
     return () => {
       cancelled = true;
+      if (autoPhotoTimerId !== null) window.clearTimeout(autoPhotoTimerId);
       disposeScannerMedia();
     };
   }, [isScannerOpen, disposeScannerMedia]);
@@ -1506,16 +1518,17 @@ function AnalyzerPageContent() {
     imageFile: File,
     pageSize = 20,
     decodedBarcode?: string | null,
-  ): Promise<void> {
+  ): Promise<ProductAnalysis[] | null> {
     if (photoSearchAvailable !== true) {
       setErrorMessage(
         "Photo search is not enabled on this server (needs OPENAI_API_KEY). Use barcode, keyword, or ASIN.",
       );
-      return;
+      return null;
     }
     setErrorMessage(null);
     setInfoMessage(null);
     setIsManualLoading(true);
+    let foundResults: ProductAnalysis[] | null = null;
     try {
       const form = new FormData();
       form.append("image", imageFile);
@@ -1563,6 +1576,7 @@ function AnalyzerPageContent() {
               ? `Matched by product family: ${derived}`
               : null;
         setInfoMessage(matchedLabel);
+        foundResults = analysisResults;
       } else {
         setSelectedProduct(null);
         if (json.notice) {
@@ -1573,7 +1587,7 @@ function AnalyzerPageContent() {
           setInfoMessage("This product does not appear to be listed on Amazon yet.");
         } else if (derived) {
           setInfoMessage(
-            `No listings for “${derived}”. Try a clearer photo, the barcode, or a keyword.`,
+            `No listings for "${derived}". Try a clearer photo, the barcode, or a keyword.`,
           );
         } else {
           setInfoMessage("Unable to confidently identify the product. Please rescan.");
@@ -1588,6 +1602,7 @@ function AnalyzerPageContent() {
     } finally {
       setIsManualLoading(false);
     }
+    return foundResults;
   }
 
   async function captureScannerFrameAndSearch(): Promise<void> {
@@ -1630,9 +1645,12 @@ function AnalyzerPageContent() {
     setIsScannerOpen(false);
     stopScanner();
     setScanPhase("analyzing");
-    await runImageProductSearchFromFile(imageFile);
+    const photoResults = await runImageProductSearchFromFile(imageFile);
     isScanLoadingRef.current = false;
     setScanPhase("idle");
+    if (photoResults && photoResults.length > 0) {
+      await handleSelectProduct(photoResults[0]);
+    }
   }
 
   captureScannerFrameAndSearchRef.current = captureScannerFrameAndSearch;
@@ -2456,7 +2474,11 @@ function AnalyzerPageContent() {
                 <div className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2">
                   <span className="flex items-center gap-1.5 rounded-full bg-slate-900/75 px-3 py-1 text-xs font-medium text-teal-300 backdrop-blur-sm">
                     <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-teal-400" />
-                    {photoSearchAvailable === true ? "Looking for barcode · photo scan ready" : "Looking for barcode…"}
+                    {scanPhase === "capturing"
+                      ? "Trying photo identification..."
+                      : photoSearchAvailable === true
+                      ? "Looking for barcode · photo scan ready"
+                      : "Looking for barcode…"}
                   </span>
                 </div>
               </div>
@@ -2464,10 +2486,10 @@ function AnalyzerPageContent() {
                 <p className="text-sm text-rose-400">{scannerError}</p>
               ) : (
                 <p className="text-sm text-slate-400">
-                  Point at a barcode or QR for an exact match only.
+                  Point at a barcode or QR for an exact match.
                   {photoSearchAvailable === true
-                    ? " If barcode is unclear, use Search by photo."
-                    : " If nothing is detected, adjust lighting/distance and rescan."}
+                    ? " No barcode? Use Search by photo — it auto-triggers after 4 s."
+                    : " Search by photo needs OPENAI_API_KEY on the server."}
                 </p>
               )}
               <div className="flex flex-wrap gap-2">
@@ -2478,18 +2500,19 @@ function AnalyzerPageContent() {
                 >
                   Stop Scanner
                 </button>
-                {photoSearchAvailable === true ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void captureScannerFrameAndSearchRef.current();
-                    }}
-                    disabled={scanPhase === "capturing" || scanPhase === "analyzing"}
-                    className="rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-700"
-                  >
-                    {scanPhase === "capturing" || scanPhase === "analyzing" ? "Searching..." : "Search by photo"}
-                  </button>
-                ) : null}
+                <button
+                  type="button"
+                  onClick={() => { void captureScannerFrameAndSearchRef.current(); }}
+                  disabled={photoSearchAvailable !== true || scanPhase === "capturing" || scanPhase === "analyzing"}
+                  title={photoSearchAvailable !== true ? "Needs OPENAI_API_KEY on the server" : undefined}
+                  className={
+                    photoSearchAvailable !== true
+                      ? "cursor-not-allowed rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-500 opacity-50"
+                      : "rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-700"
+                  }
+                >
+                  {scanPhase === "capturing" || scanPhase === "analyzing" ? "Searching..." : "Search by photo"}
+                </button>
                 <button
                   type="button"
                   onClick={() => {
