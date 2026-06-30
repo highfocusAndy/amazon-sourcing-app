@@ -1375,6 +1375,37 @@ export class SpApiClient {
     return results;
   }
 
+  /** Returns the single best-matching catalog item for a barcode/ASIN, preferring the exact variant (child ASIN) over a parent. */
+  async resolveExactCatalogItem(identifier: string): Promise<CatalogItem | null> {
+    const normalized = normalizeIdentifier(identifier);
+    if (!normalized) return null;
+
+    const asinCandidate = extractAsinCandidate(normalized);
+    if (asinCandidate) {
+      return this.fetchCatalogItem(asinCandidate).catch(() => null);
+    }
+
+    const digits = normalized.replace(/\D/g, "");
+    if (!UPC_EAN_REGEX.test(digits)) return null;
+
+    for (const candidate of buildNumericIdentifierCandidates(digits)) {
+      const primaryType: "UPC" | "EAN" | "GTIN" =
+        candidate.length === 13 ? "EAN" : candidate.length === 12 ? "UPC" : "GTIN";
+
+      const result = await this.searchCatalogByIdentifier(primaryType, candidate).catch(() => null);
+      if (result) return result;
+
+      const fallbackType: "UPC" | "EAN" | null =
+        primaryType === "UPC" ? "EAN" : primaryType === "EAN" ? "UPC" : null;
+      if (fallbackType) {
+        const fallback = await this.searchCatalogByIdentifier(fallbackType, candidate).catch(() => null);
+        if (fallback) return fallback;
+      }
+    }
+
+    return null;
+  }
+
   async searchCatalogByKeyword(keyword: string): Promise<CatalogItem | null> {
     const query = keyword.trim();
     if (!query) {

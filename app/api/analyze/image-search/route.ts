@@ -11,6 +11,7 @@ import { buildCatalogOnlyResult } from "@/lib/analysis";
 import {
   buildStableAmazonIdentityQuery,
   catalogBrandsCompatibleForFamily,
+  catalogItemMatchesPackageBrand,
   catalogItemSameProductFamilyLine,
   catalogTitleMatchesAuxProductType,
   catalogTitleMatchesProductFamily,
@@ -308,7 +309,15 @@ function scoreUniversalCandidate(
     ? catalogTitleMatchesAuxProductType(item.title, parse.product_type)
     : false;
   const formCue = parse.package_form.trim() ? titleMatchesPackageForm(item.title, parse.package_form) : false;
-  const brandCue = parse.brand.trim() ? catalogBrandsCompatibleForFamily(parse.brand, item.brand ?? "") : false;
+  // Use the stricter brand check (title + brand field) so items with no catalog brand
+  // but a different brand in the title are correctly rejected.
+  const brandCue = parse.brand.trim() ? catalogItemMatchesPackageBrand(item, parse.brand) : false;
+
+  // Hard reject: when a brand was read from the photo but this catalog item doesn't carry
+  // that brand in its title or brand field, it cannot be the right product.
+  if (parse.brand.trim() && !brandCue) {
+    return 0;
+  }
 
   let score = 0;
   let cueCount = 0;
@@ -335,8 +344,6 @@ function scoreUniversalCandidate(
   if (brandCue) {
     score += 3;
     cueCount += 1;
-  } else if (parse.brand.trim()) {
-    score -= 3;
   }
   if (isLikelyCrossProductBundleTitle(item.title, parse)) {
     score -= 7;
@@ -455,8 +462,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // Client / hardware barcode first (before vision — no LLM cost).
     // -----------------------------------------------------------------
     if (formBarcodeOk) {
-      const allFromForm = await client.resolveAllCatalogItems(formBarcodeDigits).catch(() => []);
-      if (allFromForm.length > 0) {
+      const exactFromForm = await client.resolveExactCatalogItem(formBarcodeDigits).catch(() => null);
+      if (exactFromForm) {
         const usageEarly = await consumeMonthlyUsage(gate.userId, "keyword_search");
         if (!usageEarly.ok) {
           return NextResponse.json(
@@ -476,11 +483,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           );
         }
         console.log(
-          `[image-search] form barcode ${formBarcodeDigits} → ${allFromForm.length} catalog match(es): ${allFromForm.map((i) => i.asin).join(", ")}`,
+          `[image-search] form barcode ${formBarcodeDigits} → exact catalog match: ${exactFromForm.asin}`,
         );
-        const results = allFromForm.map((item) =>
-          buildCatalogOnlyResult(item, formBarcodeDigits, { group: "exact", reason: "Exact barcode match" }),
-        );
+        const results = [
+          buildCatalogOnlyResult(exactFromForm, formBarcodeDigits, { group: "exact", reason: "Exact barcode match" }),
+        ];
         return NextResponse.json({
           ok: true,
           results,
@@ -628,14 +635,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // ---------------------------------------------------------------
     if (parse.barcode_detected && parse.barcode_value) {
       const barcodeValue = parse.barcode_value;
-      const allFromVision = await client.resolveAllCatalogItems(barcodeValue).catch(() => []);
-      if (allFromVision.length > 0) {
+      const exactFromVision = await client.resolveExactCatalogItem(barcodeValue).catch(() => null);
+      if (exactFromVision) {
         console.log(
-          `[image-search] vision barcode ${barcodeValue} → ${allFromVision.length} catalog match(es): ${allFromVision.map((i) => i.asin).join(", ")}`,
+          `[image-search] vision barcode ${barcodeValue} → exact catalog match: ${exactFromVision.asin}`,
         );
-        const results = allFromVision.map((item) =>
-          buildCatalogOnlyResult(item, barcodeValue, { group: "exact", reason: "Exact barcode match" }),
-        );
+        const results = [
+          buildCatalogOnlyResult(exactFromVision, barcodeValue, { group: "exact", reason: "Exact barcode match" }),
+        ];
         return NextResponse.json({
           ok: true,
           results,
@@ -706,8 +713,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }
     }
 
-    const universalKeyword =
-      buildStableAmazonIdentityQuery(parse).trim() || buildFallbackIdentityQuery(parse).trim();
+    // When brand is known: stable query first (brand + family, deterministic).
+    // When brand is unknown: fallback query first — it includes visible_text phrases
+    // (e.g. "Chestnut Hill") so the SP-API search is specific enough to avoid returning
+    // a popular unrelated brand (e.g. "purified water" alone returns Nestle/Crystal Geyser).
+    const universalKeyword = parse.brand.trim()
+      ? (buildStableAmazonIdentityQuery(parse).trim() || buildFallbackIdentityQuery(parse).trim())
+      : (buildFallbackIdentityQuery(parse).trim() || buildStableAmazonIdentityQuery(parse).trim());
     const brandOnlyUniversal = isBrandOnlyFallbackQuery(universalKeyword, parse.brand);
     const universalKeywordParts = [
       parse.core_product_family.trim(),
@@ -754,6 +766,34 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     const universalCandidates = scoredCandidates.map((entry) => entry.item);
     const seed = pickFamilySeed(universalCandidates.slice(0, 12), parse);
+
+    // Safety net: when the vision model couldn't read the brand but the best-scoring
+    // catalog item has a known catalog brand, verify that brand's tokens appear somewhere
+    // in the package text we DID read (visible_text, product_name, family).
+    // If none of "nestle"/"crystal"/"deer park"/etc. tokens appear in "Chestnut Hill
+    // Purified Water", the keyword search returned an unrelated popular product.
+    const seedBrand = (seed.brand ?? "").trim();
+    if (!parse.brand.trim() && seedBrand) {
+      const packageBlob = [parse.product_name, parse.core_product_family, ...parse.visible_text]
+        .join(" ")
+        .toLowerCase();
+      const seedBrandTokens = familyTokens(seedBrand);
+      const seedBrandAppearsOnPackage = seedBrandTokens.some((tok) => packageBlob.includes(tok));
+      if (!seedBrandAppearsOnPackage) {
+        console.log(
+          `[image-search] seed brand "${seedBrand}" not found in package text — rejecting substitution`,
+        );
+        return NextResponse.json({
+          ok: true,
+          results: [] as ProductAnalysis[],
+          derivedQuery: searchKeyword,
+          imageUnclear: true,
+          notice: NOTICE_UNCLEAR,
+          visionParse: parse,
+        });
+      }
+    }
+
     const grouped = await collectFamilyResults({
       client,
       parse: {

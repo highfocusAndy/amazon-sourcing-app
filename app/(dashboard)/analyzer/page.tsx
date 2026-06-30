@@ -786,13 +786,8 @@ function AnalyzerPageContent() {
           setResults(enrichedResults);
           addProducts(enrichedResults);
 
-          // Auto-open detail panel with the exact match (mirrors Amazon Seller app behaviour)
-          const firstResult = enrichedResults[0];
-          if (firstResult) {
-            setSelectedProduct(firstResult);
-            setMobileDetailsOpen(true);
-            setDetailPanelCost("");
-          }
+          setSelectedProduct(null);
+          setMobileDetailsOpen(false);
 
           setViewFilter("all");
           setLastRunMode("manual");
@@ -1645,12 +1640,9 @@ function AnalyzerPageContent() {
     setIsScannerOpen(false);
     stopScanner();
     setScanPhase("analyzing");
-    const photoResults = await runImageProductSearchFromFile(imageFile);
+    await runImageProductSearchFromFile(imageFile);
     isScanLoadingRef.current = false;
     setScanPhase("idle");
-    if (photoResults && photoResults.length > 0) {
-      await handleSelectProduct(photoResults[0]);
-    }
   }
 
   captureScannerFrameAndSearchRef.current = captureScannerFrameAndSearch;

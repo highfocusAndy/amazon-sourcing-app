@@ -46,8 +46,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const catalogItems = await client.resolveAllCatalogItems(identifier);
-    if (catalogItems.length === 0) {
+    const exactItem = await client.resolveExactCatalogItem(identifier);
+    if (!exactItem) {
       return NextResponse.json({
         ok: false,
         error: "Product not found for this barcode.",
@@ -55,9 +55,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       });
     }
 
-    const results: ProductAnalysis[] = catalogItems.map((item) =>
-      buildCatalogOnlyResult(item, identifier, { group: "exact", reason: "Exact barcode match" }),
-    );
+    const results: ProductAnalysis[] = [
+      buildCatalogOnlyResult(exactItem, identifier, { group: "exact", reason: "Exact barcode match" }),
+    ];
     return NextResponse.json({ ok: true, results });
   } catch (error) {
     return NextResponse.json(
