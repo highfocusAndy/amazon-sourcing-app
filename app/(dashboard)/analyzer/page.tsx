@@ -1074,9 +1074,10 @@ function AnalyzerPageContent() {
           if (cancelled || hasScannedRef.current) return;
           const zxingModule = await import("@zxing/library");
           if (cancelled || hasScannedRef.current) return;
-          // TRY_HARDER (hint key 2) enables multi-angle scanning in ZXing so barcodes
-          // held sideways or upside-down are detected without any special orientation.
-          const hints = new Map<number, unknown>([[2, true]]);
+          // TRY_HARDER (DecodeHintType = 3) enables multi-angle scanning in ZXing so
+          // barcodes held sideways or upside-down are detected without special orientation.
+          // Key 2 is POSSIBLE_FORMATS (needs an array) — do not use it here.
+          const hints = new Map<number, unknown>([[3, true]]);
           const zxingReader = new (zxingModule.BrowserMultiFormatReader as unknown as new (h: Map<number, unknown>) => ZxingReaderLike)(hints);
           zxingReaderRef.current = zxingReader;
           if (zxingReader.decodeFromStream) {
