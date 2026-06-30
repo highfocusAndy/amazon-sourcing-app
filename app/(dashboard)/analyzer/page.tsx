@@ -733,62 +733,23 @@ function AnalyzerPageContent() {
         let analysisResults: ProductAnalysis[];
 
         if (lookupOnly && isScannerTriggered) {
-          // Step 1 – exact barcode identification
-          const barcodeResponse = await fetchWithTimeout("/api/analyze/barcode-scan", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ identifier: effectiveIdentifier }),
-          });
-          const barcodeJson = (await barcodeResponse.json()) as {
-            ok?: boolean;
-            error?: string;
-            results?: ProductAnalysis[];
-          };
-          if (!barcodeResponse.ok || !barcodeJson.results?.length) {
+          // Single-step: /api/analyze handles UPC/EAN directly — no two-round-trip needed.
+          let scanResults: ProductAnalysis[];
+          try {
+            scanResults = await runSingleAnalysis();
+          } catch {
             setManualIdentifierResolved(false);
             setResults([]);
             setErrorMessage(null);
-            setInfoMessage(
-              "Product not found for this barcode. Try Search by photo or enter ASIN/keyword.",
-            );
+            setInfoMessage("Product not found for this barcode. Try Search by photo or enter ASIN/keyword.");
             return;
           }
 
-          const catalogResults = barcodeJson.results;
-          const exactAsin = catalogResults[0]?.asin;
-
-          // Step 2 – full analysis on the exact ASIN so the detail panel gets prices/decisions
-          let enrichedResults: ProductAnalysis[] = catalogResults;
-          if (exactAsin) {
-            try {
-              const analyzeRes = await fetchWithTimeout("/api/analyze", {
-                method: "POST",
-                headers: { "content-type": "application/json" },
-                body: JSON.stringify({
-                  identifier: exactAsin,
-                  wholesalePrice: parsedWholesalePrice ?? 0,
-                  brand,
-                  projectedMonthlyUnits: parsedProjectedUnits ?? 1,
-                  sellerType: selectedSellerType,
-                  shippingCost: selectedSellerType === "FBM" ? Number(shippingCost) : 0,
-                }),
-              });
-              const analyzeJson = (await analyzeRes.json()) as { result?: ProductAnalysis; error?: string };
-              if (analyzeRes.ok && analyzeJson.result) {
-                enrichedResults = [analyzeJson.result, ...catalogResults.slice(1)];
-              }
-            } catch {
-              // Full analysis failed; keep catalog result so the panel still shows something
-            }
-          }
-
           setManualIdentifierResolved(true);
-          setResults(enrichedResults);
-          addProducts(enrichedResults);
-
+          setResults(scanResults);
+          addProducts(scanResults);
           setSelectedProduct(null);
           setMobileDetailsOpen(false);
-
           setViewFilter("all");
           setLastRunMode("manual");
           setInfoMessage(null);
@@ -2479,7 +2440,7 @@ function AnalyzerPageContent() {
 
       {isScannerOpen ? (
         /* Mobile: full-screen black / Desktop (md+): centered card over blurred overlay */
-        <div className="fixed inset-0 z-50 bg-black md:flex md:items-center md:justify-center md:bg-black/75 md:backdrop-blur-sm">
+        <div className="fixed inset-0 z-[300] bg-black md:flex md:items-center md:justify-center md:bg-black/75 md:backdrop-blur-sm">
           <div className="relative flex h-full w-full flex-col overflow-hidden bg-black md:h-auto md:w-full md:max-w-sm md:rounded-2xl md:shadow-2xl md:shadow-black/60">
 
             {/* Camera feed — fills screen on mobile, portrait card on desktop */}
@@ -2568,7 +2529,7 @@ function AnalyzerPageContent() {
             </div>
 
             {/* ── Bottom bar ── */}
-            <div className="absolute inset-x-0 bottom-0 flex items-center justify-between px-8 pb-10 pt-6 bg-gradient-to-t from-black/70 to-transparent md:pb-6">
+            <div className="absolute inset-x-0 bottom-0 flex items-center justify-between px-8 pt-6 bg-gradient-to-t from-black/70 to-transparent" style={{ paddingBottom: "max(2.5rem, calc(env(safe-area-inset-bottom, 0px) + 1.5rem))" }}>
 
               {/* Restart — icon-only circle, left */}
               <button
