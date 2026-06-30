@@ -595,6 +595,9 @@ export function normalizeProductLineKey(title: string): string {
   t = t.replace(/\b(twin|triple|duo)\s+pack\b/gi, " ");
   t = t.replace(/\b\d+(\.\d+)?\s*(fl\.?\s*oz|oz|ml|cl|l|lb|lbs|g|kg)\b/gi, " ");
   t = t.replace(/\b\d+(\.\d+)?\s*(ounce|ounces|gram|grams)\b/gi, " ");
+  // Strip container/packaging words so different forms of the same product
+  // (bag vs tin vs jar) compare as the same product line.
+  t = t.replace(/\b(bag|bags|pouch|pouches|packet|packets|sachet|sachets|tin|tins|canister|canisters|carton|cartons|resealable)\b/gi, " ");
   t = t.replace(/\s+/g, " ").trim();
   return t;
 }

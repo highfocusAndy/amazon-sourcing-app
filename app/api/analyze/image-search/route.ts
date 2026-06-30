@@ -276,7 +276,30 @@ function packageFormSearchTokens(packageForm: string): string[] {
   if (f === "tall bottle") return ["bottle"];
   if (f === "oil bottle") return ["oil", "bottle"];
   if (f === "jar") return ["jar"];
+  // Food / general packaging
+  if (/\b(bag|pouch|packet|sachet|resealable)\b/.test(f)) return ["bag"];
+  if (/\b(tin|canister)\b/.test(f)) return ["tin"];
+  if (/\b(box|carton)\b/.test(f)) return ["box"];
+  if (/\b(bottle)\b/.test(f)) return ["bottle"];
   return [];
+}
+
+/**
+ * Coarse container category from a package_form string or catalog title.
+ * Returns null when the form is ambiguous or not recognizable.
+ */
+type ContainerCategory = "bag" | "tin" | "box" | "bottle" | "jar" | "tube";
+
+function detectContainerCategory(text: string): ContainerCategory | null {
+  const t = text.trim().toLowerCase();
+  if (!t) return null;
+  if (/\b(bag|pouch|packet|sachet|resealable|zip.?lock|stand.?up)\b/.test(t)) return "bag";
+  if (/\b(tin|canister)\b/.test(t)) return "tin";
+  if (/\b(jar|tub)\b/.test(t)) return "jar";
+  if (/\b(tube)\b/.test(t)) return "tube";
+  if (/\b(box|carton)\b/.test(t)) return "box";
+  if (/\b(bottle)\b/.test(t)) return "bottle";
+  return null;
 }
 
 function titleMatchesPackageForm(title: string, packageForm: string): boolean {
@@ -284,6 +307,15 @@ function titleMatchesPackageForm(title: string, packageForm: string): boolean {
   if (tokens.length === 0) return true;
   const t = title.toLowerCase();
   return tokens.every((tok) => t.includes(tok));
+}
+
+/** True when the catalog title's container type is clearly a DIFFERENT category from what vision saw. */
+function titleContradictsPackageForm(title: string, packageForm: string): boolean {
+  const expected = detectContainerCategory(packageForm);
+  if (!expected) return false;
+  const found = detectContainerCategory(title);
+  if (!found) return false;
+  return found !== expected;
 }
 
 function scoreUniversalCandidate(
@@ -347,6 +379,11 @@ function scoreUniversalCandidate(
   }
   if (isLikelyCrossProductBundleTitle(item.title, parse)) {
     score -= 7;
+  }
+  // Penalise when the title's container type actively contradicts what vision saw
+  // (e.g. photo shows a bag, title says "tin" — different product form).
+  if (parse.package_form.trim() && titleContradictsPackageForm(item.title, parse.package_form)) {
+    score -= 5;
   }
 
   const hasStrongIdentityCue = familyCue || productNameCue;
@@ -860,6 +897,16 @@ function pickFamilySeed(items: CatalogItem[], parse: VisionProductFamilyParse): 
     if (familyTokensStrict.length > 0) {
       const familyHits = familyTokensStrict.filter((tok) => t.includes(tok)).length;
       if (familyHits === familyTokensStrict.length) s += 3;
+    }
+    // Prefer matching container form; penalise clearly wrong container type.
+    if (parse.package_form.trim()) {
+      if (!titleContradictsPackageForm(title, parse.package_form)) {
+        const expected = detectContainerCategory(parse.package_form);
+        const found = detectContainerCategory(title);
+        if (expected && found === expected) s += 4;
+      } else {
+        s -= 5;
+      }
     }
     return s;
   };
