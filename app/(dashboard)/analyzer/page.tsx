@@ -2480,12 +2480,12 @@ function AnalyzerPageContent() {
       {isScannerOpen ? (
         /* Mobile: full-screen black / Desktop (md+): centered card over blurred overlay */
         <div className="fixed inset-0 z-50 bg-black md:flex md:items-center md:justify-center md:bg-black/75 md:backdrop-blur-sm">
-          <div className="relative flex h-full w-full flex-col overflow-hidden bg-black md:h-auto md:w-full md:max-w-3xl md:rounded-2xl md:shadow-2xl md:shadow-black/60">
+          <div className="relative flex h-full w-full flex-col overflow-hidden bg-black md:h-auto md:w-full md:max-w-sm md:rounded-2xl md:shadow-2xl md:shadow-black/60">
 
-            {/* Camera feed — fills screen on mobile, 16:9 card on desktop */}
+            {/* Camera feed — fills screen on mobile, portrait card on desktop */}
             <video
               ref={videoRef}
-              className="h-full w-full object-cover md:aspect-video md:h-auto"
+              className="h-full w-full object-cover md:aspect-[3/4] md:h-auto"
               muted
               playsInline
             />
