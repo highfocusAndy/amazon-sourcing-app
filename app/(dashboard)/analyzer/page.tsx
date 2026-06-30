@@ -2436,94 +2436,137 @@ function AnalyzerPageContent() {
       ) : null}
 
       {isScannerOpen ? (
-        <div className="fixed inset-0 z-50 bg-black">
-          {/* Full-screen camera feed */}
-          <video ref={videoRef} className="h-full w-full object-cover" muted playsInline />
+        /* Mobile: full-screen black / Desktop (md+): centered card over blurred overlay */
+        <div className="fixed inset-0 z-50 bg-black md:flex md:items-center md:justify-center md:bg-black/75 md:backdrop-blur-sm">
+          <div className="relative flex h-full w-full flex-col overflow-hidden bg-black md:h-auto md:w-full md:max-w-lg md:rounded-2xl md:shadow-2xl md:shadow-black/60">
 
-          {/* Sweeping scan line */}
-          <div
-            className="pointer-events-none absolute inset-x-0 h-px bg-teal-400"
-            style={{ boxShadow: "0 0 8px 2px rgba(45,212,191,0.7)", animation: "scanLine 2s ease-in-out infinite" }}
-          />
+            {/* Camera feed — fills screen on mobile, 16:9 card on desktop */}
+            <video
+              ref={videoRef}
+              className="h-full w-full object-cover md:aspect-video md:h-auto"
+              muted
+              playsInline
+            />
 
-          {/* Corner bracket markers */}
-          <div className="pointer-events-none absolute inset-0">
-            <div className="absolute left-8 top-24 h-8 w-8 rounded-tl border-l-2 border-t-2 border-teal-400" />
-            <div className="absolute right-8 top-24 h-8 w-8 rounded-tr border-r-2 border-t-2 border-teal-400" />
-            <div className="absolute bottom-36 left-8 h-8 w-8 rounded-bl border-b-2 border-l-2 border-teal-400" />
-            <div className="absolute bottom-36 right-8 h-8 w-8 rounded-br border-b-2 border-r-2 border-teal-400" />
-          </div>
+            {/* ── Viewfinder guide ── */}
+            {/* Subtle dark surround panels that frame the scan zone */}
+            <div className="pointer-events-none absolute inset-x-0 top-0 bg-black/50" style={{ height: "22%" }} />
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-black/50" style={{ height: "30%" }} />
+            <div className="pointer-events-none absolute left-0 bg-black/50" style={{ top: "22%", width: "7%", height: "48%" }} />
+            <div className="pointer-events-none absolute right-0 bg-black/50" style={{ top: "22%", width: "7%", height: "48%" }} />
 
-          {/* Status badge */}
-          <div className="pointer-events-none absolute bottom-32 left-1/2 -translate-x-1/2">
-            <span className="flex items-center gap-1.5 rounded-full bg-slate-900/75 px-3 py-1.5 text-xs font-medium text-teal-300 backdrop-blur-sm">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-teal-400" />
-              {scanPhase === "analyzing"
-                ? "Identifying product…"
-                : scanPhase === "capturing"
-                ? "Capturing…"
-                : photoSearchAvailable === true
-                ? "Looking for barcode · photo scan ready"
-                : "Looking for barcode…"}
-            </span>
-          </div>
-
-          {/* In-scanner loading overlay — shown while analyzing, keeps camera frame visible */}
-          {(scanPhase === "analyzing" || scanPhase === "capturing") && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/60">
-              <div className="h-12 w-12 animate-spin rounded-full border-2 border-teal-400 border-t-transparent" />
-              <p className="mt-4 text-sm font-medium text-slate-200">Identifying product…</p>
-            </div>
-          )}
-
-          {/* Error toast */}
-          {scannerError && (
-            <div className="absolute top-20 left-1/2 -translate-x-1/2 w-full max-w-xs px-4">
-              <p className="rounded-lg bg-rose-900/85 px-4 py-2 text-sm text-rose-300 text-center backdrop-blur-sm">{scannerError}</p>
-            </div>
-          )}
-
-          {/* Top bar: title + close */}
-          <div className="absolute inset-x-0 top-0 flex items-center justify-between px-4 py-3 bg-gradient-to-b from-slate-900/70 to-transparent">
-            <div className="flex items-center gap-2">
-              <div className="h-2 w-2 animate-pulse rounded-full bg-teal-400" />
-              <span className="text-sm font-semibold text-slate-100">Scanning product</span>
-            </div>
-            <button
-              type="button"
-              onClick={() => setIsScannerOpen(false)}
-              className="rounded-full bg-slate-800/80 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-700 backdrop-blur-sm"
+            {/* Corner brackets + scan line — sized to the clear viewfinder zone */}
+            <div
+              className="pointer-events-none absolute"
+              style={{ top: "22%", left: "7%", width: "86%", height: "48%" }}
             >
-              ✕ Close
-            </button>
-          </div>
+              {/* Corners */}
+              <div className="absolute left-0 top-0 h-10 w-10 rounded-tl-lg border-l-[3px] border-t-[3px] border-teal-400" style={{ filter: "drop-shadow(0 0 6px rgba(45,212,191,0.7))" }} />
+              <div className="absolute right-0 top-0 h-10 w-10 rounded-tr-lg border-r-[3px] border-t-[3px] border-teal-400" style={{ filter: "drop-shadow(0 0 6px rgba(45,212,191,0.7))" }} />
+              <div className="absolute bottom-0 left-0 h-10 w-10 rounded-bl-lg border-b-[3px] border-l-[3px] border-teal-400" style={{ filter: "drop-shadow(0 0 6px rgba(45,212,191,0.7))" }} />
+              <div className="absolute bottom-0 right-0 h-10 w-10 rounded-br-lg border-b-[3px] border-r-[3px] border-teal-400" style={{ filter: "drop-shadow(0 0 6px rgba(45,212,191,0.7))" }} />
+              {/* Sweeping scan line (relative to this box) */}
+              <div
+                className="pointer-events-none absolute inset-x-0 h-0.5 bg-gradient-to-r from-transparent via-teal-400 to-transparent"
+                style={{ boxShadow: "0 0 10px 3px rgba(45,212,191,0.6)", animation: "scanLine 2s ease-in-out infinite" }}
+              />
+            </div>
 
-          {/* Bottom bar: restart + photo search */}
-          <div className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-3 px-4 py-6 bg-gradient-to-t from-slate-900/70 to-transparent">
-            <button
-              type="button"
-              onClick={() => {
-                setIsScannerOpen(false);
-                setScannerError(null);
-                disposeScannerMedia();
-                void (async () => {
-                  const ok = await acquireScannerStream();
-                  if (ok) setIsScannerOpen(true);
-                })();
-              }}
-              className="rounded-lg bg-slate-800/80 px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-700 backdrop-blur-sm"
-            >
-              Restart
-            </button>
-            <button
-              type="button"
-              onClick={() => { void captureScannerFrameAndSearchRef.current(); }}
-              disabled={photoSearchAvailable !== true || scanPhase === "capturing" || scanPhase === "analyzing"}
-              title={photoSearchAvailable !== true ? "Needs OPENAI_API_KEY on the server" : undefined}
-              className="rounded-full bg-teal-500 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-teal-500/30 hover:bg-teal-400 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {scanPhase === "capturing" || scanPhase === "analyzing" ? "Searching…" : "Search by photo"}
-            </button>
+            {/* Hint text just above the viewfinder */}
+            <div className="pointer-events-none absolute left-0 right-0 flex justify-center" style={{ top: "15%" }}>
+              <span className="text-[11px] font-medium uppercase tracking-widest text-white/60">
+                Point at barcode or product
+              </span>
+            </div>
+
+            {/* Status pill just below the viewfinder */}
+            <div className="pointer-events-none absolute left-0 right-0 flex justify-center" style={{ top: "72%" }}>
+              <span className="flex items-center gap-2 rounded-full bg-black/55 px-4 py-1.5 text-xs font-medium text-teal-300 backdrop-blur-sm">
+                {(scanPhase === "analyzing" || scanPhase === "capturing") ? (
+                  <>
+                    <span className="h-3 w-3 animate-spin rounded-full border-[2px] border-teal-400 border-t-transparent" />
+                    Identifying product…
+                  </>
+                ) : (
+                  <>
+                    <span className="relative flex h-2 w-2">
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-teal-400 opacity-60" />
+                      <span className="relative inline-flex h-2 w-2 rounded-full bg-teal-400" />
+                    </span>
+                    {photoSearchAvailable === true ? "Scanning · tap below for photo" : "Looking for barcode…"}
+                  </>
+                )}
+              </span>
+            </div>
+
+            {/* Error toast */}
+            {scannerError && (
+              <div className="absolute left-1/2 -translate-x-1/2 w-full max-w-xs px-4" style={{ top: "13%" }}>
+                <p className="rounded-xl bg-rose-950/90 px-4 py-2.5 text-sm text-rose-300 text-center shadow-lg backdrop-blur-sm">{scannerError}</p>
+              </div>
+            )}
+
+            {/* ── Top bar ── */}
+            <div className="absolute inset-x-0 top-0 flex items-center justify-between px-5 py-4 bg-gradient-to-b from-black/65 to-transparent">
+              <div className="flex items-center gap-2.5">
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-teal-400 opacity-75" />
+                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-teal-500" />
+                </span>
+                <span className="text-sm font-semibold tracking-wide text-white">Scan Product</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsScannerOpen(false)}
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white/80 backdrop-blur-sm transition-colors hover:bg-white/20"
+                aria-label="Close scanner"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* ── Bottom bar ── */}
+            <div className="absolute inset-x-0 bottom-0 flex items-center justify-between px-8 pb-10 pt-6 bg-gradient-to-t from-black/70 to-transparent md:pb-6">
+
+              {/* Restart — icon-only circle, left */}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsScannerOpen(false);
+                  setScannerError(null);
+                  disposeScannerMedia();
+                  void (async () => {
+                    const ok = await acquireScannerStream();
+                    if (ok) setIsScannerOpen(true);
+                  })();
+                }}
+                className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white/70 backdrop-blur-sm transition-colors hover:bg-white/20"
+                title="Restart camera"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+                  <path fillRule="evenodd" d="M15.312 11.424a5.5 5.5 0 01-9.201 2.466l-.312-.311h2.433a.75.75 0 000-1.5H5.498a.75.75 0 00-.75.75v3.744a.75.75 0 001.5 0v-2.43l.31.31a7 7 0 0011.712-3.138.75.75 0 00-1.449-.39zm1.23-3.723a.75.75 0 00.219-.53V3.427a.75.75 0 00-1.5 0V5.89l-.31-.31A7 7 0 003.239 8.717a.75.75 0 001.448.389A5.5 5.5 0 0113.89 6.64l.311.31h-2.432a.75.75 0 000 1.5h3.744a.75.75 0 00.53-.219z" clipRule="evenodd" />
+                </svg>
+              </button>
+
+              {/* Photo search — large shutter-style button, center */}
+              <button
+                type="button"
+                onClick={() => { void captureScannerFrameAndSearchRef.current(); }}
+                disabled={photoSearchAvailable !== true || scanPhase === "capturing" || scanPhase === "analyzing"}
+                title={photoSearchAvailable !== true ? "Needs OPENAI_API_KEY on the server" : "Search by photo"}
+                className="relative flex h-[72px] w-[72px] items-center justify-center rounded-full border-[3px] border-white/80 bg-transparent shadow-xl transition-transform hover:scale-105 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {(scanPhase === "capturing" || scanPhase === "analyzing") ? (
+                  <span className="h-7 w-7 animate-spin rounded-full border-[3px] border-white/40 border-t-white" />
+                ) : (
+                  <span className="h-14 w-14 rounded-full bg-white shadow-inner" />
+                )}
+              </button>
+
+              {/* Spacer to balance layout */}
+              <div className="h-11 w-11" />
+            </div>
+
           </div>
         </div>
       ) : null}
