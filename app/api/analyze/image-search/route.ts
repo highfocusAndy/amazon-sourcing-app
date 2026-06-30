@@ -767,30 +767,40 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const universalCandidates = scoredCandidates.map((entry) => entry.item);
     const seed = pickFamilySeed(universalCandidates.slice(0, 12), parse);
 
-    // Safety net: when the vision model couldn't read the brand but the best-scoring
-    // catalog item has a known catalog brand, verify that brand's tokens appear somewhere
-    // in the package text we DID read (visible_text, product_name, family).
-    // If none of "nestle"/"crystal"/"deer park"/etc. tokens appear in "Chestnut Hill
-    // Purified Water", the keyword search returned an unrelated popular product.
+    // Safety net: when the vision model couldn't read the brand, check whether the
+    // visible text on the package ACTIVELY CONTRADICTS the seed brand.
+    // Only reject if there are DISTINCTIVE tokens in visible_text (≥4 chars, not generic
+    // product-type / size words) that don't appear anywhere in the seed's title or brand.
+    // e.g. "Chestnut Hill" visible → seed "Nestle Pure Life" → reject.
+    // e.g. label has no readable brand text → seed "Crystal Geyser" → allow (can't contradict).
     const seedBrand = (seed.brand ?? "").trim();
     if (!parse.brand.trim() && seedBrand) {
-      const packageBlob = [parse.product_name, parse.core_product_family, ...parse.visible_text]
-        .join(" ")
-        .toLowerCase();
-      const seedBrandTokens = familyTokens(seedBrand);
-      const seedBrandAppearsOnPackage = seedBrandTokens.some((tok) => packageBlob.includes(tok));
-      if (!seedBrandAppearsOnPackage) {
-        console.log(
-          `[image-search] seed brand "${seedBrand}" not found in package text — rejecting substitution`,
-        );
-        return NextResponse.json({
-          ok: true,
-          results: [] as ProductAnalysis[],
-          derivedQuery: searchKeyword,
-          imageUnclear: true,
-          notice: NOTICE_UNCLEAR,
-          visionParse: parse,
-        });
+      const genericTokens = new Set([
+        ...familyTokens(parse.core_product_family),
+        ...familyTokens(parse.product_type),
+        ...familyTokens(parse.size),
+        ...familyTokens(parse.count),
+      ]);
+      const distinctiveTokens = parse.visible_text
+        .flatMap((phrase) => familyTokens(phrase))
+        .filter((tok) => !genericTokens.has(tok) && tok.length >= 4 && !/^\d+$/.test(tok));
+
+      if (distinctiveTokens.length > 0) {
+        const seedBlob = `${seed.title ?? ""} ${seedBrand}`.toLowerCase();
+        const anyTokenMatchesSeed = distinctiveTokens.some((tok) => seedBlob.includes(tok));
+        if (!anyTokenMatchesSeed) {
+          console.log(
+            `[image-search] seed "${seed.title}" contradicted by distinctive package tokens [${distinctiveTokens.join(", ")}] — rejecting substitution`,
+          );
+          return NextResponse.json({
+            ok: true,
+            results: [] as ProductAnalysis[],
+            derivedQuery: searchKeyword,
+            imageUnclear: true,
+            notice: NOTICE_UNCLEAR,
+            visionParse: parse,
+          });
+        }
       }
     }
 
