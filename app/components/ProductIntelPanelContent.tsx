@@ -2,7 +2,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { useMemo, type MouseEvent, type ReactNode } from "react";
-import { amazonOfferListingUrl } from "@/lib/marketplaces";
+import { amazonOfferListingUrl, amazonKeywordSearchUrl } from "@/lib/marketplaces";
 import { computeEffectiveEconomics, approvalRequiredEffective, approvalEligibilityUnset } from "@/lib/sourcingIntelligence";
 import { estimateMonthlySalesFromBsr } from "@/lib/salesEstimate";
 import { useCompetitionThresholds } from "@/app/context/CompetitionThresholdsContext";
@@ -329,7 +329,19 @@ export function ProductIntelPanelContent({
                 {selectedProduct.offerLabel ? (
                   <p className="mt-1 text-sm text-teal-400">Listing: {selectedProduct.offerLabel}</p>
                 ) : null}
-                {selectedProduct.brand ? <p className="text-sm text-slate-400">Brand: {selectedProduct.brand}</p> : null}
+                {selectedProduct.brand ? (
+                  <p className="text-sm text-slate-400">
+                    Brand:{" "}
+                    <a
+                      href={amazonKeywordSearchUrl(marketplaceDomain, selectedProduct.brand)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-slate-300 underline decoration-slate-500 underline-offset-2 hover:text-teal-300 hover:decoration-teal-400"
+                    >
+                      {selectedProduct.brand}
+                    </a>
+                  </p>
+                ) : null}
                 {selectedProduct.asin ? <p className="text-xs text-slate-500">ASIN: {selectedProduct.asin}</p> : null}
                 {selectedProduct.salesRankCategory ? (
                   <p className="text-xs text-slate-500">Category: {selectedProduct.salesRankCategory}</p>

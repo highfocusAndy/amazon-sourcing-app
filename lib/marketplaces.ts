@@ -43,6 +43,12 @@ export function amazonOfferListingUrl(marketplaceDomain: string, asin: string): 
   return amazonProductDetailUrl(marketplaceDomain, asin);
 }
 
+/** Amazon keyword search URL — used for brand search links. */
+export function amazonKeywordSearchUrl(marketplaceDomain: string, keyword: string): string {
+  const host = marketplaceDomain.replace(/^www\./i, "").trim() || "amazon.com";
+  return `https://www.${host}/s?k=${encodeURIComponent(keyword)}`;
+}
+
 /** Standard product detail (PDP) URL — most reliable across devices and marketplaces. */
 export function amazonProductDetailUrl(marketplaceDomain: string, asin: string): string {
   const host = marketplaceDomain.replace(/^www\./i, "").trim() || "amazon.com";

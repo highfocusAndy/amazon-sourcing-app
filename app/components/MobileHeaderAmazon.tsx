@@ -65,11 +65,28 @@ export function MobileHeaderAmazon() {
   }
 
   return (
-    <span
-      className="max-w-[5.5rem] shrink-0 truncate text-right text-[10px] font-semibold leading-tight text-teal-200/90"
-      title={amazonStatus.title ?? "Amazon connected"}
-    >
-      {amazonStatus.title ?? "Amazon"}
-    </span>
+    <>
+      <button
+        type="button"
+        onClick={() => setModalOpen(true)}
+        title="Manage Amazon seller account"
+        className="flex max-w-[5.5rem] shrink-0 flex-col items-end gap-0 text-right"
+      >
+        <span className="truncate text-[10px] font-semibold leading-tight text-teal-200/90">
+          {amazonStatus.title ?? "Amazon"}
+        </span>
+        <span className="text-[9px] leading-tight text-slate-400 underline underline-offset-1 decoration-slate-500">
+          manage
+        </span>
+      </button>
+      {modalOpen ? (
+        <AmazonAccountModal
+          onClose={() => {
+            setModalOpen(false);
+            refresh();
+          }}
+        />
+      ) : null}
+    </>
   );
 }
