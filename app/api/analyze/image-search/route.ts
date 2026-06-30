@@ -781,7 +781,27 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       });
     }
 
-    const rawUniversalItems = await client.searchCatalogByKeywordMultiple(searchKeyword, FAMILY_SEARCH_FETCH_CAP);
+    let rawUniversalItems = await client.searchCatalogByKeywordMultiple(searchKeyword, FAMILY_SEARCH_FETCH_CAP);
+
+    // When vision detected a specific container form, Amazon's popularity-ranked results often
+    // omit that form entirely (e.g. "cashews" returns tins, not bags).
+    // Run a supplemental search with the container token so those variants make it into
+    // the candidate pool and can be scored / selected.
+    const containerTokens = packageFormSearchTokens(parse.package_form);
+    if (containerTokens.length > 0) {
+      const formKeyword = `${searchKeyword} ${containerTokens.join(" ")}`.trim();
+      if (formKeyword !== searchKeyword) {
+        const formItems = await client
+          .searchCatalogByKeywordMultiple(formKeyword, FAMILY_SEARCH_FETCH_CAP)
+          .catch(() => [] as CatalogItem[]);
+        const uniqueMap = new Map(rawUniversalItems.map((it) => [it.asin, it]));
+        for (const it of formItems) {
+          if (!uniqueMap.has(it.asin)) uniqueMap.set(it.asin, it);
+        }
+        rawUniversalItems = [...uniqueMap.values()];
+      }
+    }
+
     const semanticTokens = nonBrandKeywordTokens(searchKeyword, parse.brand);
     const scoredCandidates = rawUniversalItems
       .map((item) => ({
