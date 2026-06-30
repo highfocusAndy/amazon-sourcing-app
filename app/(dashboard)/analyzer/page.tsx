@@ -15,6 +15,7 @@ import {
   type MouseEvent,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import { useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { DashboardHeaderAccount } from "@/app/components/DashboardHeaderAccount";
@@ -960,7 +961,6 @@ function AnalyzerPageContent() {
     setScannerError(null);
     hasScannedRef.current = false;
     let cancelled = false;
-    let detectionErrorShown = false;
     let attachAttempts = 0;
 
     const applyScannedValue = (scannedValue: string): void => {
@@ -1018,17 +1018,7 @@ function AnalyzerPageContent() {
             applyScannedValue(scannedValue);
             return;
           }
-          const errorName = error?.name ?? "";
-          if (
-            errorName &&
-            errorName !== "NotFoundException" &&
-            errorName !== "ChecksumException" &&
-            errorName !== "FormatException" &&
-            !detectionErrorShown
-          ) {
-            setScannerError("Scanner is active but could not decode this frame. Try better lighting and distance.");
-            detectionErrorShown = true;
-          }
+          void error;
         };
 
         const startZXingDecode = async (): Promise<void> => {
@@ -2438,7 +2428,7 @@ function AnalyzerPageContent() {
         </>
       ) : null}
 
-      {isScannerOpen ? (
+      {isScannerOpen && typeof document !== "undefined" ? createPortal(
         /* Mobile: full-screen black / Desktop (md+): centered card over blurred overlay */
         <div className="fixed inset-0 z-[300] bg-black md:flex md:items-center md:justify-center md:bg-black/75 md:backdrop-blur-sm">
           <div className="relative flex h-full w-full flex-col overflow-hidden bg-black md:h-auto md:w-full md:max-w-sm md:rounded-2xl md:shadow-2xl md:shadow-black/60">
@@ -2571,7 +2561,8 @@ function AnalyzerPageContent() {
             </div>
 
           </div>
-        </div>
+        </div>,
+        document.body
       ) : null}
       <style>{`
         @keyframes scanLine {
