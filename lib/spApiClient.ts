@@ -1604,24 +1604,22 @@ export class SpApiClient {
     const digits = normalized.replace(/\D/g, "");
     if (UPC_EAN_REGEX.test(digits)) {
       const identifierCandidates = buildNumericIdentifierCandidates(digits);
+      // Fire all candidate+type combinations in parallel — sequential fallbacks
+      // were the primary cause of slow UPC scan resolution (up to 4 serial calls).
+      const tasks: Promise<CatalogItem | null>[] = [];
       for (const candidate of identifierCandidates) {
-        // Pick the single most-likely type for this digit count — covers 99%+ of
-        // supplier data without paying for sequential fallback calls upfront.
         const primaryType: "UPC" | "EAN" | "GTIN" =
           candidate.length === 13 ? "EAN" : candidate.length === 12 ? "UPC" : "GTIN";
-
-        const primary = await this.searchCatalogByIdentifier(primaryType, candidate).catch(() => null);
-        if (primary) return primary;
-
-        // One cross-type fallback: some suppliers encode EAN-12 as 12-digit or
-        // pad a UPC to 13 digits — worth a single extra attempt, not three.
+        tasks.push(this.searchCatalogByIdentifier(primaryType, candidate).catch(() => null));
         const fallbackType: "UPC" | "EAN" | null =
           primaryType === "UPC" ? "EAN" : primaryType === "EAN" ? "UPC" : null;
         if (fallbackType) {
-          const fallback = await this.searchCatalogByIdentifier(fallbackType, candidate).catch(() => null);
-          if (fallback) return fallback;
+          tasks.push(this.searchCatalogByIdentifier(fallbackType, candidate).catch(() => null));
         }
       }
+      const results = await Promise.all(tasks);
+      const found = results.find((r) => r !== null) ?? null;
+      if (found) return found;
     }
 
     return null;

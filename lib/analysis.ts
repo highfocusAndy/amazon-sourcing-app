@@ -457,19 +457,39 @@ export async function analyzeProduct(
 
     const env = getServerEnv();
     const marketplaceId = spApiClient.marketplaceId ?? env.marketplaceId;
-    const [pricing, listingRestrictionsResult, amazonSalesVolumeLabel] = await Promise.all([
-      spApiClient.fetchCompetitivePricing(resolvedAsin),
-      options?.skipRestrictions
-        ? Promise.resolve({ data: null, error: null as string | null })
-        : spApiClient
-            .fetchListingRestrictions(resolvedAsin)
-            .then((data) => ({ data, error: null as string | null }))
-            .catch((error) => ({
-              data: null,
-              error: error instanceof Error ? error.message : "Listing restrictions lookup failed.",
-            })),
-      extractAmazonSalesVolume(resolvedAsin, marketplaceId),
-    ]);
+
+    // Start pricing first so fee estimate can begin as soon as we have a buy-box price,
+    // without waiting for the slower restrictions check and page-scrape to finish.
+    const pricingPromise = spApiClient.fetchCompetitivePricing(resolvedAsin);
+    const restrictionsPromise = options?.skipRestrictions
+      ? Promise.resolve({ data: null, error: null as string | null })
+      : spApiClient
+          .fetchListingRestrictions(resolvedAsin)
+          .then((data) => ({ data, error: null as string | null }))
+          .catch((error) => ({
+            data: null,
+            error: error instanceof Error ? error.message : "Listing restrictions lookup failed.",
+          }));
+    const salesVolumePromise = extractAmazonSalesVolume(resolvedAsin, marketplaceId);
+
+    // Fee estimate starts the moment pricing resolves — overlaps with restrictions + scrape.
+    const sellerTypeForFee = result.sellerType;
+    const feeEstimatePromise = pricingPromise.then(async (p) => {
+      if (p.buyBoxPrice === null) return null;
+      try {
+        return await spApiClient.fetchFeeEstimate(
+          resolvedAsin,
+          { listingPrice: p.listingPrice ?? p.buyBoxPrice, shippingAmount: p.shippingAmount ?? 0 },
+          sellerTypeForFee,
+        );
+      } catch {
+        return null;
+      }
+    });
+
+    const [pricing, listingRestrictionsResult, amazonSalesVolumeLabel, feeEstimateResult] =
+      await Promise.all([pricingPromise, restrictionsPromise, salesVolumePromise, feeEstimatePromise]);
+
     result.buyBoxPrice = pricing.buyBoxPrice;
     result.amazonSalesVolumeLabel = amazonSalesVolumeLabel ?? null;
     result.offerCount = pricing.offerCount;
@@ -503,13 +523,8 @@ export async function analyzeProduct(
     }
 
     if (result.buyBoxPrice !== null) {
-      try {
-        const listingForFees = pricing.listingPrice ?? result.buyBoxPrice;
-        const shippingForFees = pricing.shippingAmount ?? 0;
-        const feeEstimate = await spApiClient.fetchFeeEstimate(resolvedAsin, {
-          listingPrice: listingForFees,
-          shippingAmount: shippingForFees,
-        }, result.sellerType);
+      const feeEstimate = feeEstimateResult;
+      if (feeEstimate) {
         let referralFee = feeEstimate.referralFee;
         let fulfillmentFee = feeEstimate.fulfillmentFee;
 
@@ -539,7 +554,7 @@ export async function analyzeProduct(
           result.fbaFee = 0;
           result.totalFees = toCurrency(result.referralFee + result.shippingCost) ?? 0;
         }
-      } catch {
+      } else {
         result.referralFee = estimateReferralFee(result.buyBoxPrice);
         result.reasons.push("Fee preview unavailable; using estimated referral fee (15%).");
         if (result.sellerType === "FBM") {
