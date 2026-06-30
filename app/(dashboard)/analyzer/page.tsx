@@ -1074,7 +1074,10 @@ function AnalyzerPageContent() {
           if (cancelled || hasScannedRef.current) return;
           const zxingModule = await import("@zxing/library");
           if (cancelled || hasScannedRef.current) return;
-          const zxingReader = new zxingModule.BrowserMultiFormatReader() as unknown as ZxingReaderLike;
+          // TRY_HARDER (hint key 2) enables multi-angle scanning in ZXing so barcodes
+          // held sideways or upside-down are detected without any special orientation.
+          const hints = new Map<number, unknown>([[2, true]]);
+          const zxingReader = new (zxingModule.BrowserMultiFormatReader as unknown as new (h: Map<number, unknown>) => ZxingReaderLike)(hints);
           zxingReaderRef.current = zxingReader;
           if (zxingReader.decodeFromStream) {
             await zxingReader.decodeFromStream(stream, video, onZXingResult);
@@ -1092,6 +1095,34 @@ function AnalyzerPageContent() {
 
         const detector = new detectorCtor({ formats: [...BARCODE_DETECTOR_FORMATS] });
         let nativeDetectFailCount = 0;
+        let frameCount = 0;
+
+        // Try the same frame rotated at 90°, 180°, 270° — catches barcodes
+        // held sideways, upside-down, or at any angle.
+        const detectRotated = async (video: HTMLVideoElement): Promise<string | null> => {
+          const w = video.videoWidth;
+          const h = video.videoHeight;
+          if (!w || !h) return null;
+          for (const angleDeg of [90, 180, 270]) {
+            const swapped = angleDeg === 90 || angleDeg === 270;
+            const canvas = document.createElement("canvas");
+            canvas.width = swapped ? h : w;
+            canvas.height = swapped ? w : h;
+            const ctx = canvas.getContext("2d");
+            if (!ctx) continue;
+            ctx.translate(canvas.width / 2, canvas.height / 2);
+            ctx.rotate((angleDeg * Math.PI) / 180);
+            ctx.drawImage(video, -w / 2, -h / 2);
+            try {
+              const hits = await detector.detect(canvas);
+              const val = hits.map((e) => e.rawValue?.trim() ?? "").find((v) => v.length > 0);
+              if (val) return val;
+            } catch {
+              // ignore per-rotation failures
+            }
+          }
+          return null;
+        };
 
         const scanLoop = async (): Promise<void> => {
           if (cancelled || hasScannedRef.current || !videoRef.current) return;
@@ -1106,6 +1137,16 @@ function AnalyzerPageContent() {
               if (scannedValue) {
                 applyScannedValue(scannedValue);
                 return;
+              }
+              // Every 10 frames also try rotated orientations so barcodes held
+              // sideways, upside-down, or at any angle are detected.
+              frameCount++;
+              if (frameCount % 10 === 0) {
+                const rotatedValue = await detectRotated(videoRef.current);
+                if (rotatedValue && !hasScannedRef.current) {
+                  applyScannedValue(rotatedValue);
+                  return;
+                }
               }
             }
           } catch {
@@ -2438,7 +2479,7 @@ function AnalyzerPageContent() {
       {isScannerOpen ? (
         /* Mobile: full-screen black / Desktop (md+): centered card over blurred overlay */
         <div className="fixed inset-0 z-50 bg-black md:flex md:items-center md:justify-center md:bg-black/75 md:backdrop-blur-sm">
-          <div className="relative flex h-full w-full flex-col overflow-hidden bg-black md:h-auto md:w-full md:max-w-lg md:rounded-2xl md:shadow-2xl md:shadow-black/60">
+          <div className="relative flex h-full w-full flex-col overflow-hidden bg-black md:h-auto md:w-full md:max-w-3xl md:rounded-2xl md:shadow-2xl md:shadow-black/60">
 
             {/* Camera feed — fills screen on mobile, 16:9 card on desktop */}
             <video
