@@ -1019,13 +1019,14 @@ function AnalyzerPageContent() {
       lastAutoManualCalcKeyRef.current = "";
       setErrorMessage(null);
 
-      setIsScannerOpen(false);
-
       if (isManualLoadingRef.current || isUploadLoadingRef.current) {
+        setIsScannerOpen(false);
         setInfoMessage(`Scanned identifier: ${normalizedScanned}. Finish current run, then continue.`);
         return;
       }
 
+      // Freeze the camera frame so user sees the still while we analyze.
+      if (videoRef.current) videoRef.current.pause();
       isScanLoadingRef.current = true;
       setScanPhase("analyzing");
       const run = runManualAnalysisRef.current;
@@ -1033,6 +1034,8 @@ function AnalyzerPageContent() {
         void run(sellerTypeRef.current, false, normalizedScanned, true, true).finally(() => {
           isScanLoadingRef.current = false;
           setScanPhase("idle");
+          setIsScannerOpen(false);
+          disposeScannerMedia();
         });
       }
     };
@@ -1636,13 +1639,15 @@ function AnalyzerPageContent() {
       return;
     }
     const imageFile = new File([blob], "camera-product.jpg", { type: "image/jpeg" });
+    // Freeze the captured frame so user sees it while we analyze.
+    if (videoRef.current) videoRef.current.pause();
     isScanLoadingRef.current = true;
-    setIsScannerOpen(false);
-    stopScanner();
     setScanPhase("analyzing");
     await runImageProductSearchFromFile(imageFile);
     isScanLoadingRef.current = false;
     setScanPhase("idle");
+    setIsScannerOpen(false);
+    stopScanner();
   }
 
   captureScannerFrameAndSearchRef.current = captureScannerFrameAndSearch;
@@ -1948,8 +1953,8 @@ function AnalyzerPageContent() {
         playsInline
         aria-hidden
       />
-      {/* Global loading spinner (includes scan/photo processing). */}
-      {(isManualLoading || isUploadLoading || panelAnalysisLoading || isScanLoadingRef.current) && (
+      {/* Global loading spinner (excludes scan — scan shows its own in-scanner overlay). */}
+      {(isManualLoading || isUploadLoading || panelAnalysisLoading) && (
         <div className="pointer-events-none fixed inset-0 z-40 flex items-center justify-center bg-slate-900/40">
           <div className="flex flex-col items-center gap-3">
             <div className="h-10 w-10 animate-spin rounded-full border-2 border-teal-400 border-t-transparent" />
@@ -2431,99 +2436,94 @@ function AnalyzerPageContent() {
       ) : null}
 
       {isScannerOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-2xl rounded-xl border border-slate-600 bg-slate-900 shadow-2xl shadow-black/50">
-            <div className="flex items-center justify-between border-b border-slate-700 px-4 py-3">
-              <div className="flex items-center gap-2.5">
-                <div className="h-2 w-2 animate-pulse rounded-full bg-teal-400" />
-                <h3 className="text-base font-semibold text-slate-100">Scanning product</h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsScannerOpen(false)}
-                className="rounded-md border border-slate-600 px-2 py-1 text-xs font-semibold text-slate-300 hover:bg-slate-700"
-              >
-                Close
-              </button>
+        <div className="fixed inset-0 z-50 bg-black">
+          {/* Full-screen camera feed */}
+          <video ref={videoRef} className="h-full w-full object-cover" muted playsInline />
+
+          {/* Sweeping scan line */}
+          <div
+            className="pointer-events-none absolute inset-x-0 h-px bg-teal-400"
+            style={{ boxShadow: "0 0 8px 2px rgba(45,212,191,0.7)", animation: "scanLine 2s ease-in-out infinite" }}
+          />
+
+          {/* Corner bracket markers */}
+          <div className="pointer-events-none absolute inset-0">
+            <div className="absolute left-8 top-24 h-8 w-8 rounded-tl border-l-2 border-t-2 border-teal-400" />
+            <div className="absolute right-8 top-24 h-8 w-8 rounded-tr border-r-2 border-t-2 border-teal-400" />
+            <div className="absolute bottom-36 left-8 h-8 w-8 rounded-bl border-b-2 border-l-2 border-teal-400" />
+            <div className="absolute bottom-36 right-8 h-8 w-8 rounded-br border-b-2 border-r-2 border-teal-400" />
+          </div>
+
+          {/* Status badge */}
+          <div className="pointer-events-none absolute bottom-32 left-1/2 -translate-x-1/2">
+            <span className="flex items-center gap-1.5 rounded-full bg-slate-900/75 px-3 py-1.5 text-xs font-medium text-teal-300 backdrop-blur-sm">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-teal-400" />
+              {scanPhase === "analyzing"
+                ? "Identifying product…"
+                : scanPhase === "capturing"
+                ? "Capturing…"
+                : photoSearchAvailable === true
+                ? "Looking for barcode · photo scan ready"
+                : "Looking for barcode…"}
+            </span>
+          </div>
+
+          {/* In-scanner loading overlay — shown while analyzing, keeps camera frame visible */}
+          {(scanPhase === "analyzing" || scanPhase === "capturing") && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/60">
+              <div className="h-12 w-12 animate-spin rounded-full border-2 border-teal-400 border-t-transparent" />
+              <p className="mt-4 text-sm font-medium text-slate-200">Identifying product…</p>
             </div>
-            <div className="space-y-3 p-4">
-              {/* Camera feed with animated scan line */}
-              <div className="relative overflow-hidden rounded-lg bg-black">
-                <video ref={videoRef} className="aspect-video w-full rounded-lg bg-black" muted playsInline />
-                {/* Sweeping green scan line */}
-                <div
-                  className="pointer-events-none absolute inset-x-3 h-px bg-teal-400"
-                  style={{ boxShadow: "0 0 8px 2px rgba(45,212,191,0.7)", animation: "scanLine 2s ease-in-out infinite" }}
-                />
-                {/* Corner bracket markers */}
-                <div className="pointer-events-none absolute inset-0">
-                  <div className="absolute left-4 top-4 h-6 w-6 rounded-tl border-l-2 border-t-2 border-teal-400" />
-                  <div className="absolute right-4 top-4 h-6 w-6 rounded-tr border-r-2 border-t-2 border-teal-400" />
-                  <div className="absolute bottom-4 left-4 h-6 w-6 rounded-bl border-b-2 border-l-2 border-teal-400" />
-                  <div className="absolute bottom-4 right-4 h-6 w-6 rounded-br border-b-2 border-r-2 border-teal-400" />
-                </div>
-                {/* Live status badge */}
-                <div className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2">
-                  <span className="flex items-center gap-1.5 rounded-full bg-slate-900/75 px-3 py-1 text-xs font-medium text-teal-300 backdrop-blur-sm">
-                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-teal-400" />
-                    {scanPhase === "capturing"
-                      ? "Trying photo identification..."
-                      : photoSearchAvailable === true
-                      ? "Looking for barcode · photo scan ready"
-                      : "Looking for barcode…"}
-                  </span>
-                </div>
-              </div>
-              {scannerError ? (
-                <p className="text-sm text-rose-400">{scannerError}</p>
-              ) : (
-                <p className="text-sm text-slate-400">
-                  Point at a barcode or QR for an exact match.
-                  {photoSearchAvailable === true
-                    ? " No barcode? Use Search by photo — it auto-triggers after 4 s."
-                    : " Search by photo needs OPENAI_API_KEY on the server."}
-                </p>
-              )}
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsScannerOpen(false)}
-                  className="rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-700"
-                >
-                  Stop Scanner
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { void captureScannerFrameAndSearchRef.current(); }}
-                  disabled={photoSearchAvailable !== true || scanPhase === "capturing" || scanPhase === "analyzing"}
-                  title={photoSearchAvailable !== true ? "Needs OPENAI_API_KEY on the server" : undefined}
-                  className={
-                    photoSearchAvailable !== true
-                      ? "cursor-not-allowed rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-500 opacity-50"
-                      : "rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-700"
-                  }
-                >
-                  {scanPhase === "capturing" || scanPhase === "analyzing" ? "Searching..." : "Search by photo"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsScannerOpen(false);
-                    setScannerError(null);
-                    disposeScannerMedia();
-                    void (async () => {
-                      const ok = await acquireScannerStream();
-                      if (ok) {
-                        setIsScannerOpen(true);
-                      }
-                    })();
-                  }}
-                  className="rounded-lg bg-gradient-to-r from-teal-500 to-cyan-600 px-3 py-2 text-xs font-semibold text-white shadow-md shadow-teal-500/20 hover:from-teal-400 hover:to-cyan-500"
-                >
-                  Restart Scanner
-                </button>
-              </div>
+          )}
+
+          {/* Error toast */}
+          {scannerError && (
+            <div className="absolute top-20 left-1/2 -translate-x-1/2 w-full max-w-xs px-4">
+              <p className="rounded-lg bg-rose-900/85 px-4 py-2 text-sm text-rose-300 text-center backdrop-blur-sm">{scannerError}</p>
             </div>
+          )}
+
+          {/* Top bar: title + close */}
+          <div className="absolute inset-x-0 top-0 flex items-center justify-between px-4 py-3 bg-gradient-to-b from-slate-900/70 to-transparent">
+            <div className="flex items-center gap-2">
+              <div className="h-2 w-2 animate-pulse rounded-full bg-teal-400" />
+              <span className="text-sm font-semibold text-slate-100">Scanning product</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsScannerOpen(false)}
+              className="rounded-full bg-slate-800/80 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-700 backdrop-blur-sm"
+            >
+              ✕ Close
+            </button>
+          </div>
+
+          {/* Bottom bar: restart + photo search */}
+          <div className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-3 px-4 py-6 bg-gradient-to-t from-slate-900/70 to-transparent">
+            <button
+              type="button"
+              onClick={() => {
+                setIsScannerOpen(false);
+                setScannerError(null);
+                disposeScannerMedia();
+                void (async () => {
+                  const ok = await acquireScannerStream();
+                  if (ok) setIsScannerOpen(true);
+                })();
+              }}
+              className="rounded-lg bg-slate-800/80 px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-700 backdrop-blur-sm"
+            >
+              Restart
+            </button>
+            <button
+              type="button"
+              onClick={() => { void captureScannerFrameAndSearchRef.current(); }}
+              disabled={photoSearchAvailable !== true || scanPhase === "capturing" || scanPhase === "analyzing"}
+              title={photoSearchAvailable !== true ? "Needs OPENAI_API_KEY on the server" : undefined}
+              className="rounded-full bg-teal-500 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-teal-500/30 hover:bg-teal-400 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {scanPhase === "capturing" || scanPhase === "analyzing" ? "Searching…" : "Search by photo"}
+            </button>
           </div>
         </div>
       ) : null}
