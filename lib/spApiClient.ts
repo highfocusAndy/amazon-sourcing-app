@@ -523,7 +523,8 @@ export class SpApiClient {
   // ── Auth ────────────────────────────────────────────────────────────────────
   private async getLwaAccessToken(): Promise<string> {
     const now = Date.now();
-    const cacheKey = this.config.clientId;
+    // Key by refreshToken — unique per user/account (clientId is shared across all users).
+    const cacheKey = this.config.refreshToken;
 
     const cached = MODULE_LWA_CACHE.get(cacheKey);
     if (cached && cached.expiresAt - 60_000 > now) {
@@ -1611,22 +1612,24 @@ export class SpApiClient {
     const digits = normalized.replace(/\D/g, "");
     if (UPC_EAN_REGEX.test(digits)) {
       const identifierCandidates = buildNumericIdentifierCandidates(digits);
-      // Fire all candidate+type combinations in parallel — sequential fallbacks
-      // were the primary cause of slow UPC scan resolution (up to 4 serial calls).
-      const tasks: Promise<CatalogItem | null>[] = [];
       for (const candidate of identifierCandidates) {
+        // Pick the single most-likely type for this digit count — covers 99%+ of
+        // supplier data without paying for sequential fallback calls upfront.
         const primaryType: "UPC" | "EAN" | "GTIN" =
           candidate.length === 13 ? "EAN" : candidate.length === 12 ? "UPC" : "GTIN";
-        tasks.push(this.searchCatalogByIdentifier(primaryType, candidate).catch(() => null));
+
+        const primary = await this.searchCatalogByIdentifier(primaryType, candidate).catch(() => null);
+        if (primary) return primary;
+
+        // One cross-type fallback: some suppliers encode EAN-12 as 12-digit or
+        // pad a UPC to 13 digits — worth a single extra attempt, not three.
         const fallbackType: "UPC" | "EAN" | null =
           primaryType === "UPC" ? "EAN" : primaryType === "EAN" ? "UPC" : null;
         if (fallbackType) {
-          tasks.push(this.searchCatalogByIdentifier(fallbackType, candidate).catch(() => null));
+          const fallback = await this.searchCatalogByIdentifier(fallbackType, candidate).catch(() => null);
+          if (fallback) return fallback;
         }
       }
-      const results = await Promise.all(tasks);
-      const found = results.find((r) => r !== null) ?? null;
-      if (found) return found;
     }
 
     return null;

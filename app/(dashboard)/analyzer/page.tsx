@@ -40,6 +40,7 @@ import {
   trackAiInsightView,
   trackError,
 } from "@/lib/analytics";
+import { approvalRequiredEffective } from "@/lib/sourcingIntelligence";
 
 type SortColumn =
   | "inputIdentifier"
@@ -340,7 +341,16 @@ function matchesViewFilter(item: ProductAnalysis, viewFilter: ViewFilter): boole
   }
 
   if (viewFilter === "ungated") {
-    return item.approvalRequired === false && item.listingRestricted === false && !item.restrictedBrand;
+    // Product was never analysed (catalog-only) — restriction status unknown, hide it
+    if (item.listingRestricted === null && item.approvalRequired === null) {
+      return false;
+    }
+    // Show only products confirmed eligible: not restricted, no approval required, no brand gate
+    return (
+      item.listingRestricted !== true &&
+      !approvalRequiredEffective(item) &&
+      !item.restrictedBrand
+    );
   }
 
   if (viewFilter === "ungate_profitable") {
@@ -397,7 +407,7 @@ function AnalyzerPageContent() {
   const [lastRunMode, setLastRunMode] = useState<"manual" | "upload" | null>(null);
   const [isKeywordMode, setIsKeywordMode] = useState(false);
   const [lastKeyword, setLastKeyword] = useState<string | null>(null);
-  const [keywordPageSize, setKeywordPageSize] = useState(20);
+  const [keywordPageSize, setKeywordPageSize] = useState(30);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [scanPhase, setScanPhase] = useState<"idle" | "scanning" | "capturing" | "analyzing">("idle");
   const [mobileBulkOpen, setMobileBulkOpen] = useState(false);
@@ -734,11 +744,18 @@ function AnalyzerPageContent() {
         let analysisResults: ProductAnalysis[];
 
         if (lookupOnly && isScannerTriggered) {
-          // Single-step: /api/analyze handles UPC/EAN directly — no two-round-trip needed.
-          let scanResults: ProductAnalysis[];
-          try {
-            scanResults = await runSingleAnalysis();
-          } catch {
+          // Step 1 – fast catalog lookup (identifies the exact product, ~1–2 s)
+          const barcodeResponse = await fetchWithTimeout("/api/analyze/barcode-scan", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ identifier: effectiveIdentifier }),
+          });
+          const barcodeJson = (await barcodeResponse.json()) as {
+            ok?: boolean;
+            error?: string;
+            results?: ProductAnalysis[];
+          };
+          if (!barcodeResponse.ok || !barcodeJson.results?.length) {
             setManualIdentifierResolved(false);
             setResults([]);
             setErrorMessage(null);
@@ -746,11 +763,19 @@ function AnalyzerPageContent() {
             return;
           }
 
+          const catalogResults = barcodeJson.results;
+
+          // Show the product immediately so the user sees name/image/rank right away.
+          // The auto-rerun effect will fire ~800 ms later to enrich with prices & analysis.
           setManualIdentifierResolved(true);
-          setResults(scanResults);
-          addProducts(scanResults);
-          setSelectedProduct(null);
-          setMobileDetailsOpen(false);
+          setResults(catalogResults);
+          addProducts(catalogResults);
+          const firstResult = catalogResults[0];
+          if (firstResult) {
+            setSelectedProduct(firstResult);
+            setMobileDetailsOpen(true);
+            setDetailPanelCost("");
+          }
           setViewFilter("all");
           setLastRunMode("manual");
           setInfoMessage(null);
@@ -1267,7 +1292,11 @@ function AnalyzerPageContent() {
         item.decision === "BAD" || item.decision === "LOW_MARGIN" || item.decision === "NO_MARGIN",
     ).length;
     const ungated = results.filter(
-      (item) => item.approvalRequired === false && item.listingRestricted === false && !item.restrictedBrand,
+      (item) =>
+        item.listingRestricted !== null &&
+        item.listingRestricted !== true &&
+        !approvalRequiredEffective(item) &&
+        !item.restrictedBrand,
     ).length;
     return { profitable, ungating, bad, ungated };
   }, [results]);
@@ -1649,8 +1678,8 @@ function AnalyzerPageContent() {
     event.preventDefault();
     const effectiveKeyword = keyword.trim();
     if (effectiveKeyword) {
-      setKeywordPageSize(20);
-      await runKeywordSearch(effectiveKeyword, 20);
+      setKeywordPageSize(30);
+      await runKeywordSearch(effectiveKeyword, 30);
       return;
     }
     setIsKeywordMode(false);
@@ -1693,7 +1722,7 @@ function AnalyzerPageContent() {
 
   async function handleKeywordLoadMore(): Promise<void> {
     if (!lastKeyword) return;
-    const nextSize = Math.min(keywordPageSize + 10, 30);
+    const nextSize = Math.min(keywordPageSize + 20, 100);
     if (nextSize === keywordPageSize) return;
     setKeywordPageSize(nextSize);
     await runKeywordSearch(lastKeyword, nextSize);
@@ -2176,7 +2205,7 @@ function AnalyzerPageContent() {
               <button
                 type="button"
                 onClick={() => void handleKeywordLoadMore()}
-                disabled={isManualLoading || keywordPageSize >= 30}
+                disabled={isManualLoading || keywordPageSize >= 100}
                 className="rounded-lg border border-slate-600 bg-slate-800/70 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-700 disabled:opacity-50"
               >
                 Load more

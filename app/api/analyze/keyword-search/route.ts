@@ -31,7 +31,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ ok: true, results: [] });
   }
 
-  const pageSize = Math.min(30, Math.max(1, parseInt(searchParams.get("pageSize") ?? "20", 10) || 20));
+  const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get("pageSize") ?? "30", 10) || 30));
 
   try {
     const gate = await requireAppAccess();
