@@ -99,9 +99,8 @@ export async function extractAmazonSalesVolume(
         "Sec-Fetch-User": "?1",
         "Upgrade-Insecure-Requests": "1",
       },
-      // Keep this tight: this call races alongside SP-API calls in a Promise.all.
-      // A blocked/captcha response wastes the entire group's latency budget.
-      signal: AbortSignal.timeout(Number(process.env.AMAZON_SCRAPE_TIMEOUT_MS ?? 3500)),
+      // Tight timeout — Amazon almost always returns captcha; don't block SP-API results.
+      signal: AbortSignal.timeout(Number(process.env.AMAZON_SCRAPE_TIMEOUT_MS ?? 1000)),
     });
     if (!res.ok) return null;
     const html = await res.text();

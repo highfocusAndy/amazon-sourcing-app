@@ -81,6 +81,13 @@ interface LwaTokenCache {
   expiresAt: number;
 }
 
+// Module-level LWA token cache keyed by clientId — survives across requests
+// within the same Node.js process so we don't re-fetch the token on every scan.
+const MODULE_LWA_CACHE = new Map<string, LwaTokenCache>();
+// Deduplicates in-flight token requests — prevents parallel SP-API calls from
+// each firing their own token fetch before the first one resolves.
+const MODULE_LWA_IN_FLIGHT = new Map<string, Promise<string>>();
+
 /** Per-offer seller info from Get Item Offers (SellerId, channel, feedback when API returns it). */
 export interface SellerOfferDetail {
   sellerId: string;
@@ -516,51 +523,51 @@ export class SpApiClient {
   // ── Auth ────────────────────────────────────────────────────────────────────
   private async getLwaAccessToken(): Promise<string> {
     const now = Date.now();
-    if (this.lwaTokenCache && this.lwaTokenCache.expiresAt - 60_000 > now) {
-      return this.lwaTokenCache.token;
+    const cacheKey = this.config.clientId;
+
+    const cached = MODULE_LWA_CACHE.get(cacheKey);
+    if (cached && cached.expiresAt - 60_000 > now) {
+      return cached.token;
     }
 
-    const payload = new URLSearchParams({
-      grant_type: "refresh_token",
-      refresh_token: this.config.refreshToken,
-      client_id: this.config.clientId,
-      client_secret: this.config.clientSecret,
-    });
+    // Deduplicate: if another call is already fetching a fresh token, share that promise.
+    const inFlight = MODULE_LWA_IN_FLIGHT.get(cacheKey);
+    if (inFlight) return inFlight;
 
-    const response = await fetch("https://api.amazon.com/auth/o2/token", {
-      method: "POST",
-      headers: {
-        "content-type": "application/x-www-form-urlencoded;charset=UTF-8",
-      },
-      body: payload.toString(),
-      cache: "no-store",
-    });
+    const fetchPromise = (async () => {
+      const payload = new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: this.config.refreshToken,
+        client_id: this.config.clientId,
+        client_secret: this.config.clientSecret,
+      });
 
-    const raw = await response.text();
-    let json: Record<string, unknown> = {};
-    if (raw) {
-      try {
-        json = JSON.parse(raw) as Record<string, unknown>;
-      } catch {
-        json = {};
+      const response = await fetch("https://api.amazon.com/auth/o2/token", {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded;charset=UTF-8" },
+        body: payload.toString(),
+        cache: "no-store",
+      });
+
+      const raw = await response.text();
+      let json: Record<string, unknown> = {};
+      if (raw) {
+        try { json = JSON.parse(raw) as Record<string, unknown>; } catch { json = {}; }
       }
-    }
 
-    if (!response.ok) {
-      throw new Error(`Failed to get SP-API LWA token (${response.status})`);
-    }
+      if (!response.ok) throw new Error(`Failed to get SP-API LWA token (${response.status})`);
 
-    const token = readString(json.access_token);
-    if (!token) {
-      throw new Error("SP-API LWA token response missing access_token");
-    }
+      const token = readString(json.access_token);
+      if (!token) throw new Error("SP-API LWA token response missing access_token");
 
-    const expiresIn = readNumber(json.expires_in) ?? 3600;
-    this.lwaTokenCache = {
-      token,
-      expiresAt: now + expiresIn * 1000,
-    };
-    return token;
+      const expiresIn = readNumber(json.expires_in) ?? 3600;
+      MODULE_LWA_CACHE.set(cacheKey, { token, expiresAt: now + expiresIn * 1000 });
+      return token;
+    })();
+
+    MODULE_LWA_IN_FLIGHT.set(cacheKey, fetchPromise);
+    fetchPromise.finally(() => { MODULE_LWA_IN_FLIGHT.delete(cacheKey); });
+    return fetchPromise;
   }
 
   private async getAwsCredentials(): Promise<AwsCredentials> {
