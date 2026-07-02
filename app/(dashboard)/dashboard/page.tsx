@@ -79,7 +79,7 @@ export default function ExplorerPage() {
   const [sellerType, setSellerType] = useState<SellerType>("FBA");
   const [shippingCost, setShippingCost] = useState("0");
   const [projectedMonthlyUnits, setProjectedMonthlyUnits] = useState("1");
-  const [catalogPageSize, setCatalogPageSize] = useState(30);
+  const [catalogPageSize, setCatalogPageSize] = useState(40);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
   const [ungatedOnly, setUngatedOnly] = useState(false);
   const [eligibilityByAsin, setEligibilityByAsin] = useState<Record<string, boolean | null>>({});
@@ -293,10 +293,11 @@ export default function ExplorerPage() {
       );
       if (missingAsins.length === 0 || signal?.aborted) return;
 
-      // Listings Restrictions API: 5 requests/sec per account. Stay under to avoid 429.
+      // Listings Restrictions API: 5 req/s rate limit. 5 parallel requests take ~500ms,
+      // so 600ms delay gives a ~1.1s cycle = ~4.5 req/s — safely under the limit.
       const REQUEST_BATCH_SIZE = 5;
-      const DELAY_MS = 1000;
-      const UPDATE_UI_EVERY_PRODUCTS = 25;
+      const DELAY_MS = 600;
+      const UPDATE_UI_EVERY_PRODUCTS = 5;
 
       const accumulated: Record<string, boolean | null> = {};
       let processedCount = 0;
