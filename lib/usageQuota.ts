@@ -16,7 +16,7 @@ export type UsageMetric =
   | "openai_insight"
   | "openai_chat";
 
-type PlanTier = "trial" | "starter" | "pro" | "owner_unlimited";
+export type PlanTier = "trial" | "starter" | "pro" | "owner_unlimited";
 
 export type UsageCheckResult =
   | {
