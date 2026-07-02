@@ -149,6 +149,7 @@ export default function ExplorerPage() {
     const controller = new AbortController();
     catalogAbortRef.current = controller;
     setCatalogLoading(true);
+    setLoadMoreLoading(false);
     setError(null);
     setCatalogRequiresAmazonConnect(false);
     setCatalogNextPageToken(null);
@@ -193,6 +194,7 @@ export default function ExplorerPage() {
     const controller = new AbortController();
     catalogAbortRef.current = controller;
     setCatalogLoading(true);
+    setLoadMoreLoading(false);
     setCatalogResults([]);
     setError(null);
     setAnalyzeRequiresAuth(false);
