@@ -364,6 +364,13 @@ export default function ExplorerPage() {
     ensureEligibilityLoaded(newItems, controller.signal).catch(() => {});
     return () => {
       controller.abort();
+      // Re-queue any items that were aborted before their check completed so they
+      // get picked up the next time the effect runs (e.g. after a manual load more).
+      newItems.forEach((i) => {
+        if (eligibilityByAsinRef.current[i.asin] === undefined) {
+          eligibilityQueuedRef.current.delete(i.asin);
+        }
+      });
     };
   }, [ungatedOnly, catalogResults, loadingPaused, ensureEligibilityLoaded]);
 
@@ -437,9 +444,12 @@ export default function ExplorerPage() {
     eligibilityStillChecking,
   ]);
 
-  /** When "BSR low first" and a subcategory is selected, auto-load up to 3 more pages. Do NOT auto-load for best sellers (no subcategory). */
+  /** When "BSR low first" and a subcategory is selected, auto-load up to 3 more pages.
+   * Skips when ungatedOnly is on — the category ungated auto-load handles that path and
+   * the two effects would race, causing in-flight restriction checks to be aborted. */
   useEffect(() => {
     if (
+      ungatedOnly ||
       !selectedSubcategory ||
       productSort !== "bsr_asc" ||
       !catalogNextPageToken ||
@@ -456,6 +466,7 @@ export default function ExplorerPage() {
       autoLoadMoreCountRef.current += 1;
     });
   }, [
+    ungatedOnly,
     selectedSubcategory,
     productSort,
     catalogNextPageToken,
@@ -912,6 +923,15 @@ const handleProductClick = useCallback(
                       : ""}
                     {catalogNextPageToken ? " · more available" : ""}
                   </p>
+                  {catalogNextPageToken && !loadMoreLoading && !catalogLoading ? (
+                    <button
+                      type="button"
+                      onClick={() => loadMoreProducts()}
+                      className="shrink-0 rounded border border-sky-600 px-1.5 text-[10px] leading-4 text-sky-400 hover:bg-sky-600/20"
+                    >
+                      Load more
+                    </button>
+                  ) : null}
                 </div>
               </div>
             </div>
