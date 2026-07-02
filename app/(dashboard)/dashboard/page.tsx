@@ -93,9 +93,14 @@ export default function ExplorerPage() {
   const [loadingPaused, setLoadingPaused] = useState(false);
   const catalogAbortRef = useRef<AbortController | null>(null);
   const eligibilityAbortRef = useRef<AbortController | null>(null);
-  // ASINs already submitted for eligibility checking this session — prevents
-  // new catalog pages from aborting in-flight restriction checks.
+  // ASINs already submitted for eligibility checking this session.
   const eligibilityQueuedRef = useRef<Set<string>>(new Set());
+  // Queue of ASINs waiting to be restriction-checked by the worker.
+  const eligibilityPendingRef = useRef<string[]>([]);
+  // Incremented on every reset so stale workers know to stop.
+  const eligibilityGenRef = useRef(0);
+  // True while the queue-draining worker is running.
+  const eligibilityWorkerRunningRef = useRef(false);
   const { data: session, status: sessionStatus } = useSession();
   const router = useRouter();
 
@@ -149,6 +154,9 @@ export default function ExplorerPage() {
     setCatalogNextPageToken(null);
     setEligibilityByAsin({});
     eligibilityQueuedRef.current = new Set();
+    eligibilityPendingRef.current = [];
+    eligibilityGenRef.current += 1;
+    eligibilityWorkerRunningRef.current = false;
     setSelectedProduct(null);
     setDetailPanelCost("");
     try {
@@ -191,6 +199,9 @@ export default function ExplorerPage() {
     setCatalogNextPageToken(null);
     setEligibilityByAsin({});
     eligibilityQueuedRef.current = new Set();
+    eligibilityPendingRef.current = [];
+    eligibilityGenRef.current += 1;
+    eligibilityWorkerRunningRef.current = false;
     setSelectedProduct(null);
     setDetailPanelCost("");
     autoLoadMoreCountRef.current = 0;
@@ -286,93 +297,64 @@ export default function ExplorerPage() {
   const eligibilityByAsinRef = useRef(eligibilityByAsin);
   eligibilityByAsinRef.current = eligibilityByAsin;
 
-  const ensureEligibilityLoaded = useCallback(
-    async (items: CatalogItem[], signal?: AbortSignal) => {
-      const missingAsins = Array.from(
-        new Set(items.map((i) => i.asin).filter((asin) => eligibilityByAsinRef.current[asin] === undefined)),
-      );
-      if (missingAsins.length === 0 || signal?.aborted) return;
-
-      // Listings Restrictions API: 5 req/s rate limit. 5 parallel requests take ~500ms,
-      // so 600ms delay gives a ~1.1s cycle = ~4.5 req/s — safely under the limit.
-      const REQUEST_BATCH_SIZE = 5;
-      const DELAY_MS = 600;
-      const UPDATE_UI_EVERY_PRODUCTS = 5;
-
-      const accumulated: Record<string, boolean | null> = {};
-      let processedCount = 0;
-
-      try {
-        for (let i = 0; i < missingAsins.length; i += REQUEST_BATCH_SIZE) {
-          if (signal?.aborted) return;
-          const batch = missingAsins.slice(i, i + REQUEST_BATCH_SIZE);
-          const results = await Promise.all(
-            batch.map(async (asin) => {
-              try {
-                const res = await fetch(`/api/catalog/restrictions?asin=${encodeURIComponent(asin)}`, {
-                  credentials: "same-origin",
-                  signal,
-                });
-                if (!res.ok) return { asin, eligible: null as boolean | null };
-                const json = (await res.json()) as {
-                  gated?: boolean | null;
-                  asin?: string;
-                  requiresAmazonConnection?: boolean;
-                };
-                return { asin: json.asin ?? asin, eligible: eligibilityFromRestrictionsPayload(json) };
-              } catch (err) {
-                if (err != null && typeof (err as { name?: string }).name === "string" && (err as { name: string }).name === "AbortError") return null;
-                return { asin, eligible: null as boolean | null };
-              }
-            }),
-          );
-          const valid = results.filter((r): r is { asin: string; eligible: boolean | null } => r !== null);
-          if (signal?.aborted) return;
-          for (const r of valid) {
-            accumulated[r.asin] = r.eligible;
-          }
-          processedCount += valid.length;
-          // Update UI after every 500 products so user sees results incrementally
-          if (processedCount >= UPDATE_UI_EVERY_PRODUCTS || i + REQUEST_BATCH_SIZE >= missingAsins.length) {
-            setEligibilityByAsin((prev) => ({ ...prev, ...accumulated }));
-            processedCount = 0;
-          }
-          if (i + REQUEST_BATCH_SIZE < missingAsins.length) {
-            await new Promise((r) => setTimeout(r, DELAY_MS));
-          }
+  // Persistent queue-draining worker for restriction checks.
+  // Runs independently of React's render cycle so catalog updates (new pages
+  // loading) never abort in-flight checks. Rate: 5 parallel requests with a
+  // 600 ms inter-batch delay → ~4.5 req/s, safely under SP-API's 5 req/s limit.
+  const runEligibilityWorker = useCallback(async (gen: number) => {
+    if (eligibilityWorkerRunningRef.current) return;
+    eligibilityWorkerRunningRef.current = true;
+    try {
+      while (eligibilityPendingRef.current.length > 0 && gen === eligibilityGenRef.current) {
+        const batch = eligibilityPendingRef.current.splice(0, 5);
+        const results = await Promise.all(
+          batch.map(async (asin) => {
+            try {
+              const res = await fetch(`/api/catalog/restrictions?asin=${encodeURIComponent(asin)}`, {
+                credentials: "same-origin",
+              });
+              if (!res.ok) return { asin, eligible: null as boolean | null };
+              const json = (await res.json()) as {
+                gated?: boolean | null;
+                asin?: string;
+                requiresAmazonConnection?: boolean;
+              };
+              return { asin: json.asin ?? asin, eligible: eligibilityFromRestrictionsPayload(json) };
+            } catch {
+              return { asin, eligible: null as boolean | null };
+            }
+          }),
+        );
+        if (gen !== eligibilityGenRef.current) break;
+        const update: Record<string, boolean | null> = {};
+        results.forEach((r) => { update[r.asin] = r.eligible; });
+        setEligibilityByAsin((prev) => ({ ...prev, ...update }));
+        if (eligibilityPendingRef.current.length > 0) {
+          await new Promise((r) => setTimeout(r, 600));
         }
-      } catch {
-        if (signal?.aborted) return;
-        // best-effort only; avoid unhandled rejection
       }
-    },
-    [],
-  );
+    } finally {
+      eligibilityWorkerRunningRef.current = false;
+      // If new items arrived while we were finishing, restart.
+      if (eligibilityPendingRef.current.length > 0 && gen === eligibilityGenRef.current) {
+        void runEligibilityWorker(gen);
+      }
+    }
+  }, []);
 
-  // When "Ungated only" is on, check eligibility for items not yet queued.
-  // Key fix: track queued ASINs in eligibilityQueuedRef so new catalog pages
-  // don't abort in-flight restriction checks (the old approach aborted on every
-  // catalogResults change, causing a restart loop that made zero net progress).
+  // When "Ungated only" is on, enqueue any new catalog items and kick the worker.
+  // No cleanup abort here — the worker drains the queue independently and is only
+  // stopped by incrementing eligibilityGenRef (done on reset / category change).
   useEffect(() => {
     if (!ungatedOnly || catalogResults.length === 0 || loadingPaused) return;
-    const newItems = catalogResults.filter((i) => !eligibilityQueuedRef.current.has(i.asin));
-    if (newItems.length === 0) return;
-    newItems.forEach((i) => eligibilityQueuedRef.current.add(i.asin));
-    const controller = new AbortController();
-    // Store the latest controller so we can abort on category change / unmount.
-    eligibilityAbortRef.current = controller;
-    ensureEligibilityLoaded(newItems, controller.signal).catch(() => {});
-    return () => {
-      controller.abort();
-      // Re-queue any items that were aborted before their check completed so they
-      // get picked up the next time the effect runs (e.g. after a manual load more).
-      newItems.forEach((i) => {
-        if (eligibilityByAsinRef.current[i.asin] === undefined) {
-          eligibilityQueuedRef.current.delete(i.asin);
-        }
-      });
-    };
-  }, [ungatedOnly, catalogResults, loadingPaused, ensureEligibilityLoaded]);
+    const newAsins = catalogResults
+      .map((i) => i.asin)
+      .filter((asin) => !eligibilityQueuedRef.current.has(asin));
+    if (newAsins.length === 0) return;
+    newAsins.forEach((asin) => eligibilityQueuedRef.current.add(asin));
+    eligibilityPendingRef.current.push(...newAsins);
+    void runEligibilityWorker(eligibilityGenRef.current);
+  }, [ungatedOnly, catalogResults, loadingPaused, runEligibilityWorker]);
 
   /** When "Ungated only" is on and no category is selected, auto-load a few more catalog pages (capped to limit SP-API GETs). */
   const ungatedAutoLoadCountRef = useRef(0);
@@ -425,11 +407,13 @@ export default function ExplorerPage() {
       !catalogNextPageToken ||
       loadMoreLoading ||
       catalogLoading ||
-      loadingPaused ||
-      eligibilityStillChecking
+      loadingPaused
     ) {
       return;
     }
+    // Restriction checks now run via a persistent queue worker that is never
+    // aborted by catalog updates, so we can load the next page immediately
+    // without waiting for checks to finish.
     loadMoreProducts();
   }, [
     ungatedOnly,
@@ -441,7 +425,6 @@ export default function ExplorerPage() {
     catalogLoading,
     loadingPaused,
     loadMoreProducts,
-    eligibilityStillChecking,
   ]);
 
   /** When "BSR low first" and a subcategory is selected, auto-load up to 3 more pages.
@@ -601,6 +584,10 @@ const handleProductClick = useCallback(
     setLoadingPaused(true);
     catalogAbortRef.current?.abort();
     eligibilityAbortRef.current?.abort();
+    // Stop the queue-based worker by bumping the generation counter.
+    eligibilityGenRef.current += 1;
+    eligibilityPendingRef.current = [];
+    eligibilityWorkerRunningRef.current = false;
     setCatalogLoading(false);
     setLoadMoreLoading(false);
   }, []);
@@ -671,6 +658,9 @@ const handleProductClick = useCallback(
       eligibilityAbortRef.current = null;
       setEligibilityByAsin({});
       eligibilityQueuedRef.current = new Set();
+      eligibilityPendingRef.current = [];
+      eligibilityGenRef.current += 1;
+      eligibilityWorkerRunningRef.current = false;
       setUngatedOnly(false);
     }
   }, [amazonHeaderConnected]);
