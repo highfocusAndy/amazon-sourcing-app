@@ -205,7 +205,7 @@ export default function ExplorerPage() {
     eligibilityWorkerRunningRef.current = false;
     setSelectedProduct(null);
     setDetailPanelCost("");
-    autoLoadMoreCountRef.current = 0;
+
     try {
       const res = await fetch(
         `/api/catalog/search?${buildCatalogSearchQuery({
@@ -393,9 +393,6 @@ export default function ExplorerPage() {
     loadMoreProducts,
   ]);
 
-  /** When "Ungated only" is on AND a category (or subcategory) is selected, auto-load catalog up to a modest cap.
-   * Wait until current eligibility checks finish before loading more so restriction
-   * checks aren't aborted by new catalog items arriving mid-batch. */
   const CATEGORY_SCAN_CAP = 360;
   const eligibilityStillChecking = useMemo(() => {
     if (!ungatedOnly || catalogResults.length === 0) return false;
@@ -403,9 +400,12 @@ export default function ExplorerPage() {
     return asins.some((asin) => eligibilityByAsin[asin] === undefined);
   }, [ungatedOnly, catalogResults, eligibilityByAsin]);
 
+  /** Auto-load more catalog pages whenever a category or subcategory is selected,
+   * regardless of ungated state or sort. Loads until CATEGORY_SCAN_CAP is reached
+   * or no more pages are available. Restriction checks run concurrently via the
+   * queue worker (when ungatedOnly is on) and never block this effect. */
   useEffect(() => {
     if (
-      !ungatedOnly ||
       (!selectedCategory && !selectedSubcategory) ||
       catalogResults.length === 0 ||
       catalogResults.length >= CATEGORY_SCAN_CAP ||
@@ -416,12 +416,8 @@ export default function ExplorerPage() {
     ) {
       return;
     }
-    // Restriction checks now run via a persistent queue worker that is never
-    // aborted by catalog updates, so we can load the next page immediately
-    // without waiting for checks to finish.
     loadMoreProducts();
   }, [
-    ungatedOnly,
     selectedCategory,
     selectedSubcategory,
     catalogResults.length,
@@ -432,44 +428,9 @@ export default function ExplorerPage() {
     loadMoreProducts,
   ]);
 
-  /** When "BSR low first" and a subcategory is selected, auto-load up to 3 more pages.
-   * Skips when ungatedOnly is on — the category ungated auto-load handles that path and
-   * the two effects would race, causing in-flight restriction checks to be aborted. */
-  useEffect(() => {
-    if (
-      ungatedOnly ||
-      !selectedSubcategory ||
-      productSort !== "bsr_asc" ||
-      !catalogNextPageToken ||
-      loadMoreLoading ||
-      catalogLoading ||
-      loadingPaused ||
-      catalogResults.length === 0 ||
-      catalogResults.length >= 120 ||
-      autoLoadMoreCountRef.current >= 2
-    ) {
-      return;
-    }
-    loadMoreProducts().then(() => {
-      autoLoadMoreCountRef.current += 1;
-    });
-  }, [
-    ungatedOnly,
-    selectedSubcategory,
-    productSort,
-    catalogNextPageToken,
-    loadMoreLoading,
-    catalogLoading,
-    loadingPaused,
-    catalogResults.length,
-    loadMoreProducts,
-  ]);
-
   const searchProductsRef = useRef(searchProducts);
   searchProductsRef.current = searchProducts;
 
-  /** When "BSR low first" is selected, we auto-load up to 3 more pages so the list can start from top BSR. */
-  const autoLoadMoreCountRef = useRef(0);
   const [showAmazonAccountModal, setShowAmazonAccountModal] = useState(false);
   const [amazonHeaderConnected, setAmazonHeaderConnected] = useState(false);
   const [amazonHeaderTitle, setAmazonHeaderTitle] = useState<string | null>(null);
