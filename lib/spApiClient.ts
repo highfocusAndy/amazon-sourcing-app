@@ -1529,9 +1529,16 @@ export class SpApiClient {
         queryParams.pageToken = token;
       }
 
-      const response = await this.request<unknown>("GET", "/catalog/2022-04-01/items", {
-        query: queryParams,
-      });
+      let response: unknown;
+      try {
+        response = await this.request<unknown>("GET", "/catalog/2022-04-01/items", {
+          query: queryParams,
+        });
+      } catch {
+        // If a subsequent page fetch fails, return what we have so far.
+        // The caller can use the preserved token to retry this page later.
+        break;
+      }
 
       const root = asObject(response);
       const rawItems = asArray(root?.items);

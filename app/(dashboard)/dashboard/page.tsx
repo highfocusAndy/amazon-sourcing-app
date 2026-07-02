@@ -79,7 +79,7 @@ export default function ExplorerPage() {
   const [sellerType, setSellerType] = useState<SellerType>("FBA");
   const [shippingCost, setShippingCost] = useState("0");
   const [projectedMonthlyUnits, setProjectedMonthlyUnits] = useState("1");
-  const [catalogPageSize, setCatalogPageSize] = useState(40);
+  const [catalogPageSize, setCatalogPageSize] = useState(20);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
   const [ungatedOnly, setUngatedOnly] = useState(false);
   const [eligibilityByAsin, setEligibilityByAsin] = useState<Record<string, boolean | null>>({});
@@ -193,6 +193,7 @@ export default function ExplorerPage() {
     const controller = new AbortController();
     catalogAbortRef.current = controller;
     setCatalogLoading(true);
+    setCatalogResults([]);
     setError(null);
     setAnalyzeRequiresAuth(false);
     setCatalogRequiresAmazonConnect(false);
@@ -274,7 +275,11 @@ export default function ExplorerPage() {
       };
       if (!res.ok) {
         if (json.code === "AMAZON_CONNECT_REQUIRED") { setCatalogRequiresAmazonConnect(true); return; }
-        throw new Error(json.error ?? "Search failed.");
+        // Pause auto-loading on any error so the auto-load effect doesn't retry
+        // immediately in a tight loop. The user can click "Load more" to resume.
+        setLoadingPaused(true);
+        setError(json.error ?? "Search failed. Click \"Load more\" to retry.");
+        return;
       }
       const newItems = json.items ?? [];
       setCatalogResults((prev) => {
