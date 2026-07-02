@@ -125,6 +125,47 @@ async function planTierForUser(
   return { tier: "starter", subscriptionStatus, subscriptionPlan, email };
 }
 
+export type UsageSummaryRow = {
+  metric: UsageMetric;
+  label: string;
+  used: number;
+  limit: number | null;
+};
+
+export async function getMonthlyUsageSummary(userId: string): Promise<{
+  tier: PlanTier;
+  periodKey: string;
+  rows: UsageSummaryRow[];
+  unlimited: boolean;
+}> {
+  const { tier } = await planTierForUser(userId);
+  const periodKey = monthKeyUtc();
+
+  if (tier === "owner_unlimited") {
+    return { tier, periodKey, rows: [], unlimited: true };
+  }
+
+  const DISPLAY_METRICS: { metric: UsageMetric; label: string }[] = [
+    { metric: "catalog_search", label: "Catalog searches" },
+    { metric: "analyze", label: "Product analyses" },
+    { metric: "restrictions", label: "Ungated checks" },
+    { metric: "keyword_search", label: "Keyword searches" },
+  ];
+
+  const rows = await Promise.all(
+    DISPLAY_METRICS.map(async ({ metric, label }) => {
+      const limit = metricLimit(metric, tier);
+      const row = await prisma.userMonthlyUsage.findUnique({
+        where: { userId_periodKey_metric: { userId, periodKey, metric } },
+        select: { used: true },
+      });
+      return { metric, label, used: row?.used ?? 0, limit };
+    }),
+  );
+
+  return { tier, periodKey, rows, unlimited: false };
+}
+
 export async function consumeMonthlyUsage(
   userId: string,
   metric: UsageMetric,

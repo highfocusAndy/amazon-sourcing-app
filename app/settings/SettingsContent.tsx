@@ -6,18 +6,21 @@ import { AnalysisPreferencesSection } from "./AnalysisPreferencesSection";
 import { MarketplaceSection } from "./MarketplaceSection";
 import { AppearanceSection } from "./AppearanceSection";
 import { ExplorerColumnsSection } from "./ExplorerColumnsSection";
+import { UsageSection } from "./UsageSection";
 
 export type SettingsSection =
   | "analysis-preferences"
   | "marketplace"
   | "appearance"
-  | "explorer-columns";
+  | "explorer-columns"
+  | "usage";
 
 const SECTIONS: { id: SettingsSection; label: string; icon: string }[] = [
   { id: "analysis-preferences", label: "Analysis Preferences", icon: "📊" },
   { id: "marketplace", label: "Marketplace", icon: "🌍" },
   { id: "appearance", label: "Appearance", icon: "🎨" },
   { id: "explorer-columns", label: "Explorer Columns", icon: "🔧" },
+  { id: "usage", label: "Monthly Usage", icon: "📈" },
 ];
 
 function subscribeMobile(callback: () => void) {
@@ -74,6 +77,13 @@ function SettingsSectionBody({
         <>
           <h2 className={titleClass}>Explorer Columns</h2>
           <ExplorerColumnsSection className={showCardTitle ? "mt-4" : "mt-0"} />
+        </>
+      );
+    case "usage":
+      return (
+        <>
+          <h2 className={titleClass}>Monthly Usage</h2>
+          <UsageSection className={showCardTitle ? "mt-4" : "mt-0"} />
         </>
       );
     default:
