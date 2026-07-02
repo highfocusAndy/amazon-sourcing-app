@@ -290,7 +290,8 @@ export default function ExplorerPage() {
       setCatalogNextPageToken(json.nextPageToken ?? null);
     } catch (e) {
       if (e instanceof DOMException && e.name === "AbortError") return;
-      setError(e instanceof Error ? e.message : "Failed to load more.");
+      setLoadingPaused(true);
+      setError(e instanceof Error ? e.message : "Failed to load more. Click \"Load more\" to retry.");
     } finally {
       if (catalogAbortRef.current === controller) {
         catalogAbortRef.current = null;
