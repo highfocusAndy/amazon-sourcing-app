@@ -79,7 +79,7 @@ export default function ExplorerPage() {
   const [sellerType, setSellerType] = useState<SellerType>("FBA");
   const [shippingCost, setShippingCost] = useState("0");
   const [projectedMonthlyUnits, setProjectedMonthlyUnits] = useState("1");
-  const [catalogPageSize, setCatalogPageSize] = useState(20);
+  const [catalogPageSize, setCatalogPageSize] = useState(40);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
   const [ungatedOnly, setUngatedOnly] = useState(false);
   const [eligibilityByAsin, setEligibilityByAsin] = useState<Record<string, boolean | null>>({});
@@ -403,15 +403,15 @@ export default function ExplorerPage() {
     return asins.some((asin) => eligibilityByAsin[asin] === undefined);
   }, [ungatedOnly, catalogResults, eligibilityByAsin]);
 
-  /** Auto-load more catalog pages whenever a category or subcategory is selected,
-   * regardless of ungated state or sort. Loads until CATEGORY_SCAN_CAP is reached
-   * or no more pages are available. Restriction checks run concurrently via the
-   * queue worker (when ungatedOnly is on) and never block this effect. */
+  /** Auto-load more catalog pages whenever a category or subcategory is selected.
+   * Ungated mode scans up to CATEGORY_SCAN_CAP to find eligible products.
+   * Regular browsing caps at 120 items (3 requests at pageSize=40) to keep quota usage low. */
+  const categoryCap = ungatedOnly ? CATEGORY_SCAN_CAP : 120;
   useEffect(() => {
     if (
       (!selectedCategory && !selectedSubcategory) ||
       catalogResults.length === 0 ||
-      catalogResults.length >= CATEGORY_SCAN_CAP ||
+      catalogResults.length >= categoryCap ||
       !catalogNextPageToken ||
       loadMoreLoading ||
       catalogLoading ||
@@ -424,6 +424,7 @@ export default function ExplorerPage() {
     selectedCategory,
     selectedSubcategory,
     catalogResults.length,
+    categoryCap,
     catalogNextPageToken,
     loadMoreLoading,
     catalogLoading,
