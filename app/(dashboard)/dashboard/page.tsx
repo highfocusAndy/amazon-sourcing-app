@@ -93,6 +93,9 @@ export default function ExplorerPage() {
   const [loadingPaused, setLoadingPaused] = useState(false);
   const catalogAbortRef = useRef<AbortController | null>(null);
   const eligibilityAbortRef = useRef<AbortController | null>(null);
+  // ASINs already submitted for eligibility checking this session — prevents
+  // new catalog pages from aborting in-flight restriction checks.
+  const eligibilityQueuedRef = useRef<Set<string>>(new Set());
   const { data: session, status: sessionStatus } = useSession();
   const router = useRouter();
 
@@ -145,6 +148,7 @@ export default function ExplorerPage() {
     setCatalogRequiresAmazonConnect(false);
     setCatalogNextPageToken(null);
     setEligibilityByAsin({});
+    eligibilityQueuedRef.current = new Set();
     setSelectedProduct(null);
     setDetailPanelCost("");
     try {
@@ -186,6 +190,7 @@ export default function ExplorerPage() {
     setCatalogRequiresAmazonConnect(false);
     setCatalogNextPageToken(null);
     setEligibilityByAsin({});
+    eligibilityQueuedRef.current = new Set();
     setSelectedProduct(null);
     setDetailPanelCost("");
     autoLoadMoreCountRef.current = 0;
@@ -343,20 +348,21 @@ export default function ExplorerPage() {
     [],
   );
 
-  // When "Ungated only" is on and catalog results change (e.g. user clicks a category), run eligibility
-  // for the new results. When user clicks a different category, abort the previous run and start the new one.
-  // Effect does NOT depend on ensureEligibilityLoaded so we don't abort after every batch when state updates.
+  // When "Ungated only" is on, check eligibility for items not yet queued.
+  // Key fix: track queued ASINs in eligibilityQueuedRef so new catalog pages
+  // don't abort in-flight restriction checks (the old approach aborted on every
+  // catalogResults change, causing a restart loop that made zero net progress).
   useEffect(() => {
     if (!ungatedOnly || catalogResults.length === 0 || loadingPaused) return;
-    eligibilityAbortRef.current?.abort();
+    const newItems = catalogResults.filter((i) => !eligibilityQueuedRef.current.has(i.asin));
+    if (newItems.length === 0) return;
+    newItems.forEach((i) => eligibilityQueuedRef.current.add(i.asin));
     const controller = new AbortController();
+    // Store the latest controller so we can abort on category change / unmount.
     eligibilityAbortRef.current = controller;
-    ensureEligibilityLoaded(catalogResults, controller.signal).catch(() => {});
+    ensureEligibilityLoaded(newItems, controller.signal).catch(() => {});
     return () => {
       controller.abort();
-      if (eligibilityAbortRef.current === controller) {
-        eligibilityAbortRef.current = null;
-      }
     };
   }, [ungatedOnly, catalogResults, loadingPaused, ensureEligibilityLoaded]);
 
@@ -392,8 +398,16 @@ export default function ExplorerPage() {
     loadMoreProducts,
   ]);
 
-  /** When "Ungated only" is on AND a category (or subcategory) is selected, auto-load catalog up to a modest cap to limit restriction API volume. */
-  const CATEGORY_SCAN_CAP = 240;
+  /** When "Ungated only" is on AND a category (or subcategory) is selected, auto-load catalog up to a modest cap.
+   * Wait until current eligibility checks finish before loading more so restriction
+   * checks aren't aborted by new catalog items arriving mid-batch. */
+  const CATEGORY_SCAN_CAP = 360;
+  const eligibilityStillChecking = useMemo(() => {
+    if (!ungatedOnly || catalogResults.length === 0) return false;
+    const asins = catalogResults.map((p) => p.asin);
+    return asins.some((asin) => eligibilityByAsin[asin] === undefined);
+  }, [ungatedOnly, catalogResults, eligibilityByAsin]);
+
   useEffect(() => {
     if (
       !ungatedOnly ||
@@ -403,7 +417,8 @@ export default function ExplorerPage() {
       !catalogNextPageToken ||
       loadMoreLoading ||
       catalogLoading ||
-      loadingPaused
+      loadingPaused ||
+      eligibilityStillChecking
     ) {
       return;
     }
@@ -418,6 +433,7 @@ export default function ExplorerPage() {
     catalogLoading,
     loadingPaused,
     loadMoreProducts,
+    eligibilityStillChecking,
   ]);
 
   /** When "BSR low first" and a subcategory is selected, auto-load up to 3 more pages. Do NOT auto-load for best sellers (no subcategory). */
@@ -500,12 +516,6 @@ export default function ExplorerPage() {
     else if (productSort === "name_desc") filtered.sort((a, b) => (b.title || b.asin).localeCompare(a.title || a.asin));
     return filtered;
   }, [catalogResults, bsrMax, productSort, ungatedOnly, eligibilityByAsin]);
-
-  const eligibilityStillChecking = useMemo(() => {
-    if (!ungatedOnly || catalogResults.length === 0) return false;
-    const asins = catalogResults.map((p) => p.asin);
-    return asins.some((asin) => eligibilityByAsin[asin] === undefined);
-  }, [ungatedOnly, catalogResults, eligibilityByAsin]);
 
 const handleProductClick = useCallback(
     async (item: CatalogItem) => {
@@ -648,6 +658,7 @@ const handleProductClick = useCallback(
       eligibilityAbortRef.current?.abort();
       eligibilityAbortRef.current = null;
       setEligibilityByAsin({});
+      eligibilityQueuedRef.current = new Set();
       setUngatedOnly(false);
     }
   }, [amazonHeaderConnected]);
