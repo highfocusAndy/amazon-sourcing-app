@@ -18,7 +18,7 @@ const compNormalized = normalizeCompetitionThresholds(null);
 const DEFAULT_PREFS: PreferencesData = {
   default_seller_type: "FBA",
   default_shipping_cost_fbm: 0,
-  catalog_page_size: 30,
+  catalog_page_size: 40,
   competition_low_max_offers: compNormalized.lowMaxOffers,
   competition_moderate_max_offers: compNormalized.moderateMaxOffers,
   competition_saturated_min_offers: compNormalized.saturatedMinOffers,
@@ -176,20 +176,20 @@ export function AnalysisPreferencesSection({ className = "" }: { className?: str
           <input
             type="number"
             min={10}
-            max={100}
+            max={60}
             value={prefs.catalog_page_size}
             onChange={(e) =>
               setPrefs({
                 ...prefs,
                 catalog_page_size: Math.max(
                   10,
-                  Math.min(100, parseInt(e.target.value, 10) || 30),
+                  Math.min(60, parseInt(e.target.value, 10) || 40),
                 ),
               })
             }
             className="w-full max-w-xs rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
           />
-          <p className="mt-1 text-xs text-slate-500">Between 10 and 100.</p>
+          <p className="mt-1 text-xs text-slate-500">Between 10 and 60. Higher = fewer API calls per browse session (recommended: 40).</p>
         </div>
 
         <fieldset className="rounded-xl border border-slate-200 bg-slate-50/80 p-4">
